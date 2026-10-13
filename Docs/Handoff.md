@@ -1,65 +1,77 @@
-# 开发交接：2026-10-12（T001 执行后）
+# 开发交接：2026-10-13（引擎切换到 Godot 4 后）
 
 ## 真实状态
 
+**引擎已变更**：原定 UE5 蓝图路线**废止**，改为 **Godot 4.7.2 + GDScript**（负责人 2026-10-13 决定）。
+
 **已完成（有实测证据）**：
 
-- 策划 v1.1、开发计划 v1.0、AGENTS/CLAUDE 入口、Environment、TechnicalDesign、Parameters、Tasks、Bootstrap、TestCases、BlenderPipeline 执行文档。
-- **T001 环境与能力门执行**：软件路径与版本实测、硬件与磁盘余量采集、UE 系统性定位（七类证据源全否定）、Blender 无头 CLI 实测通过、视觉工具实测、agent 工具清点。
-- 新增产物：`Docs/Commands.md`、`Docs/Evidence/T001.md`、`Tools/Probes/blender_probe.py`、`Tools/Probes/make_probe_image.py`、`Art/Probes/vision_probe_red_blue.png`；重写 `Docs/Environment.md`。
+- 策划 v1.1、开发计划 v1.0（T001～T063 范围）、AGENTS/CLAUDE 入口、Environment、TechnicalDesign、Parameters、Tasks、Bootstrap、TestCases、BlenderPipeline 执行文档。
+- T001 环境与能力门：软件版本、硬件与磁盘余量、UE 系统性定位（13 类证据源全否定）、Blender 无头 CLI 实测、视觉工具实测、agent 工具清点。
+- **T004 Godot 能力实测**：纯文本手写工程/场景/脚本 → 无头执行 → 回读引擎真实状态（含 3D 物理体与碰撞尺寸）**闭环通过**。
+- 仓库已建立并推送公开远端 `github.com/XwenHaHa/Reborn`（`main`，commit `e564cc8`）。
 
-**未完成**：UE 工程创建、MCP 连接、模型制作、游戏实现、运行测试、打包。T001 判 **blocked**，T002～T063 全部 pending，**没有任何 PASS 的游戏用例**。当前不是 Git 仓库。
+**未完成**：正式游戏工程、游戏实现、运行测试、打包、LFS 配置。**没有任何 PASS 的游戏用例。** T002～T063 全部 pending。
 
-**本轮交付边界（负责人明确）**：只交付执行文档与环境发现检查；**未安装软件、未连接 MCP、未创建游戏工程、未运行游戏测试**。不得把本轮内容当作游戏功能完成。
+**本次未做**：未安装软件、未连接 MCP、未创建正式工程、未运行游戏测试。
 
-## T001 判定摘要
+## 关键进展：P0 的阻塞性质变了
 
-| 验收项 | 判定 |
-|---|---|
-| 软件路径/版本、硬件、余量 | PASS |
-| Blender 无头能力（独立检查） | PASS（实测退出码 0） |
-| UE 路径与版本 | FAIL（本机未发现 UE） |
-| 蓝图创建/编辑/编译/保存重开 | NOT-RUN（阻塞） |
-| 运行/停止/日志/状态/输入 | NOT-RUN（阻塞） |
-| 工具能力表 | PASS |
-| 不更改技术路线 | PASS（未转 C++） |
+| | UE5 阶段 | Godot 4 阶段（现在） |
+|---|---|---|
+| 核心卡点 | agent **无法创建/编辑编辑器资产**（`.uasset`/`.umap` 是二进制，必须有编辑器） | **已消除**——`.tscn`/`.tres`/`.gd`/`project.godot` 全是纯文本，agent 直接写 |
+| 是否需要编辑器 MCP | 必需，且不存在 | **不需要**，命令行即闭环 |
+| 引擎是否在位 | 未安装（三卷 484,201 目录 0 命中） | **已在位**，172.5 MB，实测 4.7.2 |
+| 剩余缺口 | 引擎 + 自动化通道，二者缺一不可 | **仅导出模板未安装** |
 
-E01 **NOT-RUN**；E02 仅 Blender 侧 API 存在性确认，其余 NOT-RUN。
+**实测能力（`Docs/Evidence/T004.md`）**：`--headless`、`-s/--script`、`--check-only`、`--quit-after`、`--import`、`--export-release/debug/pack` 全部存在且可用；`--check-only` 经对照验证为可信静态门（真实抓到过写出的语法错误）；脚本创建的 `CharacterBody3D` + `CapsuleShape3D` 回读尺寸 16.0 cm / 48.0 cm，与 `Parameters.md` 的 Cat 胶囊一致。
 
-## 关键环境事实（已实测，可直接采信）
+## 关键环境事实（可直接采信）
 
-- **本机未发现 UE**：`Get-Command`、6 处注册表键、Epic 启动器清单、`LauncherInstalled.dat`、卸载注册表、`.uproject` 关联、开始菜单、App Paths、候选安装根浅扫、C:/D:/E: 目录扫描 —— 全部否定。
-- **agent 无任何 UE 或 Blender 工具**：DSH 有 MCP 客户端能力，但 `settings.yaml` 与 `workspace.json` 无任何 MCP 配置，项目侧无 `.mcp.json`/`mcp.json`/`mcp_config.json`。因此蓝图自动化与 PIE 控制**在本会话不可能执行**；此缺口不得由 Blender 能力推断补齐。
-- **Blender 3.3.1 可用且无头可驱动**：`D:\SoftWare\Blender\blender.exe`，内置 Python **3.10.2**，`--background --factory-startup --python <文件>` 实测退出码 0。FBX 导入/导出、保存 `.blend`、armature API 均存在（存在≠往返正确）。单位 METRIC / scale 1.0 / METERS；出厂 `Cube` 实测 2.000000 m。
-- **坑（已记录，直接复用）**：`--python-expr` 在 PowerShell 下会吞掉内层引号导致 `SyntaxError`，必须用 `--python <脚本文件>`。
-- **视觉工具可用但被服务端拒绝**：`vision.js` 实测**退出码 1**，`API 403 ... An active OpenCode Go subscription is required to use Go models.` → 当前无法产出任何画面判断，视觉验收全部 NOT-RUN。
-- **硬件**：Dell Precision 3561 / i7-11800H（16 逻辑处理器）/ 31.75 GB RAM / NVIDIA T600 Laptop 4GB + Intel UHD / Win10 build 19045。
-- **磁盘**：C: **仅剩 11.9 GB**；D: 159.5 GB；E: 227.6 GB。UE 与打包产物不应落 C:。
-- **工具链**：VS Community 2022 17.12.1 存在；**Windows SDK 未安装**（`Windows Kits\10` 不存在）→ T007 打包依赖必须按实际 UE 版本核对，**不预设结论**。
-- Node v22.18.0、npm 10.9.3、Git 2.42.0、**Git LFS 3.4.0 已安装**、Python 3.13.1。
+- **Godot**：`E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe`（**外层同名项是目录不是文件**，易误判为解压失败）；`--version` = `4.7.2.stable.official.ed1daf0bf`。
+- **必须加 `--quit-after <N>`**：脚本加载失败时 `quit()` 不被调用，进程会挂死（已实测 180 s 超时）。
+- **改脚本后先跑 `--check-only`**：静态语法检查，退出码可判定。
+- **导出模板为空**：`%APPDATA%\Godot\export_templates\` 存在但无内容 → T007 阻塞。
+- **Blender 3.3.1**：`D:\SoftWare\Blender\blender.exe`，无头 CLI 通过；出厂 `Cube` 是 **2 m** 不是 1 m；**Godot 建议用 glTF 而非 FBX**。
+- **单位换算是本次切换最容易出错的地方**：UE 用厘米，**Godot 用米**，`Parameters.md` 全部数值需 ÷100。`CapsuleShape3D.height` 是**含两端半球的总高**（= 2×半高），半径 16 cm / 半高 24 cm → `radius=0.16`, `height=0.48`。
+- **硬件**：i7-11800H / 31.75 GB / T600 Laptop 4 GB + Intel UHD / Win10 build 19045；C: 仅剩 **11.8 GB**，D: 159.5 GB，E: 227.6 GB。
+- **Git 推送必须走代理**：直连 `github.com:443` 失败；用 `127.0.0.1:7897`，**未写入全局配置**。
+- **视觉工具不可用**：`vision.js` 两次实测均 403（`An active OpenCode Go subscription is required`）→ 所有画面判断保持 NOT-RUN。
 
-## 下一次从这里开始
+## 下一次从这里开始（需负责人先决策）
 
-负责人需先给出**至少一项**解除动作（见下）。在此之前**不要**开始 T002：
+**必须先确认范围，再动 T002。** 待决事项：
 
-1. **UE 安装路径与版本**（若已装）或**确认未装 + 授权安装**（指定版本与目标卷）。
-2. **编辑器自动化通道**：UE MCP 工具 / 受审查的自动化工具 / 明确同意 C++ 混合路线。**仅有 UE 路径仍不能自动创建蓝图**。
-3. **Blender-MCP 实现**：指定已确认的仓库/客户端/插件与版本；或确认改用 **Blender 3.3.1 自带无头 CLI**（已实测可用，可立即推进 T004 的 Blender 侧）。
-4. **vision 订阅**恢复，或改配可用的 `DASHSCOPE_BASE_URL` + `VISION_MODEL`。恢复后先跑 `Art/Probes/vision_probe_red_blue.png` 自检。
-5. **Git 授权范围**（T003）：仅 init，还是含 commit？
+1. **授权重写技术层文档**：`TechnicalDesign.md`、`Bootstrap.md`（T001～T007 改 Godot 版）、`Commands.md`、`Tasks.md`、`TestCases.md`。
+   - 映射基准见 `Docs/Evidence/T004.md` §4.3（蓝图→GDScript、`.umap`→`.tscn`、`DA_*`→`Resource`、Enhanced Input→InputMap、cm→m 等）。
+   - **不需要改**：策划案 v1.1（产品规则）、开发计划的任务编号与依赖结构、`Parameters.md` 的数值本身（换算单位即可）。
+2. **安装 Godot 导出模板**（`4.7.2.stable`，约 1 GB）以解锁 T007。属下载第三方内容，需授权或自行安装。
+3. **确认脚本语言**：默认 **GDScript**（无额外工具链）。改用 C# 需追加 .NET 配置，本机有 .NET 9 但会增加复杂度，**建议先用 GDScript**。
+4. **T002 的目标形态**：建议改为 `Game/Reborn/project.godot` + `scenes/L_MovementLab.tscn` + 一个可跑的 `CharacterBody3D` 玩家，验收方式为**无头运行并输出断言**（而非 UE 的 PIE 视觉验收），这样 agent 可独立完成并留证据。
 
-收到 1+2 后可执行 T002；收到 3 后可执行 T004；收到 4 后视觉验收才可用。
+**先做 T003 的理由**：T002 产生的场景/脚本量很小，但一旦引入 Blender 资产（glTF/贴图）就会变大。`.gitattributes` + LFS 现在建立成本最低。
 
 ## 尚需确认或实测
 
-UE 实际安装位置/版本；编辑器自动化工具清单（工具名必须来自实际清单，不得猜测）；Blender-MCP 实现与 Blender 3.3.1 / Python 3.10.2 的兼容性；视觉服务可用性；T007 打包依赖（Windows SDK 缺失的补法）；目标性能档与 T600 4GB 显存下的画质取舍；每周投入与发行目标（未提供 → 记为未知，不阻塞、不编造工期）。
+- 视觉工具是否恢复（影响所有画面/比例/形变验收）。
+- 导出模板安装后，实际导出与打包版启动是否成功（T007）。
+- Godot 导入 Blender 资产的首选格式与单位换算，需 T005 实测确认。
+- T600 4 GB 显存下 Godot Forward+ 的实际帧率（**P0 不测性能，P1 起再测**；不要现在宣称性能基线）。
+- 每周投入与发行目标：**未提供，记为未知**，不阻塞、不编造。
 
 ## 本次操作边界声明
 
-未安装/卸载任何软件；未连接 MCP；未创建 UE 工程；未运行游戏或打包；未修改全局配置；未 Git init/commit/push；未删除或覆盖任何源资产；外部软件目录仅只读检查。Blender 仅以 `--background --factory-startup` 只读探针方式运行，未保存任何 `.blend`。用户既有 `D:\blender\*.blend`、`E:\blender-view\*.glb` 等资产未被触碰。
-
-**恢复点**：尚无游戏工程，故无游戏恢复点。文档与探针脚本即是当前可恢复状态。
+未安装/卸载任何软件；未连接 MCP；未创建正式游戏工程；未运行游戏测试；未改全局配置；未删除或覆盖任何源资产。
+`Tools/Probes/GodotProbe/` 是**能力探针**，不是游戏工程，不纳入 T002 交付；其 `.godot/` 缓存已加入 `.gitignore`。
+导出尝试**未产生任何输出文件**（已核实 `_export_probe.exe` / `.pck` 均不存在）。
+Git 提交与推送**经负责人明确授权**后执行（负责人提供远端地址并指示提交）。
 
 ## 可直接发给下一个 agent
 
-> 请在 E:/Reborn 工作。先读 AGENTS.md、Docs/Handoff.md、Docs/Environment.md、Docs/Commands.md、Docs/Tasks/Bootstrap.md。T001 已判 **blocked**，原因有二且相互独立：**本机未发现 UE**，且**本会话不存在任何 UE/Blender 自动化工具**（DSH 无 MCP 配置）。不要在无 UE 的情况下开始 T002，不要用文档或脚本冒充蓝图操作，不要静默改 C++。**可独立推进的不是 T002**：Blender 3.3.1 无头 CLI 已实测通过（命令见 Commands.md §2），若负责人确认可用它替代未指定的 Blender-MCP，再按 T004 规格执行查询→创建 1m ProbeCube→保存→重开，并记录实际工具名与返回字段。注意 `--python-expr` 在 PowerShell 下不可用，必须 `--python <文件>`；Blender 出厂 Cube 是 2 m 不是 1 m。视觉验收当前因服务端 403 无法进行，不得编造画面判断。所有运行/视觉验收保持 NOT-RUN 直到能力到位。
+> 请在 E:/Reborn 工作。先读 AGENTS.md、Docs/Handoff.md、Docs/Environment.md、Docs/Evidence/T004.md、Docs/Commands.md。
+> **引擎已改为 Godot 4.7.2（GDScript），UE5 路线废止**；技术层文档（TechnicalDesign / Bootstrap / Commands / Tasks / TestCases）**仍是 UE5 版、尚未重写**，动手前必须确认范围，不要把两套说法混用。
+> 关键工具：`E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe`（外层同名项是目录）。
+> 无头运行**必须**加 `--quit-after <N>`，否则脚本出错会挂死。改脚本后先跑 `--check-only` 静态检查。
+> Godot 用**米**，Parameters.md 是**厘米**，参数需 ÷100。`CapsuleShape3D.height` 是含半球的总高。
+> 已知阻塞：导出模板未安装（T007）；vision 服务 403（所有视觉验收 NOT-RUN，**不得编造画面判断**）；Git LFS 未配置。
+> 不要在没有实测证据时把任何游戏任务标为 done。

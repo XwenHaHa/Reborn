@@ -1,12 +1,22 @@
 # ---------------------------------------------------------------------------
 # Reborn / .gitignore
 #
-# 现在建立这份规则的目的是"防患于未然"：T002 一旦开始创建 UE 工程，
-# Intermediate/Binaries/Saved 等目录会产生数十 GB 的中间产物。等那时候再补
-# .gitignore，很容易已经误提交过一批二进制垃圾。提前写好成本为零。
+# 引擎已由 UE5 改为 Godot 4（2026-10-13 负责人决定）。
+# UE 段暂时保留以防旧工程残留；Godot 段是当前生效的规则。
 # ---------------------------------------------------------------------------
 
-# --- Unreal Engine 生成物（不是源资产，一律不追踪）---
+# --- Godot 4 生成物 ---
+# .godot/ 是导入缓存与编辑器状态，等价于 UE 的 Intermediate / DerivedDataCache
+.godot/
+# 导出产物
+*.pck
+export_presets.cfg.local
+# 导出凭据（Android keystore / iOS 证书）绝不入库
+*.keystore
+*.jks
+*.mobileprovision
+
+# --- Unreal Engine 生成物（历史保留，当前路线不使用）---
 Binaries/
 Build/
 Builds/
@@ -22,20 +32,21 @@ Saved/
 *.xcodeproj
 *.xcworkspace
 
-# --- UE 源资产必须走 Git LFS（见 .gitattributes）---
-# 这里不 ignore，只说明：*.uasset / *.umap / *.blend / *.fbx 由 LFS 追踪。
-
 # --- 编译产物 ---
 *.obj
 *.o
 *.pdb
 *.dll
-*.exe
 *.lib
 *.so
 *.dylib
 *.exp
 *.ilk
+
+# --- 可执行文件 ---
+# 注意：这条会挡住 Godot 导出的 .exe。游戏发布二进制本就不该进源码仓库；
+# T007 需要交付可执行文件时，用 `git add -f` 显式放行，或改用 Release 附件。
+*.exe
 
 # --- 本机个人配置 / 编辑器本地状态 ---
 # 含本机绝对路径与内部主机名，不应进入公开仓库
@@ -67,5 +78,4 @@ $RECYCLE.BIN/
 *credentials*
 
 # --- 打包与发布产物 ---
-# T007 的输出目录；发布物不进源码仓库
-/Builds/P0-Win64/
+/Builds/

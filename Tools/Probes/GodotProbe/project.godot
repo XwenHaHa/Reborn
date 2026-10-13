@@ -1,0 +1,22 @@
+; Reborn / Godot 能力探针工程
+;
+; 目的：验证 agent 能否不经编辑器、只靠纯文本编写 + 无头命令行，完成
+; Godot 工程的"编写 → 解析 → 运行 → 读回结果"闭环。
+;
+; 这是决定引擎切换是否可行的关键证据：UE5 的 .uasset/.umap 是二进制、必须
+; 有编辑器才能生成，导致 agent 无法自动化；Godot 的 project.godot / .gd /
+; .tscn 都是纯文本，agent 可以直接编写。
+
+config_version=5
+
+[application]
+
+config/name="RebornCapabilityProbe"
+config/description="只读能力探针，不是游戏工程。验证无头脚本执行与结果读回。"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720

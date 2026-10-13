@@ -89,7 +89,26 @@ PROBE|probe_complete=1
 & C:\Python313\python.exe --version   # Python 3.13.1
 ```
 
-`E:/Reborn` **当前不是 Git 仓库**（无 `.git`）。T003 需要版本管理授权后才 `git init`，本文件不提供未授权的初始化命令。
+`E:/Reborn` **已是 Git 仓库**（2026-10-12 由负责人授权初始化并推送）。
+
+实测状态：
+
+```powershell
+& git rev-parse --abbrev-ref HEAD     # main
+& git log --oneline -n 1              # e564cc8 docs: 轮生 Reborn 执行文档与环境发现（T001）
+& git remote -v                       # origin  https://github.com/XwenHaHa/Reborn.git
+```
+
+- 远端：`https://github.com/XwenHaHa/Reborn.git`，**公开**仓库，已推送 `main`（远端 commit 与本地一致）。
+- 提交作者：`XwenHaHa <929716663@qq.com>`；`credential.helper = store`（凭据存于用户级 `.git-credentials`，**不入库**）。
+- **网络注意**：本机直连 `github.com:443` 失败（21 s 超时）。已确认可用路径是经本机 clash-verge 代理
+  `127.0.0.1:7897`，且**未写入 git 全局配置**，只在命令上临时指定：
+
+```powershell
+& git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push -u origin main
+```
+
+- **T003 仍未完成**：`.gitattributes` / Git LFS 追踪规则**尚未建立**，`*.uasset`/`*.umap`/`*.blend`/`*.fbx` 目前会以普通对象入库。在 T002 产生大二进制资产**之前**必须先做 T003 的 LFS 配置与恢复点试验。
 
 ---
 
