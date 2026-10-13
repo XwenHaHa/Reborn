@@ -1,22 +1,19 @@
 # ---------------------------------------------------------------------------
 # Reborn / .gitignore
 #
-# 引擎已由 UE5 改为 Godot 4（2026-10-13 负责人决定）。
-# UE 段暂时保留以防旧工程残留；Godot 段是当前生效的规则。
-# ---------------------------------------------------------------------------
+# 寮曟搸宸茬敱 UE5 鏀逛负 Godot 4锛?026-10-13 璐熻矗浜哄喅瀹氾級銆?# UE 娈垫殏鏃朵繚鐣欎互闃叉棫宸ョ▼娈嬬暀锛汫odot 娈垫槸褰撳墠鐢熸晥鐨勮鍒欍€?# ---------------------------------------------------------------------------
 
-# --- Godot 4 生成物 ---
-# .godot/ 是导入缓存与编辑器状态，等价于 UE 的 Intermediate / DerivedDataCache
+# --- Godot 4 鐢熸垚鐗?---
+# .godot/ 鏄鍏ョ紦瀛樹笌缂栬緫鍣ㄧ姸鎬侊紝绛変环浜?UE 鐨?Intermediate / DerivedDataCache
 .godot/
-# 导出产物
+# 瀵煎嚭浜х墿
 *.pck
 export_presets.cfg.local
-# 导出凭据（Android keystore / iOS 证书）绝不入库
-*.keystore
+# 瀵煎嚭鍑嵁锛圓ndroid keystore / iOS 璇佷功锛夌粷涓嶅叆搴?*.keystore
 *.jks
 *.mobileprovision
 
-# --- Unreal Engine 生成物（历史保留，当前路线不使用）---
+# --- Unreal Engine 鐢熸垚鐗╋紙鍘嗗彶淇濈暀锛屽綋鍓嶈矾绾夸笉浣跨敤锛?--
 Binaries/
 Build/
 Builds/
@@ -32,7 +29,7 @@ Saved/
 *.xcodeproj
 *.xcworkspace
 
-# --- 编译产物 ---
+# --- 缂栬瘧浜х墿 ---
 *.obj
 *.o
 *.pdb
@@ -43,32 +40,31 @@ Saved/
 *.exp
 *.ilk
 
-# --- 可执行文件 ---
-# 注意：这条会挡住 Godot 导出的 .exe。游戏发布二进制本就不该进源码仓库；
-# T007 需要交付可执行文件时，用 `git add -f` 显式放行，或改用 Release 附件。
-*.exe
+# --- 鍙墽琛屾枃浠?---
+# 娉ㄦ剰锛氳繖鏉′細鎸′綇 Godot 瀵煎嚭鐨?.exe銆傛父鎴忓彂甯冧簩杩涘埗鏈氨涓嶈杩涙簮鐮佷粨搴擄紱
+# T007 闇€瑕佷氦浠樺彲鎵ц鏂囦欢鏃讹紝鐢?`git add -f` 鏄惧紡鏀捐锛屾垨鏀圭敤 Release 闄勪欢銆?*.exe
 
-# --- 本机个人配置 / 编辑器本地状态 ---
-# 含本机绝对路径与内部主机名，不应进入公开仓库
+# --- 鏈満涓汉閰嶇疆 / 缂栬緫鍣ㄦ湰鍦扮姸鎬?---
+# 鍚湰鏈虹粷瀵硅矾寰勪笌鍐呴儴涓绘満鍚嶏紝涓嶅簲杩涘叆鍏紑浠撳簱
 .claude/settings.local.json
 *.code-workspace
 .idea/
 
-# --- 操作系统 ---
+# --- 鎿嶄綔绯荤粺 ---
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
 
-# --- 临时文件 ---
+# --- 涓存椂鏂囦欢 ---
 *.tmp
 *.log
 *.bak
 *~
 *.swp
 
-# --- 密钥与本地环境变量（严格禁止入库）---
+# --- 瀵嗛挜涓庢湰鍦扮幆澧冨彉閲忥紙涓ユ牸绂佹鍏ュ簱锛?--
 .env
 .env.*
 !.env.example
@@ -77,5 +73,11 @@ $RECYCLE.BIN/
 *.pfx
 *credentials*
 
-# --- 打包与发布产物 ---
+# --- 鎵撳寘涓庡彂甯冧骇鐗?---
 /Builds/
+
+# Godot --doctool 生成的 API 文档（体积大，可随时重生成）
+Art/Probes/godot_docs/
+
+# 探针与调试日志
+Art/Probes/*.log

@@ -1,10 +1,10 @@
-; Reborn / 正式 Godot 工程配置
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
 ;
-; 引擎：Godot 4.7.2（GDScript）
-; 单位：米（m）。Docs/Parameters.md 是厘米，代码中已 ÷100。
-; 依据：Docs/TechnicalDesign.md v0.2
-;
-; 本文件为纯文本，可直接由 agent 编写与 diff，无需编辑器。
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -17,7 +17,6 @@ config/features=PackedStringArray("4.7")
 
 [autoload]
 
-; 世界时间、资源、区域账本的统一入口（T014/T034 扩充）
 WorldDirector="*res://autoload/world_director.gd"
 
 [debug]
@@ -89,14 +88,6 @@ pause={
 3d_physics/layer_3="interactable"
 3d_physics/layer_4="safe_spot"
 
-[physics]
-
-3d/default_gravity=9.8
-
 [rendering]
 
-; T600 Laptop 4GB。先按 forward_plus 建立；P1 实测帧率后若不达标再退 mobile。
-; 起测关闭不必要特效。
-renderer/rendering_method="forward_plus"
-anti_aliasing/quality/msaa_3d=0
 environment/defaults/default_clear_color=Color(0.15, 0.17, 0.2, 1)

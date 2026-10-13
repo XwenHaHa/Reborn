@@ -82,6 +82,7 @@ P4 前先阅读 TechnicalDesign 数据契约，T036 是契约实现检查与持�
 
 | 阻塞 | 影响 | 最小解除条件 |
 |---|---|---|
+| **台阶（MaxStepHeight）能力未达成** | **T009/T010/M01** | 见 `Docs/Evidence/T009-probe.md`。问题已精确定位到"抬高+前移+下落"的几何处理：胶囊圆底在台阶棱角处先接触竖直面，下落探测得到 0.2807 而非台阶顶 0.120。下一步改用 `ShapeCast3D` 找可站立面，或抬高后多前移再下落 |
 | **Godot 导出模板未安装**（`%APPDATA%\Godot\export_templates\` 为空） | T007、所有"打包版启动"验收 | 安装 `4.7.2.stable` 模板（约 1 GB）。**需负责人授权或自行安装**（编辑器内一次点击） |
 | Blender 资产路线未定（MCP 实现未指定） | T005/T006 的 Blender 侧 | 指定已确认 MCP 实现并授权；**或确认改用 Blender 3.3.1 自带无头 CLI**（已实测可用，建议此项） |
 | vision 订阅失效（OpenCode Go 403） | 全部视觉验收 | 恢复订阅或改配可用的 `DASHSCOPE_BASE_URL` + `VISION_MODEL`；恢复后先用 `Art/Probes/vision_probe_red_blue.png` 自检 |
