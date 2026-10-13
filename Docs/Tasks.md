@@ -4,13 +4,16 @@
 
 - **引擎已由 UE5 改为 Godot 4.7.2 + GDScript**（负责人决定）。技术层文档已重写为 Godot 版。
 - **T001 = done（Godot 版）**：环境与引擎能力门通过。
-- **T004 = 能力部分 done**：Godot 无头闭环实测通过；Blender 资产侧未开始。
-- **T002 / T003 / T005 / T006 / T007 = pending**。
-- T008～T063 全部 pending。**游戏测试全部 NOT-RUN，无任何 PASS 的游戏用例。**
+- **T002 = done**（视觉部分 awaiting-review）：正式工程建立，无头断言 **18/18 通过**，10 次运行（5 冷启动 + 5 热运行）结果一致。
+- **T003 = done**：LFS 生效；**从零克隆的工程可被引擎实际运行**（18/18 通过）。
+- **T004 = 部分 done**：Godot 无头闭环实测通过；Blender 资产侧未开始。
+- **T005 / T006 / T007 = pending**。
+- T008～T063 全部 pending。**游戏测试除 E01 部分外全部 NOT-RUN，无 PASS 的游戏玩法用例。**
 
-**能力门现状**：Godot 无头运行、`--check-only`、物理体创建与回读**已通过**；**Windows 导出阻塞于导出模板未安装**；Blender 无头 CLI 通过；视觉分析因服务端 403 不可用。
+**能力门现状**：Godot 无头运行、`--check-only`、物理体创建与回读**已通过**；
+**Windows 导出阻塞于导出模板未安装**；Blender 无头 CLI 通过；视觉分析因服务端 403 不可用。
 
-**注意**：下文"10-12 交付边界"仅适用于上一轮。本轮已按负责人指示：重写技术层文档、执行 T003、执行 T002。
+**P0 阶段门**：E01 部分通过；E02/E03 未执行；打包未通过 → **P0 尚未完成**。
 
 ## 状态规则
 
@@ -21,13 +24,13 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | 任务 | 状态 | 已有证据 | 下一步 |
 |---|---|---|---|
 | T001 | **done（Godot 版）** | `Docs/Evidence/T001.md`（环境/硬件/UE 定位）；`Docs/Evidence/T004.md`（Godot 能力） | 已完成 |
-| T002 | in-progress | 待写 `Docs/Evidence/T002.md` | 建立 `Game/Reborn` 正式工程与 `l_movement_lab`，无头断言验收 |
-| T003 | in-progress | 待写 `Docs/Evidence/T003.md` | `.gitattributes` + LFS 追踪 + 恢复点试验 |
-| T004 | **部分 done** | `Docs/Evidence/T004.md` | Godot 侧完成；Blender 资产侧待路线确认（建议用 CLI） |
-| T005 | pending | 无 | 依赖 T002 + T004；**用 glTF 而非 FBX** |
+| T002 | **done**（视觉部分 awaiting-review） | `Docs/Evidence/T002.md`；提交 `611a55b` | 无头断言 18/18 通过，10 次运行一致；视觉待 vision 恢复后补验 |
+| T003 | **done** | `Docs/Evidence/T003.md`；提交 `b7767ca`、`611a55b` | LFS 生效 + 从零克隆可运行工程（18/18 通过） |
+| T004 | **部分 done** | `Docs/Evidence/T004.md` | Godot 侧完成；Blender 资产侧待确认路线（建议用 CLI） |
+| T005 | pending | 无 | 依赖 T002(done) + T004(部分)；**用 glTF 而非 FBX** |
 | T006 | pending | 无 | 依赖 T005；允许阻塞，静态占位可推进 P1～P5 |
-| T007 | pending | 无 | 依赖 T002；**阻塞于导出模板未安装** |
-| T008～T063 | pending | 无 | 前置通过后先写单任务规格再实现 |
+| T007 | pending | 无 | 依赖 T002(done)；**阻塞于导出模板未安装** |
+| T008～T063 | pending | 无 | T008 前置（T001/T002）已满足，可开始；先写单任务规格 |
 
 ### T001 判定明细（Godot 版）
 
@@ -40,14 +43,38 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | 建立工具能力表 | PASS |
 | 不擅自更改技术路线 | PASS（换引擎是负责人决策，非 agent 擅自变更） |
 
-关联用例：E01 **NOT-RUN**（尚未建正式工程）；E02 Blender 侧 API 已确认，Godot 导入侧 **NOT-RUN**。
+### T002 / T003 判定明细
+
+| 验收项 | 判定 | 证据 |
+|---|---|---|
+| T002 工程可被引擎加载运行 | PASS | `RESULT\|PASS`，退出码 0 |
+| T002 无头断言 | PASS | 18/18，10 次运行（5 冷 + 5 热）一致 |
+| T002 地面 1000×1000 cm | PASS | 读回 `BoxShape3D.size` = 10.0000 m |
+| T002 出生点无碰撞重叠 | PASS | `intersect_shape` 实测 0 overlaps |
+| T002 落地与停止 | PASS | `is_on_floor=true`，落点 y=0.3402（期望 0.34） |
+| T002 视觉 | **awaiting-review** | vision 服务 403，未做画面判断 |
+| T003 `.gitattributes` + LFS 生效 | PASS | 指针/实体/SHA256 三重验证 |
+| T003 **恢复点** | PASS | 从零克隆后引擎实跑 18/18 通过 |
+
+关联用例：**E01 部分 PASS**（工程可加载、脚本保留、无 `SCRIPT ERROR`、`--check-only` 退出码 0）；
+E01 的视觉部分 **awaiting-review**；E02 Blender 侧 API 已确认，Godot 导入侧 **NOT-RUN**。
 
 ## 选择顺序
 
-先 T001（**已完成**）。T002 与 T003 可并行，**建议 T003 先在正式资产引入前完成**。
-T005 需要 T002 和 T004；T006 需要 T005；T007 需要 T002 **且**导出模板已安装。
+T001 / T002 / T003 **均已完成**。下一步可执行（按建议优先级）：
 
-T008 进入条件：T001/T002 通过，已有可恢复工程；T006 可明确阻塞并使用静态占位，但不得据此启动正式骨骼生产。其余任务依赖沿用总计划；阶段门见 TestCases。T028 若只有自测，则 awaiting-review，不冒充真实玩家验证。
+1. **台阶能力探针（建议先做）**：Godot `CharacterBody3D` **没有** UE `MaxStepHeight` 的等价物。
+   猫需上 12 cm 台阶、鼠需上 3 cm，还要有"低于阈值才抬升、高于则被挡住"的行为。
+   这是 P1 的**最高技术风险**，先花小成本验证可行性，避免 T009/T010 卡住。
+2. **T008**（最小物种配置与身体）：前置 T002 已满足。动手前先写 `Docs/Tasks/T008.md` 单任务规格。
+3. **T005**（静态资产往返）：需先确认 Blender 路线（**建议用 3.3.1 自带无头 CLI**，已实测可用）。
+4. **T007**（打包）：需先安装导出模板。
+
+T005 需要 T002(done) 和 T004(部分)；T006 需要 T005。
+
+T008 进入条件：T001/T002 通过、已有可恢复工程 —— **均已满足**（T003 提供了从零克隆可运行的验证）。
+T006 可明确阻塞并使用静态占位，但不得据此启动正式骨骼生产。
+T028 若只有自测，则 awaiting-review，不冒充真实玩家验证。
 
 P4 前先阅读 TechnicalDesign 数据契约，T036 是契约实现检查与持久化准备，不是首次想数据结构。
 
