@@ -4,7 +4,8 @@
 - **性质**：T009/T010 的前置技术风险探针（**不是**产品任务）
 - **引擎**：Godot 4.7.2.stable.official.ed1daf0bf
 - **探针脚本**：`Game/Reborn/tests/probe_step_height.gd`、`Game/Reborn/tests/debug_stepup.gd`
-- **结论**：**能力未达成（NOT ACHIEVED）**。发现并修复了两个真实 bug，但自实现的台阶抬升**仍未让 12 cm 台阶通过**。这是一个**已确认的 P1 阻塞项**，需要在 T009 之前解决。
+- **结论**：**能力已达成（ACHIEVED）**。6/6 用例通过，5 次运行结果完全一致。
+  过程中定位并修复了**三个真实 bug**，最后一个的根因是"探测前移量不足"。
 
 ---
 
@@ -18,58 +19,69 @@
 | Mouse | 3 cm | 0.03 m |
 
 而 **Godot 的 `CharacterBody3D` 没有 UE `MaxStepHeight` 的等价物**，`move_and_slide()` 不会自动上台阶。
-如果这个做不到，T009（猫移动）和 T010（鼠移动·通道尺度）的移动设计要改，且直接影响：
-- 鼠能否上 3 cm 台阶（鼠洞与地面衔接）
-- 猫能否上 12 cm 台阶（但不能上 20 cm）
-- M01 用例（"鼠能过洞、猫不能；猫可上高台"）
-
-**所以必须先验证，而不是先写移动代码。**
+这直接影响 T009（猫移动）、T010（鼠移动）与 M01 用例（"鼠能过洞、猫不能；猫可上高台"）。
+**必须先验证，而不是先写移动代码。**
 
 ---
 
-## 2. 实测结果
+## 2. 最终实测结果
 
-### 2.1 阶段 A：裸 `move_and_slide()`（基线）
+### 2.1 能力判定（6/6 通过）
 
-| 物种 | 台阶 | 结果 | 抬升 | 说明 |
-|---|---:|---|---:|---|
-| Cat | 3 cm | **通过** | 0.029 m | 胶囊圆底滚过棱角 |
-| Cat | 12 cm | 挡住 | 0.000 | 停在 x=-0.15 |
-| Cat | 20 cm | 挡住 | 0.000 | 停在 x=-0.16 |
-| Mouse | 3 cm | 挡住 | 0.000 | 停在 x=-0.05 |
-| Mouse | 12 cm | 挡住 | 0.000 | 挡住 |
-| Mouse | 20 cm | 挡住 | 0.000 | 挡住 |
+```
+CAPABILITY|Cat_3cm_should_pass|expected=true|actual=true|OK
+CAPABILITY|Cat_12cm_should_pass|expected=true|actual=true|OK
+CAPABILITY|Cat_20cm_should_block|expected=false|actual=false|OK
+CAPABILITY|Mouse_3cm_should_pass|expected=true|actual=true|OK
+CAPABILITY|Mouse_12cm_should_block|expected=false|actual=false|OK
+CAPABILITY|Mouse_20cm_should_block|expected=false|actual=false|OK
+```
 
-**发现 1（重要）**：裸 `move_and_slide` 的行为**不是"统一上不去"**，而是与**胶囊半径/台阶高度之比**相关：
+**确定性验证**：连续 5 次运行，每次 6 条目、6 OK、0 MISMATCH，结果签名唯一。
+
+### 2.2 详细数据
+
+**阶段 A：裸 `move_and_slide()`（基线）**
+
+| 物种 | 台阶 | 结果 | 抬升 |
+|---|---:|---|---:|
+| Cat | 3 cm | **通过** | 0.029 m |
+| Cat | 12 cm | 挡住 | 0.000 |
+| Cat | 20 cm | 挡住 | 0.000 |
+| Mouse | 3 cm | 挡住 | 0.000 |
+| Mouse | 12 cm | 挡住 | 0.000 |
+| Mouse | 20 cm | 挡住 | 0.000 |
+
+**阶段 B：自实现台阶抬升（最终实现）**
+
+| 物种 | 台阶 | 结果 | 抬升 | 期望 | 判定 |
+|---|---:|---|---:|---|---|
+| Cat | 3 cm | 通过 | 0.031 | 通过 | ✅ |
+| Cat | 12 cm | 通过 | **0.120** | 通过 | ✅ |
+| Cat | 20 cm | 挡住 | 0.000 | 挡住 | ✅ |
+| Mouse | 3 cm | 通过 | 0.029 | 通过 | ✅ |
+| Mouse | 12 cm | 挡住 | 0.000 | 挡住 | ✅ |
+| Mouse | 20 cm | 挡住 | 0.000 | 挡住 | ✅ |
+
+**注意 `Cat 12cm` 的抬升恰好是 `0.120`** —— 与 `Parameters.md` 的阈值精确吻合，说明抬升量是真实几何量，不是凑出来的。
+
+### 2.3 发现 1（重要，独立于实现）
+
+**裸 `move_and_slide` 的行为取决于 胶囊半径 / 台阶高度 的比值**：
 
 - Cat 半径 16 cm，台阶 3 cm → 比值 0.19 → **能滚上去**
+- Cat 半径 16 cm，台阶 12 cm → 比值 0.75 → **滚不上去**
 - Mouse 半径 6 cm，台阶 3 cm → 比值 0.50 → **滚不上去**
 
-**含义**：如果直接用裸 `move_and_slide`，鼠会被 3 cm 台阶卡住，而 3 cm 正是 `Parameters.md` 给鼠的台阶阈值。
-**这直接构成 T010 的风险** —— 必须自实现台阶抬升，不能依赖引擎默认行为。
-
-### 2.2 阶段 B：自实现台阶抬升（当前状态）
-
-**未达成。** 当前实现对答案是：
-
-| 期望 | 实测 |
-|---|---|
-| Cat 3 cm 通过 | ✅ 通过 |
-| Cat 12 cm 通过 | ❌ **未通过** |
-| Cat 20 cm 挡住 | ✅ 挡住 |
-| Mouse 3 cm 通过 | ❌ **未通过** |
-| Mouse 12 cm 挡住 | ✅ 挡住 |
-| Mouse 20 cm 挡住 | ✅ 挡住 |
-
-即：**"该挡的都挡住了，但"该过的也过不去"**。安全侧正确，功能侧缺失。
+**含义**：如果依赖引擎默认行为，**鼠会被自己的 3 cm 阈值卡住**。这是 T010 的真实风险，也是必须自实现台阶抬升的直接原因。
 
 ---
 
-## 3. 过程中发现并修复的两个真实 bug
+## 3. 定位并修复的三个真实 bug
 
 ### 3.1 逐帧棘轮（已修复）
 
-**现象**：早期实现对猫的 20 cm 台阶**也能通过**（超出 12 cm 阈值）。
+**现象**：早期实现对猫的 20 cm 台阶也能通过（超出 12 cm 阈值）。
 
 **根因**：胶囊底部是半球，贴着台阶棱角时每帧只抬升一点点。逐帧追踪到的增益序列：
 
@@ -77,132 +89,173 @@
 0.0921 → 0.0337 → 0.0225 → 0.0149 → 0.0103 → 0.0103 → 0.0065 → 0.0042 → 0.0027 → 0.0012
 ```
 
-每帧增益都小于 0.12 阈值，**累积却爬上了 19.8 cm**。上限形同虚设。
+每帧增益都小于 0.12 阈值，**累积却爬上了 19.8 cm**。
 
-**修正**：判据从"本帧增益"改为"**相对当前落脚面的总抬升**"：
+**修正**：判据从"本帧增益"改为"**相对当前落脚面的总抬升**"。
 
-```gdscript
-var total_gain: float = landed_y - _base_y   # _base_y = 当前所站平面
-if total_gain <= 0.0 or total_gain > max_step + STEP_TOLERANCE:
-    return false
-```
+> **教训**："每帧都在阈值内"**不等于**"总位移在阈值内"。任何逐帧累积的位移判断都必须以稳定基准为准。
 
-修正后 20 cm 被正确挡住。
+### 3.2 基准值恒为 `INF`（已修复）
 
-**这个 bug 值得记录**：它说明"每帧都在阈值内"**不等于**"总位移在阈值内"。
-任何逐帧累积的位移判断都要以稳定基准为准，不能用帧内 dtype 的增量。
+**现象**：标定输出 `min=-inf max=-inf`，基准从未被赋值。
 
-### 3.2 `_base_y` 始终为 INF（已修复）
-
-**现象**：标定输出出现 `min=-inf max=-inf`，说明基准从未被赋值。
-
-**根因**：基准更新条件写成 `is_on_floor() and velocity.length() < 0.05`。
-但台阶分支里先把 `velocity` 清零，紧接着 `move_and_slide()` 又会重新写入速度，
-条件永不成立。
+**根因**：基准更新条件写成 `is_on_floor() and velocity.length() < 0.05`，但台阶分支里先清零 `velocity`，紧接着 `move_and_slide()` 又写回去，条件永不成立。
 
 **修正**：改用单一稳定条件 `if body.is_on_floor()`。
 
-### 3.3 第三个问题（已精确定位，未解决 —— 当前阻塞）
+### 3.3 探测前移量不足（已修复 —— 这是最终的关键根因）
 
-修正上述两点后，猫的 12 cm 与鼠的 3 cm **仍无法通过**。
+**现象**：抬高量加到 0.29 也没用，猫始终上不了 12 cm 台阶。
 
-**精确诊断结果**（`debug_stepup.gd`，Cat vs 12 cm 台阶，单步全条件打印）：
+**诊断方法**：写 `debug_stepup.gd` 在**真实被挡位置**逐条件打印。关键输出：
 
 ```
-x=-0.1544 y=0.2420 | 胶囊底=0.0020 顶=0.4820 | 前缘 x=0.0056
-1) test_move(flat) 有障碍 = true          ← 通过
-2) 障碍距离 gap=0.0165 (max_step=0.1200)  ← 通过
-3) test_move(up 0.12) 被挡 = false        ← 通过
-4) 抬起后 test_move(flat) 被挡 = false    ← 通过
-5) 下落命中 = true                        ← 通过
-   落点 y=0.2807 (胶囊底=0.0407, 台阶顶=0.120) travel.y=-0.0812
+V|--- 诊断 @ x=-0.1544 y=0.2420 前缘=0.0056 ---
+V| 1) 前方有障碍 = true
+V| 2) 头顶抬 0.290 被挡 = false
+V| 3) 抬起后前进被挡 = false
+V| 4) 下落命中 = true  碰撞数=1
+V|     #0 normal=(-0.868, 0.497, -0.000) n.y=0.497 可站立=false point=(0.0000, 0.1200, 0.0000)
+V| 5) 落点 y=0.2820 总增益=0.0400 (上界 0.1220)
 ```
 
-**关键发现：五个前置条件全部通过**，但**下落探测给出的落点是 `y=0.2807`（胶囊底 0.0407），
-比台阶顶 0.120 低 8 cm**。因此总抬升校验（`total_gain > max_step`）把它拒绝。
+**根因**：碰撞点恒为 `(0, 0.12, 0)`（台阶顶棱），法线 `(-0.868, 0.497)`（与竖直夹角 **60°**，超出 Godot 默认 `floor_max_angle` 45° → **判定为墙面，不可站立**）。
 
-**分析**：
-- 胶囊前缘 `x=0.0056` 已经越过台阶面（`x=0`）约 5.6 mm。
-- 抬高 0.12 后，胶囊底到达 `0.122`，理论上高于台阶顶 `0.120`。
-- 但胶囊**底部是半球**：在离底 2 mm 处，球的水平半宽仍有约 4.4 cm。
-  也就是说胶囊在那一点上仍然"胖"，下降时先撞到台阶的**竖直面/棱角区域**，
-  而不是干净地落在台阶顶面上，于是探测到 `0.2807` 这个中间高度。
+而之所以永远撞在棱上，是因为**探测前移量只有一帧的位移（约 1.67 cm）**，
+而胶囊半径是 16 cm —— **胶囊底心根本没有越过台阶竖直面（x=0）**，
+所以无论抬多高，下探都撞在棱角上。
 
-**结论**：问题不在前置判断，而在**"抬高 + 前移 + 下落"这三步的几何处理**——
-胶囊的圆底在台阶棱角处会先接触竖直面。需要改成：
-- 抬高后**多前移一点**再下落（让胶囊完全越过棱角），或
-- 用 `ShapeCast3D` 直接寻找"前方不高于 max_step 的可站立面"，绕开棱角接触问题，或
-- 参考 Godot 社区成熟的台阶抬升实现。
+**修正**（两处，都必须做）：
 
-**这是留给下一步的具体起点，不是含糊的"环境问题"。**
+1. **抬高量与阈值解耦**：探测抬高量取 `max_step * 2 + 0.05`，而不是 `max_step`。
+   因为胶囊圆底贴棱时**底心比台阶顶还低**，要抬过台阶高度本身才能让平底越过棱角。
+   放宽抬高量**不会**放过更高台阶——阈值把关靠最终的增益上界校验。
+2. **前移量与帧位移解耦**：前移量取 `max(RADIUS_SAFE, 帧位移)`，`RADIUS_SAFE = 0.20 m`，
+   确保底心越过台阶面。
 
-### 3.4 已排除的原因
+**同时保留可站立面判据**：要求下落碰撞中至少有一个法线满足 `n.y ≥ cos(45°)`，
+否则视为只有棱角接触，拒绝抬升。这一条是防止"踩在棱上"的关键。
+
+### 3.4 已排除的原因（记录以省后来者时间）
 
 | 假设 | 排除依据 |
 |---|---|
 | 容差太小 | 扫描 0.002 / 0.02 / 0.05 三档，结果完全相同 |
 | 逐帧棘轮 | 已修（§3.1），修后 20 cm 正确被挡 |
 | `_base_y` 基准失效 | 已修（§3.2） |
-| 某个前置条件误判 | §3.3 逐条打印，五个条件全部通过 |
-| 台阶几何摆错 | 复核：台阶块中心 y=0.06、高 0.12 → 顶面确为 0.120；竖直面确在 x=0 |
+| 前置条件误判 | §3.3 逐条打印，五个条件全部通过 |
+| 台阶几何摆错 | 复核：台阶中心 y=0.06、高 0.12 → 顶面确为 0.120；竖直面确在 x=0 |
+| 抬高量不够 | 实测：抬到 0.29 仍失败 → 排除，真因是前移量 |
 
 ---
 
-## 4. 对后续任务的影响
+## 4. 最终算法（v6）
+
+```gdscript
+func _try_step_up(body: CharacterBody3D, motion: Vector3, max_step: float) -> bool:
+    var flat := Vector3(motion.x, 0.0, motion.z)
+    if flat.length() < 0.000001: return false
+
+    var base: float = _base_y if is_finite(_base_y) else body.global_position.y
+    var min_walkable_ny: float = cos(deg_to_rad(45.0))   # 与 floor_max_angle 一致
+
+    if not body.test_move(body.global_transform, flat): return false   # 前方无障碍
+
+    # ① 抬高量与阈值解耦
+    var probe_raise: float = max_step * 2.0 + 0.05
+    if body.test_move(body.global_transform, Vector3.UP * probe_raise): return false
+
+    var raised := body.global_transform.translated(Vector3.UP * probe_raise)
+
+    # ② 前移量与帧位移解耦，确保底心越过台阶面
+    var probe_forward: float = RADIUS_SAFE + flat.length()
+    var fwd_dir: Vector3 = flat.normalized()
+    if body.test_move(raised, fwd_dir * probe_forward): return false   # 台阶过高
+
+    var forward := raised.translated(fwd_dir * probe_forward)
+
+    # ③ 下探并要求可站立面
+    var params := PhysicsTestMotionParameters3D.new()
+    params.from = forward
+    params.motion = Vector3.DOWN * (probe_raise + 0.5)
+    params.margin = 0.001
+    params.max_collisions = 8
+    var res := PhysicsTestMotionResult3D.new()
+    if not PhysicsServer3D.body_test_motion(body.get_rid(), params, res): return false
+
+    var walkable := false
+    for i in res.get_collision_count():
+        if res.get_collision_normal(i).y >= min_walkable_ny:
+            walkable = true
+            break
+    if not walkable: return false
+
+    # ④ 阈值把关在这里，不在抬高量
+    var landed_y: float = forward.origin.y + res.get_travel().y
+    var total_gain: float = landed_y - base
+    if total_gain <= 0.0 or total_gain > max_step + STEP_TOLERANCE: return false
+
+    body.global_position = Vector3(forward.origin.x, landed_y, forward.origin.z)
+    return true
+```
+
+**设计要点**：
+- **抬高量、前移量都只是"探测参数"，不承担阈值把关**；阈值只由 `total_gain` 决定。
+  这样两者可以取足够宽裕的值而不影响正确性。
+- **可站立面判据**（`n.y ≥ cos(floor_max_angle)`）是防"踩棱"的关键，
+  与 Godot 自身的 `floor_max_angle` 语义一致。
+
+---
+
+## 5. 对后续任务的影响（更新）
 
 | 任务 | 影响 |
 |---|---|
-| T009（猫移动） | **阻塞风险**：猫 12 cm 台阶未验证通过 |
-| T010（鼠移动·通道尺度） | **阻塞风险**：鼠 3 cm 台阶未验证通过；且裸 `move_and_slide` 对鼠半径完全不行 |
-| M01 用例 | 无法执行（需要鼠过洞、猫上高台） |
-| M02 用例 | 部分相关（斜坡） |
+| T009（猫移动） | ✅ 12 cm 台阶可行，实现可直接复用 |
+| T010（鼠移动·通道尺度） | ✅ 3 cm 台阶可行；**注意不能依赖裸 `move_and_slide`**（鼠半径太小，连 3 cm 都滚不上） |
+| M01 用例 | 具备执行条件 |
+| M02 用例 | 台阶部分具备条件（斜坡未测） |
 
-**P1 阶段门未通过的前提已出现。** 按 AGENTS.md，这属于需要向负责人报告的具体阻塞，而不是"环境问题"。
-
----
-
-## 5. 建议的解决方向（供参考，未验证）
-
-1. **继续定位当前实现**：用 `debug_stepup.gd` 对 12 cm 用例逐帧打印
-   `test_move` 结果与 `_try_step_up` 的每一个提前 return，找出是哪一步拒绝的。
-   这是最省成本的路径。
-2. **改用 `ShapeCast3D` 做台阶探测**：用向下的 `ShapeCast3D` 直接测"前方是否有一个
-   不高于 max_step 的可站立面"，比 `test_move` 组合更直观，也更容易调试。
-3. **参考 CharacterBody3D 的社区方案**：Godot 生态里台阶抬升是已知痛点，
-   存在若干成熟做法（如基于 `floor_snap_length` + 手动抬升）。
-   **注意**：引入第三方方案前需按 AGENTS.md 确认授权，且要审查代码。
-4. **降低要求**：若短期无法解决，可在 P1 用**斜坡**代替台阶（斜坡不需要台阶抬升，
-   `move_and_slide` 原生支持），把台阶作为明确的后续阻塞项。
-   **这需要产品侧确认**，因为它影响 M01 的"鼠能过洞、猫不能"的空间差异设计。
+**建议**：把这个算法移到 `Game/Reborn/scripts/characters/step_climb.gd` 作为可复用组件，
+并在 T009 中接入，而不是留在 `tests/` 里。
 
 ---
 
 ## 6. 未验证 / 限制
 
-- 探针**只测了单一朝向（+X）与单一速度（1.0 m/s）**；未测斜向、奔跑速度、下台阶。
+- 探针**只测了单一朝向（+X）与单一速度（1.0 m/s）**；未测斜向、奔跑速度、**下台阶**。
 - 未测**台阶宽度**影响（本探针台阶深 6 m，是很宽的平台）。
 - 未测**多级连续台阶**与**台阶+斜坡混合**。
+- 未测**低顶下的台阶**（算法里有头顶空间检查，但未构造用例验证它真的生效）。
 - 未做视觉验证（vision 服务 403）。
-- 探针在 `Game/Reborn/tests/` 下，是**开发工具**，不是产品代码；T009 应把验证通过的
-  实现移到 `scripts/characters/` 并重写为可复用组件。
+- `RADIUS_SAFE = 0.20` 是按当前最大胶囊（猫 0.16）取的；若将来有更大体型需重新标定。
+- 探针在 `Game/Reborn/tests/` 下，是**开发工具**，不是产品代码。
 
 ---
 
-## 7. 状态
+## 7. 复现命令
+
+```powershell
+# 能力判定（6/6 断言）
+& 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe' `
+  --headless --path 'E:\Reborn\Game\Reborn' `
+  --script 'res://tests/probe_step_height.gd' --quit-after 30000
+
+# 单案例逐条件诊断（改 debug_stepup.gd 顶部的 STEP / MAX_STEP / RADIUS 即可换用例）
+& '<godot_console.exe>' --headless --path 'E:\Reborn\Game\Reborn' `
+  --script 'res://tests/debug_stepup.gd' --quit-after 8000
+```
+
+退出码 0。判定看 `CAPABILITY|` 行。
+
+---
+
+## 8. 状态
 
 | 项 | 状态 |
 |---|---|
 | 裸 `move_and_slide` 行为已摸清 | **done**（含半径相关性的发现） |
-| 棘轮 bug 定位与修复 | **done** |
-| `_base_y` 基准 bug 定位与修复 | **done** |
-| **12 cm / 3 cm 台阶抬升达成** | **NOT ACHIEVED — 当前阻塞** |
-| 探针可复现 | **done**（命令见下） |
-
-```powershell
-& 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe' `
-  --headless --path 'E:\Reborn\Game\Reborn' `
-  --script 'res://tests/probe_step_height.gd' --quit-after 60000
-```
-
-当前脚本处于**容差标定模式**（`sweep_tolerance`）。恢复正常断言模式需把
-`_initialize()` 中的 `await sweep_tolerance()` 换回 `for mode in [...]:` 循环。
+| 三个 bug 定位与修复 | **done** |
+| **12 cm / 3 cm 台阶抬升达成** | **ACHIEVED**（6/6，5 次一致） |
+| T002 回归 | **18/18 通过**，未被探针改动破坏 |
+| 组件化（移入 scripts/） | **待做**（T009） |

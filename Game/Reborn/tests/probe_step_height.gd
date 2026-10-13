@@ -32,6 +32,10 @@ const MAX_ITERS := 700
 ## 台阶容差（米）。由 sweep_tolerance 实测标定后固定，见文件末尾的标定记录。
 var STEP_TOLERANCE: float = 0.002
 
+## 探测前移量的下限（米）。必须足以让胶囊底心越过台阶竖直面，
+## 否则下探会一直撞在台阶顶棱（不可站立面）上。取略大于最大胶囊半径。
+const RADIUS_SAFE: float = 0.20
+
 var _results: Dictionary = {}
 
 
@@ -40,9 +44,6 @@ func _initialize() -> void:
 	print("PROBE|physics_hz=%d|speed=%.2f|start_x=%.2f|target_x=%.2f|tolerance=%.4f" % [
 		Engine.physics_ticks_per_second, SPEED, START_X, TARGET_X, STEP_TOLERANCE
 	])
-
-	await sweep_tolerance()
-	return
 
 	for mode in ["naive", "stepup"]:
 		print("---- 阶段 %s ----" % ("A：裸 move_and_slide" if mode == "naive" else "B：自实现台阶抬升"))
@@ -187,77 +188,89 @@ func _add_box(parent: Node3D, nm: String, size: Vector3, pos: Vector3) -> void:
 	parent.add_child(body)
 
 
-## 自实现台阶抬升。
-## API 依据：Godot 4.7.2 引擎文档（--doctool 权威签名）
-##   PhysicsServer3D.body_test_motion(body: RID,
-##       parameters: PhysicsTestMotionParameters3D,
-##       result: PhysicsTestMotionResult3D = null) -> bool
+## 自实现台阶抬升（v4 —— 基于实测根因重写）
 ##
-## 判据演进（三个版本，两个真实 bug 的修正记录）：
-##   v1 用 "dropped <= max_step" —— 错。它只说明"落点还在同一水平面附近"，
-##      实测反例：猫(max=0.12) 对 20cm 台阶 dropped=0.1223、落点仍在地面，却判为通过。
-##   v2 改用 "落点相对起点的增益 ∈ (0, max_step]" —— 仍是错。
-##      **逐帧棘轮**：胶囊底部是圆的，贴着台阶棱角每帧只抬升一点点
-##      （实测增益序列 0.0921 → 0.0337 → 0.0225 → 0.0149 → … → 0.0012），
-##      每帧都小于阈值，累积却爬上了 19.8cm 的台阶。上限形同虚设。
-##   v3（当前）把基准从"本帧起点"改为"**当前落脚面**"：
-##      总抬升 = 拟落点 − 当前所站平面。超过 max_step 一律拒绝。
-##      base_y 只在真正站定时更新（速度接近 0 且在落地状态）。
+## 根因（实测，见 Docs/Evidence/T009-probe.md）：
+##   胶囊底部是半球。面对台阶时它停在"底心仍在台阶面左侧、圆底蹭到台阶顶棱"
+##   的位置。向下探测在该处命中的是**棱角**：
+##     碰撞点 (0.0, 0.12, 0.0)，法线 (-0.864, 0.504, 0)
+##   法线与竖直方向夹角 59.7°，超出 Godot 默认 floor_max_angle（45°），
+##   因此引擎判定为**墙面、不可站立**，落点也停在半空（胶囊底 0.0407）。
+##
+## 结论：不能只看"下落有没有命中"，必须**要求落点是可站立面**（法线足够竖直）。
+##   同时在抬高前先让水平位移推进到被挡，使胶囊真正贴住台阶，再抬高前进。
+##
+## 判据（三条同时成立）：
+##   1. 头顶有抬高空间
+##   2. 抬高并前移后不被阻挡
+##   3. 下落命中，且碰撞法线属于可站立面（n.y ≥ cos(floor_max_angle)），
+##      并且落点相对当前落脚面的抬升 ∈ (0, max_step]
 func _try_step_up(body: CharacterBody3D, motion: Vector3, max_step: float) -> bool:
 	var flat := Vector3(motion.x, 0.0, motion.z)
 	if flat.length() < 0.000001:
 		return false
 
 	var y_start: float = body.global_position.y
+	var base: float = _base_y if is_finite(_base_y) else y_start
+	# Godot 默认 floor_max_angle 是 45°，这里用同一判据认定"可站立"
+	var min_walkable_ny: float = cos(deg_to_rad(45.0))
 
-	# 前方必须有障碍，否则不是台阶场景
+	# 前方必须有障碍（否则不是台阶场景）
 	if not body.test_move(body.global_transform, flat):
 		return false
 
-	# 障碍距离必须 ≤ max_step，否则是远墙而不是台阶
-	var probe := PhysicsTestMotionParameters3D.new()
-	probe.from = body.global_transform
-	probe.motion = flat
-	probe.margin = 0.001
-	var probe_res := PhysicsTestMotionResult3D.new()
-	if not PhysicsServer3D.body_test_motion(body.get_rid(), probe, probe_res):
-		return false
-	var moved: float = probe_res.get_travel().length()
-	if flat.length() - moved > max_step:
-		return false  # 被挡得太早 → 不是可上的台阶
-
-	# 头顶要有空间
-	if body.test_move(body.global_transform, Vector3.UP * max_step):
+	# 关键（v5）：**探测用的抬高量必须大于台阶阈值**，与 max_step 解耦。
+	#
+	# 原因：胶囊底部是半球。贴住台阶时圆底蹭在台阶顶棱上，底心高度比台阶顶
+	# 还低。要让平底越过棱角，抬高量必须超过台阶高度本身，而不是只抬 max_step。
+	# 实测：抬 max_step 时猫上不了 12cm 台阶（抬到 0.122 vs 台阶顶 0.120，
+	# 只差 2mm，前进仍然蹭棱 → 可站立面判据拒绝）。
+	#
+	# 放宽抬高量**不会**放过更高台阶：过高的台阶会在"抬高后仍被挡"或最终
+	# 增益上界校验处被拒绝。阈值把关靠 total_gain，不靠抬高量。
+	var probe_raise: float = max_step * 2.0 + 0.05
+	# 头顶空间：抬这么高会顶到天花板就放弃（低顶下不应上台阶）
+	if body.test_move(body.global_transform, Vector3.UP * probe_raise):
 		return false
 
-	var raised := body.global_transform.translated(Vector3.UP * max_step)
-	if body.test_move(raised, flat):
+	var raised := body.global_transform.translated(Vector3.UP * probe_raise)
+
+	# 关键（v6）：**前移量必须足够让胶囊底心越过台阶竖直面**。
+	#
+	# 前一版用一帧的位移（motion，约 1.67cm）当前移量，结果底心根本没跨过
+	# 台阶面（x=0），下探永远撞在台阶**顶棱**上：
+	#   normal=(-0.868, 0.497, 0)  夹角 60° → 不可站立 → 被拒绝
+	# 实测：把抬高量加到 0.29 也没用，因为问题在前移量而不是抬高量。
+	#
+	# 前移量取"至少一个半径 + 一个帧位移"，使平底足以落到台阶顶面之上。
+	var forward_dist: float = maxf(flat.length(), 0.0)
+	var probe_forward: float = RADIUS_SAFE + forward_dist
+	var fwd_dir: Vector3 = flat.normalized()
+	var forward := raised.translated(fwd_dir * probe_forward)
+	if body.test_move(raised, fwd_dir * probe_forward):
 		return false  # 抬起后仍被挡 → 台阶高于阈值
 
-	# 找落点
-	var forward := raised.translated(flat)
+	# 下落探测，并收集所有碰撞的法线
 	var params := PhysicsTestMotionParameters3D.new()
 	params.from = forward
-	params.motion = Vector3.DOWN * (max_step + 0.01)
+	params.motion = Vector3.DOWN * (probe_raise + 0.5)
 	params.margin = 0.001
+	params.max_collisions = 8
 	var res := PhysicsTestMotionResult3D.new()
 	if not PhysicsServer3D.body_test_motion(body.get_rid(), params, res):
 		return false  # 前方悬空
 
+	# 必须有**可站立**的接触面；只有棱角接触时返回 false
+	var walkable := false
+	for i in res.get_collision_count():
+		if res.get_collision_normal(i).y >= min_walkable_ny:
+			walkable = true
+			break
+	if not walkable:
+		return false
+
 	var landed_y: float = forward.origin.y + res.get_travel().y
-
-	# 记录候选抬升量（含被拒绝的），供容差标定使用
-	if _cur_key != "":
-		if not _gains.has(_cur_key):
-			_gains[_cur_key] = []
-		var arr: Array = _gains[_cur_key]
-		if arr.size() < 400:
-			arr.append(landed_y - _base_y)
-
-	# v3 关键：以"当前落脚面"为基准算总抬升，防止逐帧棘轮。
-	# 容差说明：胶囊底部是半球，靠上台阶棱角时需要的抬升量会略大于台阶高度，
-	# 因此允许 STEP_TOLERANCE 的余量。该值由 sweep_tolerance 实测标定。
-	var total_gain: float = landed_y - _base_y
+	var total_gain: float = landed_y - base
 	if total_gain <= 0.0 or total_gain > max_step + STEP_TOLERANCE:
 		return false
 

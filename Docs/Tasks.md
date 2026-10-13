@@ -27,6 +27,7 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T002 | **done**（视觉部分 awaiting-review） | `Docs/Evidence/T002.md`；提交 `611a55b` | 无头断言 18/18 通过，10 次运行一致；视觉待 vision 恢复后补验 |
 | T003 | **done** | `Docs/Evidence/T003.md`；提交 `b7767ca`、`611a55b` | LFS 生效 + 从零克隆可运行工程（18/18 通过） |
 | T004 | **部分 done** | `Docs/Evidence/T004.md` | Godot 侧完成；Blender 资产侧待确认路线（建议用 CLI） |
+| 台阶探针 | **done**（T009/T010 前置） | `Docs/Evidence/T009-probe.md`；`tests/probe_step_height.gd` | 6/6 通过，5 次运行一致；算法待移入 `scripts/` 组件化 |
 | T005 | pending | 无 | 依赖 T002(done) + T004(部分)；**用 glTF 而非 FBX** |
 | T006 | pending | 无 | 依赖 T005；允许阻塞，静态占位可推进 P1～P5 |
 | T007 | pending | 无 | 依赖 T002(done)；**阻塞于导出模板未安装** |
@@ -61,11 +62,16 @@ E01 的视觉部分 **awaiting-review**；E02 Blender 侧 API 已确认，Godot 
 
 ## 选择顺序
 
-T001 / T002 / T003 **均已完成**。下一步可执行（按建议优先级）：
+T001 / T002 / T003 **均已完成**；**台阶能力探针已完成（6/6 通过）**，P1 最高技术风险已解除。
 
-1. **台阶能力探针（建议先做）**：Godot `CharacterBody3D` **没有** UE `MaxStepHeight` 的等价物。
-   猫需上 12 cm 台阶、鼠需上 3 cm，还要有"低于阈值才抬升、高于则被挡住"的行为。
-   这是 P1 的**最高技术风险**，先花小成本验证可行性，避免 T009/T010 卡住。
+下一步可执行：
+
+1. **T008**（最小物种配置与身体）：前置 T002 已满足。动手前先写 `Docs/Tasks/T008.md` 单任务规格。
+   建议把 `SpeciesConfig` 的 `max_step_height` 字段与台阶算法一起接入。
+2. **台阶算法组件化**：把 `tests/probe_step_height.gd` 里验证过的算法移到
+   `scripts/characters/step_climb.gd` 作为可复用组件，T009 直接调用。
+3. **T005**（静态资产往返）：需先确认 Blender 路线（**建议用 3.3.1 自带无头 CLI**，已实测可用）。
+4. **T007**（打包）：需先安装导出模板。
 2. **T008**（最小物种配置与身体）：前置 T002 已满足。动手前先写 `Docs/Tasks/T008.md` 单任务规格。
 3. **T005**（静态资产往返）：需先确认 Blender 路线（**建议用 3.3.1 自带无头 CLI**，已实测可用）。
 4. **T007**（打包）：需先安装导出模板。
@@ -82,12 +88,14 @@ P4 前先阅读 TechnicalDesign 数据契约，T036 是契约实现检查与持�
 
 | 阻塞 | 影响 | 最小解除条件 |
 |---|---|---|
-| **台阶（MaxStepHeight）能力未达成** | **T009/T010/M01** | 见 `Docs/Evidence/T009-probe.md`。问题已精确定位到"抬高+前移+下落"的几何处理：胶囊圆底在台阶棱角处先接触竖直面，下落探测得到 0.2807 而非台阶顶 0.120。下一步改用 `ShapeCast3D` 找可站立面，或抬高后多前移再下落 |
 | **Godot 导出模板未安装**（`%APPDATA%\Godot\export_templates\` 为空） | T007、所有"打包版启动"验收 | 安装 `4.7.2.stable` 模板（约 1 GB）。**需负责人授权或自行安装**（编辑器内一次点击） |
 | Blender 资产路线未定（MCP 实现未指定） | T005/T006 的 Blender 侧 | 指定已确认 MCP 实现并授权；**或确认改用 Blender 3.3.1 自带无头 CLI**（已实测可用，建议此项） |
 | vision 订阅失效（OpenCode Go 403） | 全部视觉验收 | 恢复订阅或改配可用的 `DASHSCOPE_BASE_URL` + `VISION_MODEL`；恢复后先用 `Art/Probes/vision_probe_red_blue.png` 自检 |
 | C: 仅剩 11.8 GB | 产物落盘 | 确认工程与产物落 D:/E: |
 | Godot 渲染器未定（T600 4GB 能否跑 Forward+） | P1 起的画质与性能 | T002 先建 `forward_plus`，**P1 实测帧率后再定**；不要现在宣称性能基线 |
+
+> **已解除**：台阶（MaxStepHeight）能力 —— 2026-10-13 探针达成 6/6，
+> 猫 12 cm 上、20 cm 挡；鼠 3 cm 上、12 cm 挡。见 `Docs/Evidence/T009-probe.md`。
 
 ## 后续单任务规格格式
 
