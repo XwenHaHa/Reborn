@@ -225,22 +225,49 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 
 ---
 
-## 6. 视觉验证（可运行，服务端当前拒绝）
+## 6. 视觉验证（VERIFIED — 2026-10-13 可用）
 
 ```powershell
 & node "E:\claude-vision-skill\vision.js" "<图片绝对路径>" "<中文检查问题>"
 ```
 
-- 脚本存在且**能启动并发出请求**（实测）。
-- 实测结果：**退出码 1**，服务端返回
-  `API 403: {"error":{"type":"server_error","message":"Upstream request failed: An active OpenCode Go subscription is required to use Go models."}}`
-- 配置（只记键名，不记值）：`E:\claude-vision-skill\.env` 含 `DASHSCOPE_API_KEY`、`VISION_MODEL=mimo-v2.5`；**未设置 `DASHSCOPE_BASE_URL`**。
-- 结论：调用链已打通到"服务端鉴权"这一步；**当前不能产出任何画面判断**。所有视觉验收保持 NOT-RUN。
-- 已知答案探针图：`Art/Probes/vision_probe_red_blue.png`（64×32，左半纯红右半纯蓝；已用 Blender 解码器逐像素核对）。恢复订阅后用它第一时间确认工具可用。
-- 生成命令：`& C:\Python313\python.exe 'E:\Reborn\Tools\Probes\make_probe_image.py'`
+- 退出码：**0**（可用）
+- **可信性已验证**：对已知答案图 `Art/Probes/vision_probe_red_blue.png`（64×32 左红右蓝）提问，答对
+  （"红色，蓝色"）。**先用已知答案验证工具，再用它下结论。**
+- 配置在 `E:\claude-vision-skill\.env`（该目录 `.gitignore` 含 `.env`）：
+  `DASHSCOPE_BASE_URL` / `DASHSCOPE_API_KEY` / `VISION_MODEL` / `VISION_MAX_TOKENS`。
+  **key 不记录、不入库、不进日志。**
+- ⚠ **`DASHSCOPE_BASE_URL` 必须带 `/v1`**。实测：
 
-**影响**：Godot 的画面验收（T002 视觉部分、T005 比例/朝向、T006 变形）在恢复前记 `awaiting-review`。
-**数据断言（无头运行 + 读回数值）不依赖视觉工具，可以照常通过。**
+  | 请求 | 结果 |
+  |---|---|
+  | `POST /chat/completions` | **404** |
+  | `POST /v1/chat/completions` | **200** |
+  | `GET /v1/models` | **200** |
+
+- 该网关用 `http://`（非 https）直连 IP；**排除代理**（`NO_PROXY=<ip>`），否则被拦。
+- 原配置（opencode.ai 网关 + `mimo-v2.5`）实测 403 订阅失效，已备份为 `.env.bak_before_reborn`。
+
+### 6.1 ⚠ 不要用屏幕截图做视觉验证
+
+实测踩到：屏幕截图依赖**窗口可见、在前台、未被遮挡、DPI 缩放正确**。
+游戏窗口曾处于 `(-25600,-25600)` 且客户区 `0x0`（Windows 最小化位置），
+截到的是桌面背景，导致两次视觉分析**结论互相矛盾**。
+
+**改用引擎自己导出渲染帧**（`Game/Reborn/tests/tool_capture_render.gd`）：
+
+```powershell
+# 注意：不能用 --headless（无头是 dummy 渲染器，没有真实画面）
+& 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe' `
+  --path 'E:\Reborn\Game\Reborn' --script 'res://tests/tool_capture_render.gd' --quit-after 400
+# 输出 user://render_capture.png -> %APPDATA%\Godot\app_userdata\Reborn\render_capture.png
+```
+
+同时打印**客观像素统计**（`unique_colors` / 亮度跨度 / 与 clear color 的相似像素占比），
+比语义描述更可靠。实测判据：修复后 `unique_colors=2151`、`range=0.5776`、`clear_color_like_ratio=0.0000`。
+
+**影响**：Godot 的画面验收（T002/T005/T006/T007）现可正常进行。
+**数据断言（无头运行 + 读回数值）不依赖视觉工具，一直可照常通过。**
 
 ---
 

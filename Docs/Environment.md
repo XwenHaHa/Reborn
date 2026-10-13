@@ -50,11 +50,19 @@
 - API 存在：`export_scene.fbx`、`import_scene.fbx`、`wm.save_as_mainfile`、`bpy.data.armatures`。
 - **Godot 导入建议用 glTF 而非 FBX**（Godot 对 FBX 支持较弱），T005 步骤需相应改写。
 
-### 视觉工具（可运行，服务端拒绝）
+### 视觉工具（**已可用**，2026-10-13）
 
-- `E:\claude-vision-skill\vision.js` 能启动并发请求，但两次实测均 **退出码 1**：`API 403 ... An active OpenCode Go subscription is required to use Go models.`
-- **当前无法产出任何画面判断**，视觉类验收全部 NOT-RUN。
-- 已知答案探针图 `Art/Probes/vision_probe_red_blue.png` 已备好，恢复后先自检。
+- `E:\claude-vision-skill\vision.js` **实测可用**（退出码 0）。
+- **可信性已验证**：对已知答案探针图 `Art/Probes/vision_probe_red_blue.png`（左红右蓝）提问，
+  答对（"红色，蓝色"）。**先验证工具、再用工具下结论。**
+- 配置（只记键名与非密值，**key 不记录**）：`E:\claude-vision-skill\.env`
+  含 `DASHSCOPE_BASE_URL`、`DASHSCOPE_API_KEY`、`VISION_MODEL`、`VISION_MAX_TOKENS`。
+  - `DASHSCOPE_BASE_URL` **必须带 `/v1`**（实测：`POST /chat/completions` → 404；
+    `POST /v1/chat/completions` → 200）。
+  - 原配置（opencode.ai 网关 + `mimo-v2.5`）实测 403 订阅失效，已备份为
+    `.env.bak_before_reborn`。该目录 `.gitignore` 含 `.env`，凭据**不入任何仓库**。
+- **首次使用即发现真实渲染缺陷**（场景无光源/无环境/相机未激活），见
+  `Docs/Evidence/Visual-Verification.md`。
 
 ### Agent 自动化工具
 
@@ -103,13 +111,13 @@ windows_release_x86_64_console.exe  0.2 MB
 | Blender-MCP | **未指定/不存在** | 无 MCP 配置；但 Blender CLI 已可独立验证 |
 | MCP 保存、导出 | **未验证** | 依赖未确定的 MCP 实现；Blender CLI 侧 API 已确认存在 |
 | Godot 导入 Blender 资产 | **未验证** | 需 T005 实测（建议 glTF） |
-| 视觉/录屏 | **可运行但被服务端拒绝** | vision.js 实测 403（订阅缺失） |
+| 视觉/录屏 | **通过** | vision.js 实测可用；已知答案图答对；已用于发现并修复渲染缺陷 |
 | Git/LFS/备份 | **通过** | LFS 生效；从零克隆后引擎实跑 18/18 |
 | 硬件与磁盘余量 | **通过** | CPU/GPU/RAM/磁盘已采集 |
 
 ## 阶段门现状
 
-**P0 部分通过**：E01 部分通过、**打包通过**（T007）；
+**P0 部分通过**：E01 部分通过、**打包通过**（T007）、**视觉验收通过**；
 **E02（静态资产往返）与 E03（骨骼往返）未执行** → P0 尚未完成，差的是资产链验证。
 
 ## 阻塞与最小解除条件
@@ -120,9 +128,9 @@ windows_release_x86_64_console.exe  0.2 MB
 | ~~技术层文档仍是 UE5 版~~ | ~~T002 起~~ | **已解除**（文档已重写为 Godot 版） |
 | ~~Git LFS 未配置~~ | ~~T003~~ | **已解除**（LFS 生效 + 从零克隆恢复试验通过） |
 | ~~台阶 MaxStepHeight 能力未达成~~ | ~~T009/T010~~ | **已解除**（探针 6/6 通过） |
-| vision 订阅失效（OpenCode Go 403） | 全部视觉验收（T002 画面项、T007 画面项、T005/T006 外观） | 恢复订阅或改配可用的 `DASHSCOPE_BASE_URL` + `VISION_MODEL`；恢复后用 `Art/Probes/vision_probe_red_blue.png` 自检，再补验 `Art/Probes/t007_release_window.png` |
-| 真实按键输入无安全自动化手段 | T007 输入项、P7 试玩 | 受审查的输入自动化工具（需授权），或真人操作录像。**禁止盲发按键** |
-| Blender 资产路线未定 | T005/T006 的 Blender 侧 | 指定已确认 MCP 实现并授权；或确认改用 Blender 自带无头 CLI（已实测可用，建议） |
+| ~~vision 订阅失效（403）~~ | ~~全部视觉验收~~ | **已解除**（2026-10-13 换用负责人提供的网关并验证） |
+| 真实按键输入无安全自动化手段 | T007 的"输入"项、P7 试玩 | 受审查的输入自动化工具（**需授权**），或真人操作录像。**禁止盲发按键**（可能打进用户焦点窗口）；合成输入已由 `run_t007_input.gd` 覆盖 |
+| Blender 资产路线未定 | T005/T006 的 Blender 侧 | 指定已确认 MCP 实现并授权；或确认改用 Blender 自带无头 CLI（已实测可用） |
 | C: 仅剩 13.7 GB | 产物落盘 | 确认工程与产物落 D:/E: |
 
 ## 与 2026-10-12 首次检查的差异

@@ -21,6 +21,10 @@ extends SceneTree
 
 const LAB := "res://scenes/maps/l_movement_lab.tscn"
 const EPS := 0.01  # 1 cm
+## Cat 胶囊半高（Parameters.md: 24 cm -> 0.24 m）
+const HALF_HEIGHT := 0.24
+## 地面顶面高度（BoxMesh/BoxShape3D 厚 0.20，居中于 y=0）
+const GROUND_TOP := 0.10
 
 var _failures: int = 0
 var _checks: int = 0
@@ -38,12 +42,18 @@ func _initialize() -> void:
 	_assert("lab_scene_loads", "PackedScene", "PackedScene", true)
 
 	var lab: Node = packed.instantiate()
+
+	# --- 先核对"场景作者摆放的位置"，在**入树之前**做 ---
+	# 为什么不在运行中核对：玩家一入树就受重力下落，读到的位置取决于断言前
+	# 跑了几个物理帧，会随渲染开销变化。实测加光源/阴影后从 0.0000 m 变成
+	# 0.0789 m 并稳定失败——这是断言本身时序脆弱，不是场景错了。
+	# 位置是**局部变换**属性，实例化后立即可读，用它才确定。
+	_check_authored_placement(lab)
+
 	root.add_child(lab)
 
 	# 必须等节点真正进入场景树：add_child 之后同一帧内 get_global_transform()
 	# 仍会失败（!is_inside_tree），读到的是零变换。
-	# 这里用条件轮询而不是固定帧数——固定帧数在首次运行（需生成 .godot 缓存）
-	# 时会不够，曾实测出一次间歇性失败。轮询把时序依赖彻底去掉。
 	var entered: bool = await _await_condition(
 		func() -> bool: return (lab.get_node_or_null("Player") as Node3D).is_inside_tree(),
 		600,
@@ -100,9 +110,10 @@ func _check_ground_scale(lab: Node) -> void:
 		_assert_near("ground_mesh_size_z_m", 10.0, bm.size.z, EPS)
 
 
-## PlayerStart 必须在地面上方且与地面无碰撞重叠。
-## 用真实物理查询（不是拿坐标自己算），才是有效证据。
-func _check_spawn_clearance(lab: Node) -> void:
+## 核对"场景作者把 Player 摆在了 PlayerStart 上、且在地面上方"。
+## 用**局部位置**（实例化后立即可读），不依赖运行中的物理状态。
+## 这是确定性的：不受帧率、渲染开销、下落进度影响。
+func _check_authored_placement(lab: Node) -> void:
 	var start := lab.get_node_or_null("PlayerStart") as Marker3D
 	if start == null:
 		_assert("player_start_exists", "Marker3D", "null", false)
@@ -115,24 +126,37 @@ func _check_spawn_clearance(lab: Node) -> void:
 		return
 	_assert("player_exists", "CharacterBody3D", "CharacterBody3D", true)
 
-	# 玩家实际位置必须与 PlayerStart 一致（不是写了没用上）
-	var d: float = player.global_position.distance_to(start.global_position)
-	_assert_near("player_at_start_m", 0.0, d, EPS)
+	# 局部位置（.tscn 里写的值），与 PlayerStart 一致
+	var d: float = player.position.distance_to(start.position)
+	_assert_near("player_authored_at_start_m", 0.0, d, EPS)
+	print("PLACEMENT|player_local=%s|start_local=%s" % [player.position, start.position])
 
-	# 高于地面：地面顶面在 y=0.1（厚 0.2 居中于 0），胶囊半高 0.24
+	# 作者摆放的高度必须让胶囊与地面无初始交叠：
+	# 地面顶面 y=0.10（厚 0.20 居中于 0），胶囊半高 0.24 → 最低要求 0.34
+	var bottom: float = player.position.y - HALF_HEIGHT
 	_assert(
-		"spawn_above_ground",
-		"> 0.34 (ground top 0.10 + half height 0.24)",
-		"%.3f" % player.global_position.y,
-		player.global_position.y > 0.34,
+		"authored_spawn_above_ground",
+		">= 0.10 (ground top)",
+		"%.3f (capsule bottom)" % bottom,
+		bottom >= 0.10,
 	)
 
-	# 真实重叠检测：胶囊与 world_static 层不应有交叠
+
+## 运行时物理核对：出生点无碰撞重叠（用真实物理查询）。
+## PlayerStart 不会移动，所以用它的 global_position 是稳定的。
+func _check_spawn_clearance(lab: Node) -> void:
+	var start := lab.get_node_or_null("PlayerStart") as Marker3D
+	var player := lab.get_node_or_null("Player") as CharacterBody3D
+	if start == null or player == null:
+		return
+
+	# 真实重叠检测：把胶囊放在 **PlayerStart**（不动的参照物）而非运行中的玩家位置，
+	# 否则玩家已下落会改变查询结果，断言就随帧数漂移。
 	var space := player.get_world_3d().direct_space_state
 	var params := PhysicsShapeQueryParameters3D.new()
 	var col := player.get_node_or_null("CollisionShape3D") as CollisionShape3D
 	params.shape = col.shape
-	params.transform = Transform3D(Basis(), player.global_position)
+	params.transform = Transform3D(Basis(), start.global_position)
 	params.collision_mask = 1  # world_static
 	params.collide_with_bodies = true
 	var res: Array[Dictionary] = space.intersect_shape(params, 4)

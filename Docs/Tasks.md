@@ -24,13 +24,13 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | 任务 | 状态 | 已有证据 | 下一步 |
 |---|---|---|---|
 | T001 | **done（Godot 版）** | `Docs/Evidence/T001.md`（环境/硬件/UE 定位）；`Docs/Evidence/T004.md`（Godot 能力） | 已完成 |
-| T002 | **done**（视觉部分 awaiting-review） | `Docs/Evidence/T002.md`；提交 `611a55b` | 无头断言 18/18 通过，10 次运行一致；视觉待 vision 恢复后补验 |
+| T002 | **done** | `Docs/Evidence/T002.md`；`Visual-Verification.md` | 无头断言 18/18 ×3；**视觉已补验通过**（发现并修复场景无光源缺陷） |
 | T003 | **done** | `Docs/Evidence/T003.md`；提交 `b7767ca`、`611a55b` | LFS 生效 + 从零克隆可运行工程（18/18 通过） |
-| T004 | **部分 done** | `Docs/Evidence/T004.md` | Godot 侧完成；Blender 资产侧待确认路线（建议用 CLI） |
-| 台阶探针 | **done**（T009/T010 前置） | `Docs/Evidence/T009-probe.md`；`tests/probe_step_height.gd` | 6/6 通过，5 次运行一致；算法待移入 `scripts/` 组件化 |
-| T005 | pending | 无 | 依赖 T002(done) + T004(部分)；**用 glTF 而非 FBX** |
+| T004 | **done**（路线决策） | `Docs/Evidence/T004.md`、`BlenderPipeline.md` | **路线已定：用 Blender 自带无头 CLI，不用 MCP**；资产侧并入 T005 |
+| 台阶探针 | **done**（T009/T010 前置） | `Docs/Evidence/T009-probe.md`；`tests/probe_step_height.gd` | 6/6 通过；算法待移入 `scripts/` 组件化 |
+| T005 | pending | 无 | 依赖 T002(done) + T004(done)；**用自带 CLI + glTF** |
 | T006 | pending | 无 | 依赖 T005；允许阻塞，静态占位可推进 P1～P5 |
-| T007 | **done**（1 项 awaiting-review） | `Docs/Evidence/T007.md`；`Builds/P0-Win64/` | 导出/独立运行/干净退出/重启均通过；**真实按键输入**与**画面**待补 |
+| T007 | **done**（真实按键 awaiting-review） | `Docs/Evidence/T007.md`；`Builds/P0-Win64/` | 导出/独立运行/干净退出/重启/视觉均通过 |
 | T008～T063 | pending | 无 | T008 前置（T001/T002）已满足，可开始；先写单任务规格 |
 
 ### T001 判定明细（Godot 版）
@@ -86,15 +86,20 @@ P4 前先阅读 TechnicalDesign 数据契约，T036 是契约实现检查与持�
 
 | 阻塞 | 影响 | 最小解除条件 |
 |---|---|---|
-| Blender 资产路线未定（MCP 实现未指定） | T005/T006 的 Blender 侧 | 指定已确认 MCP 实现并授权；**或确认改用 Blender 3.3.1 自带无头 CLI**（已实测可用，建议此项） |
-| vision 订阅失效（OpenCode Go 403） | 全部视觉验收（含 T002/T007 的画面项） | 恢复订阅或改配可用的 `DASHSCOPE_BASE_URL` + `VISION_MODEL`；恢复后先用 `Art/Probes/vision_probe_red_blue.png` 自检，再用 `Art/Probes/t007_release_window.png` 补验 T007 画面 |
-| 真实按键输入无安全自动化手段 | T007 的"输入"项、P7 试玩 | 引入受审查的输入自动化工具（**需授权**）；或由真人操作并录像。**禁止盲发按键**（可能打进用户焦点窗口） |
+| ~~Godot 导出模板未安装~~ | ~~T007~~ | **已解除** |
+| ~~技术层文档仍是 UE5 版~~ | ~~T002 起~~ | **已解除** |
+| ~~台阶 MaxStepHeight 能力未达成~~ | ~~T009/T010~~ | **已解除**（6/6 通过） |
+| ~~vision 服务 403~~ | ~~全部视觉验收~~ | **已解除**（换用负责人提供的网关并验证；T002/T007 视觉已补验通过） |
+| ~~Blender 资产路线未定~~ | ~~T005/T006~~ | **已解除**（负责人决定：用 Blender 3.3.1 自带无头 CLI） |
+| 真实按键输入无安全自动化手段 | T007 的"输入"项、P7 试玩 | 受审查的输入自动化工具（**需授权**），或真人操作录像。**禁止盲发按键**；合成输入已覆盖 |
 | C: 仅剩 13.7 GB | 产物落盘 | 确认工程与产物落 D:/E: |
-| Godot 渲染器未定（T600 4GB 能否跑 Forward+） | P1 起的画质与性能 | T002 先建 `forward_plus`，**P1 实测帧率后再定**；不要现在宣称性能基线 |
+| Godot 渲染器未定（T600 4GB 能否跑 Forward+） | P1 起的画质与性能 | **P1 实测帧率后再定**；现在不宣称性能基线 |
 
-> **已解除（2026-10-13）**：
-> - **Godot 导出模板已安装**（`4.7.2.stable`）→ T007 已通过。见 `Docs/Evidence/T007.md`。
-> - **台阶（MaxStepHeight）能力达成 6/6** —— 猫 12 cm 上、20 cm 挡；鼠 3 cm 上、12 cm 挡。见 `Docs/Evidence/T009-probe.md`。
+> ## ⚠ 一条重要教训（2026-10-13）
+>
+> **数值断言全过 ≠ 画面正确。** T002 的 18 条断言长期全绿，但场景**完全没有光源、
+> 没有环境、相机未激活**，导出程序窗口是一片深色空白。视觉检查一接入就发现了。
+> 今后任何"画面正确"的结论都必须有视觉证据，见 `Docs/Evidence/Visual-Verification.md`。
 
 ## 后续单任务规格格式
 
