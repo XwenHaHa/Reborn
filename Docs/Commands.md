@@ -143,40 +143,85 @@ PROBE|has_bpy_data_armatures=True
 & git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push origin main
 ```
 
-- **T003 仍未完成**：`.gitattributes` 与 LFS 追踪**尚未建立**。在 T002 产生二进制资产**之前**必须先做。
+- **T003 已完成**（2026-10-13）：`.gitattributes` 与 LFS 追踪已建立，并做过"从零克隆 → 引擎实跑"的恢复点试验。见 `Docs/Evidence/T003.md`。
+  注意：`migrate import` 会重写历史，推送需 `--force-with-lease`（推送前先用 `git log --oneline origin/main --not main` 确认远端无他人提交）。
 
 ---
 
-## 5. Windows 导出（PENDING — 阻塞）
+## 5. Windows 导出（VERIFIED — 2026-10-13 解锁）
 
-### 5.1 当前阻塞
+> 原阻塞（导出模板未安装）已由负责人在编辑器内安装解除。证据见 `Docs/Evidence/T007.md`。
+
+### 5.1 导出命令
 
 ```powershell
-& '<godot_console.exe>' --headless --path '<proj>' --export-release "Windows Desktop" '<out>.exe'
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$proj = 'E:\Reborn\Game\Reborn'
+$out  = 'E:\Reborn\Builds\P0-Win64'
+
+# 发布版（排除 tests/*）
+& $g --headless --path $proj --export-release "Windows Desktop" "$out\Reborn.exe"
+
+# 自检版（包含 tests/*，用于包内断言）
+& $g --headless --path $proj --export-debug "Windows Desktop SelfTest" "$out\RebornSelfTest.exe"
 ```
 
-实测退出码 **1**：
+- 退出码：**0**（两个预设）
+- 成功判据：退出码 0 **且**产物实际存在（`Reborn.exe` 109,127,680 B、`Reborn.pck` 12,904 B）
+- 日志：stdout（`savepack` 进度）
+
+### 5.2 包内断言验证（**必须用编辑器二进制**）
+
+```powershell
+& $g --headless --main-pack "$out\RebornSelfTest.pck" `
+    --script 'res://tests/run_t002.gd' --quit-after 1200
+# -> SUMMARY|checks=18|failures=0  RESULT|PASS   EXIT=0
+
+& $g --headless --main-pack "$out\RebornSelfTest.pck" `
+    --script 'res://tests/run_t007_input.gd' --quit-after 20000
+# -> SUMMARY|checks=22|failures=0  RESULT|PASS   EXIT=0
+```
+
+### 5.3 启动独立程序
+
+```powershell
+Start-Process "$out\Reborn.exe"      # 开窗口
+# 关闭： (Get-Process Reborn).CloseMainWindow()  -> 退出码 0
+```
+
+### 5.4 ⚠ 导出产物的命令行限制（实测，重要）
+
+**导出产物会拒绝 `--script` 与位置参数**，引擎自己给出的原因：
 
 ```
-ERROR: This project doesn't have an `export_presets.cfg` file at its root.
+ERROR: Scene path was specified on the command line, but this Godot binary was
+compiled without support for path overrides. Aborting.
+To be able to use it, use the `disable_path_overrides=no` SCons option when compiling Godot.
 ```
 
-排查后确认**两个缺失**：
-1. `export_presets.cfg` 缺失 —— **纯文本，agent 可写，不构成实质阻塞**。
-2. **导出模板未安装** —— `%APPDATA%\Godot\export_templates\` 存在但**为空**。这是真阻塞。
+即**官方导出模板编译时带了 `disable_path_overrides=yes`**，这是 Godot 的**有意设计**。
 
-### 5.2 解锁后必须补齐的记录
+对照证据：
 
-1. 确认模板版本为 **`4.7.2.stable`**（与引擎一致）。
-2. 记录 `export_presets.cfg` 实际内容与 preset 名。
-3. 导出的**退出码**与目标 `.exe` 的**实际存在与大小**（不能只看命令返回）。
-4. 从导出目录**启动独立程序**，验证出生、碰撞、输入、正常退出，并重启一次。
-5. 无 GUI/输入自动化工具时记 `awaiting-review`，**不冒充通过**。
+| 场景 | 退出码 | 报错 |
+|---|---:|---|
+| 编辑器 + 无效脚本路径 | **1** | `Can't load script` ✅ 有效 |
+| 导出产物 + 无效脚本路径 | **0** | 无 ❌ **静默忽略** |
+| 导出产物 + 位置场景参数 | **1** | `compiled without support for path overrides` |
 
-### 5.3 最小解除条件
+**后果**：想在打包产物内跑断言，只能用 §5.2 的 `--main-pack` + 编辑器二进制方案；
+或改成"自检场景/autoload"写进包内（未采用）。
 
-安装与引擎版本匹配的 **Godot 导出模板**（约 1 GB）。
-编辑器内 `编辑器 → 管理导出模板 → 下载并安装`。属"下载第三方内容"，需负责人授权或自行安装。
+### 5.5 ⚠ `debug/export_console_wrapper` 是枚举
+
+Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
+**写 `1` 时 release 导出不会生成 `.console.exe`**（已实测踩到）。需要 release 的控制台包装必须写 `2`。
+
+### 5.6 其它导出注意
+
+- `binary_format/embed_pck=false` → exe 必须与 `.pck` 同目录。
+- 发布预设正式对外时应把 `export_console_wrapper` 改回 `0`。
+- `application/icon` 当前为空，用 Godot 默认图标。
 
 ---
 

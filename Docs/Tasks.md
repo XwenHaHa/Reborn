@@ -11,9 +11,9 @@
 - T008～T063 全部 pending。**游戏测试除 E01 部分外全部 NOT-RUN，无 PASS 的游戏玩法用例。**
 
 **能力门现状**：Godot 无头运行、`--check-only`、物理体创建与回读**已通过**；
-**Windows 导出阻塞于导出模板未安装**；Blender 无头 CLI 通过；视觉分析因服务端 403 不可用。
+**Windows 导出已解锁并通过**（T007 done）；Blender 无头 CLI 通过；视觉分析因服务端 403 不可用。
 
-**P0 阶段门**：E01 部分通过；E02/E03 未执行；打包未通过 → **P0 尚未完成**。
+**P0 阶段门**：E01 部分通过；**打包已通过**（T007）；E02/E03 未执行 → **P0 尚未完成**（差资产往返 E02 与骨骼 E03）。
 
 ## 状态规则
 
@@ -30,7 +30,7 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | 台阶探针 | **done**（T009/T010 前置） | `Docs/Evidence/T009-probe.md`；`tests/probe_step_height.gd` | 6/6 通过，5 次运行一致；算法待移入 `scripts/` 组件化 |
 | T005 | pending | 无 | 依赖 T002(done) + T004(部分)；**用 glTF 而非 FBX** |
 | T006 | pending | 无 | 依赖 T005；允许阻塞，静态占位可推进 P1～P5 |
-| T007 | pending | 无 | 依赖 T002(done)；**阻塞于导出模板未安装** |
+| T007 | **done**（1 项 awaiting-review） | `Docs/Evidence/T007.md`；`Builds/P0-Win64/` | 导出/独立运行/干净退出/重启均通过；**真实按键输入**与**画面**待补 |
 | T008～T063 | pending | 无 | T008 前置（T001/T002）已满足，可开始；先写单任务规格 |
 
 ### T001 判定明细（Godot 版）
@@ -71,10 +71,8 @@ T001 / T002 / T003 **均已完成**；**台阶能力探针已完成（6/6 通过
 2. **台阶算法组件化**：把 `tests/probe_step_height.gd` 里验证过的算法移到
    `scripts/characters/step_climb.gd` 作为可复用组件，T009 直接调用。
 3. **T005**（静态资产往返）：需先确认 Blender 路线（**建议用 3.3.1 自带无头 CLI**，已实测可用）。
-4. **T007**（打包）：需先安装导出模板。
-2. **T008**（最小物种配置与身体）：前置 T002 已满足。动手前先写 `Docs/Tasks/T008.md` 单任务规格。
-3. **T005**（静态资产往返）：需先确认 Blender 路线（**建议用 3.3.1 自带无头 CLI**，已实测可用）。
-4. **T007**（打包）：需先安装导出模板。
+4. **T006**（骨骼往返）：依赖 T005。
+5. ~~T007（打包）~~ **已完成**。
 
 T005 需要 T002(done) 和 T004(部分)；T006 需要 T005。
 
@@ -88,14 +86,15 @@ P4 前先阅读 TechnicalDesign 数据契约，T036 是契约实现检查与持�
 
 | 阻塞 | 影响 | 最小解除条件 |
 |---|---|---|
-| **Godot 导出模板未安装**（`%APPDATA%\Godot\export_templates\` 为空） | T007、所有"打包版启动"验收 | 安装 `4.7.2.stable` 模板（约 1 GB）。**需负责人授权或自行安装**（编辑器内一次点击） |
 | Blender 资产路线未定（MCP 实现未指定） | T005/T006 的 Blender 侧 | 指定已确认 MCP 实现并授权；**或确认改用 Blender 3.3.1 自带无头 CLI**（已实测可用，建议此项） |
-| vision 订阅失效（OpenCode Go 403） | 全部视觉验收 | 恢复订阅或改配可用的 `DASHSCOPE_BASE_URL` + `VISION_MODEL`；恢复后先用 `Art/Probes/vision_probe_red_blue.png` 自检 |
-| C: 仅剩 11.8 GB | 产物落盘 | 确认工程与产物落 D:/E: |
+| vision 订阅失效（OpenCode Go 403） | 全部视觉验收（含 T002/T007 的画面项） | 恢复订阅或改配可用的 `DASHSCOPE_BASE_URL` + `VISION_MODEL`；恢复后先用 `Art/Probes/vision_probe_red_blue.png` 自检，再用 `Art/Probes/t007_release_window.png` 补验 T007 画面 |
+| 真实按键输入无安全自动化手段 | T007 的"输入"项、P7 试玩 | 引入受审查的输入自动化工具（**需授权**）；或由真人操作并录像。**禁止盲发按键**（可能打进用户焦点窗口） |
+| C: 仅剩 13.7 GB | 产物落盘 | 确认工程与产物落 D:/E: |
 | Godot 渲染器未定（T600 4GB 能否跑 Forward+） | P1 起的画质与性能 | T002 先建 `forward_plus`，**P1 实测帧率后再定**；不要现在宣称性能基线 |
 
-> **已解除**：台阶（MaxStepHeight）能力 —— 2026-10-13 探针达成 6/6，
-> 猫 12 cm 上、20 cm 挡；鼠 3 cm 上、12 cm 挡。见 `Docs/Evidence/T009-probe.md`。
+> **已解除（2026-10-13）**：
+> - **Godot 导出模板已安装**（`4.7.2.stable`）→ T007 已通过。见 `Docs/Evidence/T007.md`。
+> - **台阶（MaxStepHeight）能力达成 6/6** —— 猫 12 cm 上、20 cm 挡；鼠 3 cm 上、12 cm 挡。见 `Docs/Evidence/T009-probe.md`。
 
 ## 后续单任务规格格式
 

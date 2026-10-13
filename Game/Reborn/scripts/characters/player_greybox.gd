@@ -61,9 +61,14 @@ func _physics_process(delta: float) -> void:
 	var direction := (transform.basis * Vector3(input_dir.x, 0.0, input_dir.y)).normalized()
 
 	var speed := walk_speed
-	if Input.is_action_pressed("pause"):
+	# 注意：这里必须用 project.godot 里真实定义的动作名。
+	# 曾经误写成 pause（蹲下）和 jump（冲刺），后果是：
+	#   - 蹲下键完全无效
+	#   - 按跳跃键会同时触发跳跃与冲刺
+	# 由 tests/run_t007_input.gd 覆盖，防止再犯。
+	if Input.is_action_pressed("crouch"):
 		speed = crouch_speed
-	elif Input.is_action_pressed("jump"):
+	elif Input.is_action_pressed("sprint"):
 		speed = sprint_speed
 
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
