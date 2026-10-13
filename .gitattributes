@@ -1,0 +1,69 @@
+# ---------------------------------------------------------------------------
+# Reborn / .gitattributes
+#
+# 目的：大二进制资产走 Git LFS，文本资产保持可 diff。
+# 依据 Docs/Tasks/Bootstrap.md T003。
+# 原则：
+#   1. Godot 的场景/资源/脚本是纯文本 → 必须走普通 Git，才能 diff 与合并
+#   2. Blender 源文件、贴图、音频、模型导出 → 走 LFS
+#   3. 文本统一 LF 换行，避免 Windows CRLF 造成全文件 diff 噪声
+
+# 1. Git LFS 追踪的二进制资产
+# --- Blender 源文件 ---
+*.blend filter=lfs diff=lfs merge=lfs -text
+# --- 3D 导出 / 交换格式 ---
+*.glb   filter=lfs diff=lfs merge=lfs -text
+*.gltf  filter=lfs diff=lfs merge=lfs -text
+*.fbx   filter=lfs diff=lfs merge=lfs -text
+*.obj   filter=lfs diff=lfs merge=lfs -text
+*.dae   filter=lfs diff=lfs merge=lfs -text
+# --- 贴图 ---
+*.png  filter=lfs diff=lfs merge=lfs -text
+*.jpg  filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.webp filter=lfs diff=lfs merge=lfs -text
+*.tga  filter=lfs diff=lfs merge=lfs -text
+*.bmp  filter=lfs diff=lfs merge=lfs -text
+*.exr  filter=lfs diff=lfs merge=lfs -text
+*.hdr  filter=lfs diff=lfs merge=lfs -text
+*.ktx2 filter=lfs diff=lfs merge=lfs -text
+# --- 音频 ---
+*.wav  filter=lfs diff=lfs merge=lfs -text
+*.ogg  filter=lfs diff=lfs merge=lfs -text
+*.mp3  filter=lfs diff=lfs merge=lfs -text
+*.flac filter=lfs diff=lfs merge=lfs -text
+# --- 字体 ---
+*.ttf  filter=lfs diff=lfs merge=lfs -text
+*.otf  filter=lfs diff=lfs merge=lfs -text
+*.woff filter=lfs diff=lfs merge=lfs -text
+*.woff2 filter=lfs diff=lfs merge=lfs -text
+# --- 视频（参考录像/演示） ---
+*.mp4  filter=lfs diff=lfs merge=lfs -text
+*.webm filter=lfs diff=lfs merge=lfs -text
+# 2. 明确保持为普通文本（不走 LFS，必须可 diff）
+#    这条既是文档也是保险：Godot 的资产是纯文本，误走 LFS 会破坏 diff 能力。
+*.gd     text eol=lf
+*.tscn   text eol=lf
+*.tres   text eol=lf
+*.godot  text eol=lf
+*.cfg    text eol=lf
+*.import text eol=lf
+*.md     text eol=lf
+*.json   text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.py     text eol=lf
+*.ps1    text eol=lf
+*.sh     text eol=lf
+# .gitattributes / .gitignore 自身
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+# 3. 语言统计与 diff 归属
+*.gd     linguist-language=GDScript
+*.tscn   linguist-language=Godot-Scene
+*.tres   linguist-language=Godot-Resource
+*.godot  linguist-language=Godot-Config
+# 生成物与第三方目录不计入语言统计
+.github/       export-ignore
+Tools/Probes/  linguist-vendored=false
+*.png filter=lfs diff=lfs merge=lfs -text
