@@ -94,6 +94,10 @@ func _initialize() -> void:
 	if OS.get_cmdline_user_args().has("t010"):
 		await _capture_t010_frames(lab)
 
+	# T011：生态灰盒关卡的俯瞰与结构特写。只在显式传 `-- t011` 时执行。
+	if OS.get_cmdline_user_args().has("t011"):
+		await _capture_t011_frames(lab)
+
 	print("CAP|done")
 	quit(0)
 
@@ -362,6 +366,72 @@ func _capture_case(world: Node3D, cam: Camera3D, tag: String, cfg: SpeciesConfig
 	body.queue_free()
 	await process_frame
 
+## T011：生态灰盒关卡 `l_courtyard.tscn` 的俯瞰与三个结构特写。只在显式传 `-- t011` 时执行。
+## 取景前提（T010 教训）：相机要**正对结构所在的通道**，否则墙体/顶板会把主体遮住。
+const T011_LEVEL := "res://scenes/maps/l_courtyard.tscn"
+const T011_VIEWS := [
+	{"tag": "t011_map_overview", "pos": Vector3(0.0, 52.0, 72.0), "look": Vector3(0.0, 0.0, 2.0), "fov": 45.0},
+	{"tag": "t011_courtyard", "pos": Vector3(0.0, 20.0, 44.0), "look": Vector3(0.0, 0.0, 16.0), "fov": 55.0},
+	{"tag": "t011_courtyard_shelter", "pos": Vector3(-3.0, 1.15, 27.3), "look": Vector3(-8.5, 0.8, 27.3), "fov": 70.0},
+	{"tag": "t011_grass_danger", "pos": Vector3(2.0, 24.0, 16.0), "look": Vector3(2.0, 0.0, -12.0), "fov": 55.0},
+	{"tag": "t011_roots_hole_lane", "pos": Vector3(26.5, 0.62, 23.5), "look": Vector3(26.5, 0.32, 18.5), "fov": 70.0},
+	{"tag": "t011_roots_barrier_oblique", "pos": Vector3(30.0, 3.0, 25.0), "look": Vector3(30.0, 0.3, 19.0), "fov": 60.0},
+	{"tag": "t011_creek_gap_lane", "pos": Vector3(-31.73, 0.62, 16.5), "look": Vector3(-31.73, 0.32, 9.0), "fov": 70.0},
+]
+
+
+func _capture_t011_frames(lab: Node) -> void:
+	print("CAP|t011|start")
+	var packed: PackedScene = load(T011_LEVEL)
+	if packed == null:
+		print("CAP|t011|ERROR|level load failed")
+		return
+	var world: Node3D = packed.instantiate() as Node3D
+	if world == null:
+		print("CAP|t011|ERROR|level root is not Node3D")
+		return
+	root.add_child(world)
+
+	var cam := Camera3D.new()
+	cam.name = "T011Camera"
+	cam.near = 0.05
+	cam.far = 400.0
+	world.add_child(cam)
+
+	for v in T011_VIEWS:
+		cam.fov = float(v["fov"])
+		cam.global_position = v["pos"]
+		cam.look_at(v["look"], Vector3.UP)
+		cam.current = true
+		print("CAP|t011|view=%s|cam_pos=%s|look=%s|fov=%.1f" % [v["tag"], v["pos"], v["look"], cam.fov])
+		await _capture_view(v["tag"], cam)
+
+
+## 只拍一张（没有身体主体）：T011 关卡视角用
+func _capture_view(tag: String, cam: Camera3D) -> void:
+	var prefix: String = String(tag).split("_")[0]
+	for i in SETTLE_FRAMES:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	var vp := root.get_viewport()
+	var tex := vp.get_texture()
+	if tex == null:
+		print("CAP|%s|ERROR|no viewport texture" % prefix)
+		return
+	var img := tex.get_image()
+	if img == null:
+		print("CAP|%s|ERROR|no image" % prefix)
+		return
+	var active := vp.get_camera_3d()
+	print("CAP|%s|%s|cam_pos=%s|active=%s" % [prefix, tag, cam.global_position,
+		active.name if active != null else "<none>"])
+	_pixel_stats(img)
+	var path := "user://%s.png" % tag
+	var err := img.save_png(path)
+	print("CAP|%s|save_result=%d (%s)|path=%s|global=%s" % [
+		prefix, err, "OK" if err == OK else "FAIL", path, ProjectSettings.globalize_path(path)
+	])
 
 ## 拍一张并存 PNG + 打印客观像素统计（T009/T010 共用：只看 tag 与相机，与物种无关）
 ## 输出前缀从 tag 推导（`t009_*` → `CAP|t009|`，`t010_*` → `CAP|t010|`），保证 T009 的日志格式不变。

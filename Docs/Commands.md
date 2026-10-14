@@ -134,6 +134,35 @@ $p = 'E:\Reborn\Game\Reborn'
 
 ---
 
+
+---
+
+## 2.7 T011 生态灰盒关卡（VERIFIED — 2026-10-13）
+
+```powershell
+# 1) 生成/重建灰盒关卡（幂等：四区域铺满 + 走廊 0 阻挡 + 尺寸判据 自检）
+& $g --headless --path $p --script 'res://tests/tool_make_courtyard.gd'
+#    -> TOOL|make_courtyard|done，0 个 VERIFY|...|FAIL
+#       res://scenes/maps/l_courtyard.tscn（80×80 m、四区域、树根屏障 + 鼠洞、溪边缝隙、补给点）
+
+# 2) T011 断言（210 条：几何 + 尺寸判据 + 6 组真实动物物理探针）
+& $g --headless --path $p --script 'res://tests/run_t011_greybox.gd' --quit-after 60000
+#    -> SUMMARY|checks=210|failures=0  RESULT|PASS   EXIT=0
+
+# 3) 关卡视觉（7 个视角；**不能加 --headless**）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 60000 -- t011
+#    -> user://t011_{map_overview,courtyard,courtyard_shelter,grass_danger,roots_hole_lane,roots_barrier_oblique,creek_gap_lane}.png
+
+# 4) 包内复验
+& $g --headless --main-pack 'E:\Reborn\Builds\P0-Win64\RebornSelfTest.pck' `
+    --script 'res://tests/run_t011_greybox.gd' --quit-after 60000
+#    -> SUMMARY|checks=210|failures=0  EXIT=0
+```
+
+- 关卡几何的**唯一真源**是 `tool_make_courtyard.gd` 的常量；断言从场景几何 + `resources/species/*.tres` **算**判据
+  （谁改了不一致就红）。常量表见 `Docs/Parameters.md`「生态灰盒关卡常量」与 `Docs/Tasks/T011.md` §4。
+- 结构特写要**低角度、正对开口**拍：纯俯瞰会被顶板挡住"三面墙 + 开口"（T011 踩过，见 §8 取景坑）。
+
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -374,6 +403,13 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
   判据不是"图存在 / 文件名对"，而是**"视线几何能不能真的看到主体"**；改成正对洞口（x 偏移 0）后立刻判读成功。
 - **不许为了过测试改产品参数**：T010 的鼠洞是硬约束（鼠过得去、猫过不去）。若鼠过不去，先查台阶/胶囊判据
   （T009 的两个坑），**拿到亲测依据才动判据或车道对中**；`resources/species/*.tres` 绝不因测试而改。
+- **`Node.add_to_group(g)` 默认 `persistent = false`** → **不会被 `PackedScene` 序列化**：T011 生成器写在节点上的分组
+  存进 `.tscn` 后全丢（断言读到 `[]`）。要用分组做数据标记（区域/掩体/补给点），必须写 `add_to_group(g, true)`。
+- **非 headless 捕获可能"静默半途退出"**：T011 实测同一命令只拍完前 3 个视角就结束，**退出码仍是 0**、也没有 `CAP|done`；
+  重跑即完整。**捕获的成功判据 = 打印出 `CAP|done` 且每张都有 `save_result=0 (OK)`**，只看退出码会漏掉"只拍了一半"。
+- **大坐标下的浮点容差**：关卡尺度到 36 m 时 float32 的间隔约 4e-6，用 `1e-6` 做"严格相等"会误杀自己。
+  统一用 `GEO_EPS = 1e-4`（0.1 mm）。另外**出生点那种"正好站在地面上"的位置**做 `intersect_shape` 会把地面接触算 1 次重叠，
+  探测胶囊要**收紧 1 cm**（`shrink`）。
 
 ---
 
@@ -385,3 +421,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-13 | **引擎切换 Godot 4**。新增 §2 Godot 命令（无头运行、`--check-only`、能力清单）；§5 导出改为 PENDING 并定位真阻塞为导出模板缺失；新增 §8 排查方法坑；§4.1 记录代理推送路径。 |
 | 2026-10-13 | **T009 完成**。新增 §2.6 移动验收与试验世界命令（含"捕获不能加 `--headless`"）；§8 补 5 条实测坑（pack 不序列化实例子节点覆盖、`get_path()` 未入树报错导致假通过、视觉工具漏小目标→改用差异像素法、台阶两处判据坑、试验世界必须分道）。 |
 | 2026-10-13 | **T010 完成**。§2.6 改名并补 `-- t010` 捕获与包内两条命令（含"捕获的 `--quit-after` 要给足"）；§8 补 2 条实测坑（取景/视线几何决定可判读性；不许为了过测试改产品参数）。 |
+| 2026-10-13 | **T011 完成**。新增 §2.7 生态灰盒关卡命令（生成器 + 210 条断言 + `-- t011` 捕获 7 视角 + 包内复验）；§8 补 3 条实测坑（`add_to_group` 默认非持久 → 分组不会被序列化；非 headless 捕获可能半途静默退出、必须看 `CAP|done`；大坐标浮点容差用 `GEO_EPS = 1e-4`）。 |
