@@ -5,7 +5,8 @@
 | 参数 | Cat | Mouse |
 |---|---:|---:|
 | CapsuleRadius / HalfHeight | 16 / 24 | 6 / 9 |
-| CameraZ 相对胶囊中心 | 10 | 3 |
+| CrouchHalfHeight **（T009 新增）** | **15** | **6** |
+| CameraZ 相对胶囊中心（**T009 起实现为竖直偏移**，见 §相机轴说明） | 10 | 3 |
 | Walk / Sprint / Crouch speed | 180 / 450 / 90 | 110 / 300 / 65 |
 | MaxStepHeight | 12 | 3 |
 | JumpZVelocity | 320 | 0（禁止跳跃） |
@@ -20,6 +21,16 @@
 | InteractionRange | 100 | 45 |
 | VisionRange / HalfAngle | 900 / 60° | 650 / 75° |
 | HearingRange（标准跑步声） | 1200 | 1000 |
+
+## 单位与两条实现说明（T009 补记）
+
+- 本表距离单位是**厘米**；Godot 工程里一律用**米**（÷100）。`CapsuleShape3D.height` 是含两端半球的总高。
+- **相机轴说明**：`CameraZ 相对胶囊中心` 这一项源自 UE 参数表（UE 里 Z 是**上方向**），
+  Godot 里按**本地 +Y（竖直）** 实现 —— 即"眼高 = 胶囊中心上方 10 cm（猫）/ 3 cm（鼠）"。
+  字段名在契约里仍叫 `camera_offset_z`，轴向由断言 `camera_offset_axis == "y"` 锁死（见 `Docs/Evidence/T009.md` §4）。
+- **`CrouchHalfHeight`（T009 新增，原表没有）**：蹲姿胶囊半高。猫 15（蹲高 30 cm）、鼠 6（蹲高 12 cm）；
+  必须满足 `0 < CrouchHalfHeight < HalfHeight`（`validate_config()` 断言）。
+  **这是 agent 在实现 M02"低顶下不扩大碰撞"时补的临时值，需要负责人确认后并入正式起测值。**
 
 共同：Hunger/Thirst≤25 发警告；任一归零后各扣 Health 1/s，两项均零则 2/s；Health 不自动恢复。Sprint 只有 Stamina≥5 可开始，耗尽转行走；运动消耗使用实际经过时间。起测跌落：落地前垂直速度绝对值≤700 无伤；超过按 (speed-700)*0.1 伤害，最大100，后续分别调试两物种。
 

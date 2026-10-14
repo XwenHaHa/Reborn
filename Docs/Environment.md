@@ -49,6 +49,14 @@
 - 单位 METRIC / `scale_length=1.0` / METERS；出厂 `Cube` 实测 **2.000000 m**。
 - API 存在：`export_scene.fbx`、`import_scene.fbx`、`wm.save_as_mainfile`、`bpy.data.armatures`。
 - **Godot 导入建议用 glTF 而非 FBX**（Godot 对 FBX 支持较弱），T005 步骤需相应改写。
+- **glTF 导出实测通过（T005）**：`bpy.ops.export_scene.gltf` 可用；kwargs 签名必须从
+  `bpy.ops.export_scene.gltf.get_rna_type().properties` 读——`bpy.types.EXPORT_SCENE_OT_gltf.bl_rna` 只有 14 个基础键，会把参数误判为不支持。
+- **1 m 往返实测（T005）**：Blender 1.000000 m → Godot `AABB.size = (1.000000, 1.000000, 1.000000)`；
+  轴向实测映射 `(x, y, z) → (x, z, −y)`（即 Blender 的 −Y 前 → Godot 的 +Z）。详见 `Docs/Evidence/T005.md`。
+- **骨骼/动画往返实测（T006）**：`export_skins`/`export_animations`/`export_force_sampling` 均被 Blender 3.3.1 接受；
+  导出器写**绝对时间 `frame/fps`**（所以动作要从帧 0 开始，否则文件时间范围不在 0 起点）；
+  Godot 导入按 `animation/fps`（默认 30）**重采样并丢部分键** ⇒ 源里的极值会被削掉约 1–2%（实测 30°→29.53°）。
+  详见 `Docs/Evidence/T006.md`。
 
 ### 视觉工具（**已可用**，2026-10-13）
 
@@ -110,15 +118,19 @@ windows_release_x86_64_console.exe  0.2 MB
 | Blender 无头脚本执行 | **通过** | `--background --python` 实测，PROBE 键值输出 |
 | Blender-MCP | **未指定/不存在** | 无 MCP 配置；但 Blender CLI 已可独立验证 |
 | MCP 保存、导出 | **未验证** | 依赖未确定的 MCP 实现；Blender CLI 侧 API 已确认存在 |
-| Godot 导入 Blender 资产 | **未验证** | 需 T005 实测（建议 glTF） |
+| Godot 导入 Blender 资产 | **通过** | T005 静态：1.0000 m 往返（50/50）；**T006 骨骼**：65/65 ×3 + 包内 65/65，长度 1.0 s、LOOP_LINEAR、无根运动（`Docs/Evidence/T005.md`、`T006.md`） |
+| 物种配置与身体（Cat/Mouse） | **通过** | T008：**102/102** ×2（逐字段对照 `Parameters.md`、配置驱动的台阶物理实测、无物种名分支静态检查）；包内 91/91（静态检查如实标 N/A） |
+| 台阶自实现组件 `StepClimb` | **通过** | 探针 **6/6**（组件抽取后行为不变）；T008 用**配置驱动**复测：猫 12 cm 上/20 cm 挡、鼠 3 cm 上/12 cm 挡 |
 | 视觉/录屏 | **通过** | vision.js 实测可用；已知答案图答对；已用于发现并修复渲染缺陷 |
 | Git/LFS/备份 | **通过** | LFS 生效；从零克隆后引擎实跑 18/18 |
 | 硬件与磁盘余量 | **通过** | CPU/GPU/RAM/磁盘已采集 |
 
 ## 阶段门现状
 
-**P0 部分通过**：E01 部分通过、**打包通过**（T007）、**视觉验收通过**；
-**E02（静态资产往返）与 E03（骨骼往返）未执行** → P0 尚未完成，差的是资产链验证。
+**P0 完成**：E01 部分通过（视觉已补验）、**打包通过**（T007）、**E02 通过**（T005）、**E03 通过**（T006）；
+四类能力门（无头闭环 / 打包 / 视觉 / 资产往返）全部有实测证据。
+
+**P1 已开工**：**T008 通过**（物种配置与身体；台阶算法组件化后探针 6/6 不变）→ 下一步 T009（猫移动）/ T010（鼠移动）。
 
 ## 阻塞与最小解除条件
 

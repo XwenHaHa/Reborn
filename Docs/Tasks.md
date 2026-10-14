@@ -7,13 +7,15 @@
 - **T002 = done**（视觉部分 awaiting-review）：正式工程建立，无头断言 **18/18 通过**，10 次运行（5 冷启动 + 5 热运行）结果一致。
 - **T003 = done**：LFS 生效；**从零克隆的工程可被引擎实际运行**（18/18 通过）。
 - **T004 = 部分 done**：Godot 无头闭环实测通过；Blender 资产侧未开始。
-- **T005 / T006 / T007 = pending**。
+- **T005 = done**（静态资产往返）、**T006 = done**（骨骼往返）、**T007 = done**（Windows 导出），均在 2026-10-13。
 - T008～T063 全部 pending。**游戏测试除 E01 部分外全部 NOT-RUN，无 PASS 的游戏玩法用例。**
 
 **能力门现状**：Godot 无头运行、`--check-only`、物理体创建与回读**已通过**；
-**Windows 导出已解锁并通过**（T007 done）；Blender 无头 CLI 通过；视觉分析因服务端 403 不可用。
+**Windows 导出已解锁并通过**（T007 done）；**Blender 无头 CLI + glTF 资产往返已通过**（T005 done）；
+视觉分析可用，已用于 T002/T005/T007 的视觉验收。
 
-**P0 阶段门**：E01 部分通过；**打包已通过**（T007）；E02/E03 未执行 → **P0 尚未完成**（差资产往返 E02 与骨骼 E03）。
+**P0 阶段门**：E01 部分通过；**打包通过**（T007）；**E02（静态资产往返）通过**（T005）；**E03（骨骼往返）通过**（T006）→
+**P0 完成**（E01 的视觉部分已由 Visual-Verification 补验）。
 
 ## 状态规则
 
@@ -27,11 +29,13 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T002 | **done** | `Docs/Evidence/T002.md`；`Visual-Verification.md` | 无头断言 18/18 ×3；**视觉已补验通过**（发现并修复场景无光源缺陷） |
 | T003 | **done** | `Docs/Evidence/T003.md`；提交 `b7767ca`、`611a55b` | LFS 生效 + 从零克隆可运行工程（18/18 通过） |
 | T004 | **done**（路线决策） | `Docs/Evidence/T004.md`、`BlenderPipeline.md` | **路线已定：用 Blender 自带无头 CLI，不用 MCP**；资产侧并入 T005 |
-| 台阶探针 | **done**（T009/T010 前置） | `Docs/Evidence/T009-probe.md`；`tests/probe_step_height.gd` | 6/6 通过；算法待移入 `scripts/` 组件化 |
-| T005 | pending | 无 | 依赖 T002(done) + T004(done)；**用自带 CLI + glTF** |
-| T006 | pending | 无 | 依赖 T005；允许阻塞，静态占位可推进 P1～P5 |
+| 台阶探针 | **done**（T009/T010 前置） | `Docs/Evidence/T009-probe.md`；`tests/probe_step_height.gd` | 6/6 通过；算法已组件化（`scripts/characters/step_climb.gd`）；T009 期间修正两处判据，见 `Docs/Evidence/T009.md` §5 |
+| T005 | **done** | `Docs/Evidence/T005.md`；`Docs/Tasks/T005.md`；`Game/Reborn/tests/run_t005_asset.gd`；`Art/Exports/Tests/SM_ProbeCube.glb` | 1 m 往返实测 1.0000 m（50/50 ×3、包内 50/50）；轴向由实测改正文档；运行中碰撞高度差 1.0001 m |
+| T006 | **done** | `Docs/Evidence/T006.md`；`Docs/Tasks/T006.md`；`Game/Reborn/tests/run_t006_rig.gd`；`Art/Exports/Tests/SK_RigProbe.glb` | 骨骼往返 65/65 ×3 + 包内 65/65；长度 1.0 s、loop_mode=LOOP_LINEAR、首末闭合 0.000；无根运动/无根骨缩放 |
 | T007 | **done**（真实按键 awaiting-review） | `Docs/Evidence/T007.md`；`Builds/P0-Win64/` | 导出/独立运行/干净退出/重启/视觉均通过 |
-| T008～T063 | pending | 无 | T008 前置（T001/T002）已满足，可开始；先写单任务规格 |
+| T008 | **done** | `Docs/Evidence/T008.md`；`Docs/Tasks/T008.md`；`scripts/data/species_config.gd`；`resources/species/{cat,mouse}.tres`；`scripts/characters/animal_body.gd` + `scenes/characters/animal_body.tscn`；`tests/run_t008_species.gd` | 台阶组件化 + 配置逐字段对照 `Parameters.md`；**配置驱动的物理实测**：猫 12 cm 上/20 cm 挡、鼠 3 cm 上/12 cm 挡；**114/114** ×2、包内 103/103（T009 补了蹲姿/相机轴向断言） |
+| T009 | **done（2026-10-13）** | `Docs/Evidence/T009.md`；`Docs/Tasks/T009.md`；`tests/run_t009_cat_movement.gd`；`scenes/maps/l_move_fixtures.tscn`（+`tests/tool_make_move_fixtures.gd`）；`Art/Probes/t009_*.png` | 猫移动：行走/奔跑/潜伏/跳跃 + 相机；斜坡/低顶/落地/相机穿墙全过；**81/81** ×3 + 包内 81/81；lab 玩家已换成正式猫（T002/T005/T006/T007/T008 回归全绿）；过程中修掉 `step_climb` 两处真实判据缺陷 |
+| T010～T063 | pending | 无 | **T010（鼠移动与通道尺度）前置已满足**：`AnimalBody` / `SpeciesConfig` / `StepClimb` / 试验世界就绪；先写 `Docs/Tasks/T010.md` |
 
 ### T001 判定明细（Godot 版）
 
@@ -58,26 +62,28 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T003 **恢复点** | PASS | 从零克隆后引擎实跑 18/18 通过 |
 
 关联用例：**E01 部分 PASS**（工程可加载、脚本保留、无 `SCRIPT ERROR`、`--check-only` 退出码 0）；
-E01 的视觉部分 **awaiting-review**；E02 Blender 侧 API 已确认，Godot 导入侧 **NOT-RUN**。
+E01 的视觉部分**已补验通过**；**E02 本次通过**（`Docs/Evidence/T005.md`）；E03（骨骼往返）仍 **NOT-RUN**。
 
 ## 选择顺序
 
-T001 / T002 / T003 **均已完成**；**台阶能力探针已完成（6/6 通过）**，P1 最高技术风险已解除。
+T001 / T002 / T003 / T005 / T006 / T007 / T008 / **T009 均已完成**；台阶能力已组件化并修掉两处判据缺陷。
+**P0 阶段门完成**；**P1 进行中**（T008/T009 完成 → 下一步 T010）。
 
-下一步可执行：
+下一步可执行（按建议优先级）：
 
-1. **T008**（最小物种配置与身体）：前置 T002 已满足。动手前先写 `Docs/Tasks/T008.md` 单任务规格。
-   建议把 `SpeciesConfig` 的 `max_step_height` 字段与台阶算法一起接入。
-2. **台阶算法组件化**：把 `tests/probe_step_height.gd` 里验证过的算法移到
-   `scripts/characters/step_climb.gd` 作为可复用组件，T009 直接调用。
-3. **T005**（静态资产往返）：需先确认 Blender 路线（**建议用 3.3.1 自带无头 CLI**，已实测可用）。
-4. **T006**（骨骼往返）：依赖 T005。
-5. ~~T007（打包）~~ **已完成**。
+1. **T010（老鼠移动与通道尺度）**：短冲刺、窄缝通过、**禁止高跳**（`can_jump=false`）、
+   低顶下不得扩大碰撞体卡入障碍（用 `ShapeCast3D` 判断头顶空间，**不是**改 `scale`）；
+   复用 `AnimalBody` + `mouse.tres` + `l_move_fixtures.tscn`（M01 的鼠半边：能过 24×30 cm 洞、不能上 50 cm 台）。
+   **先写 `Docs/Tasks/T010.md`**。已知可复用项：`crouch_half_height` 鼠取 0.06（待确认）。
+2. **T011～T013**（生态灰盒 / 导航可行性 / 调试入口与移动回归）。
+   注意 T013 的移动回归里带上一条遗留项：单级台阶会前移 0.2 m（`Docs/Evidence/T009.md` §5.3）。
+3. ~~T005 / T006 / T007 / T008 / T009~~ **已完成**。
 
-T005 需要 T002(done) 和 T004(部分)；T006 需要 T005。
+**做角色资产时必须遵守 T005/T006 实测的两条约定**：
+① 在 Blender 里**面朝 `+Y`**（导入 Godot 后才朝 `-Z` 前方）；
+② 骨骼动画**原地、无根运动**；导入会让极值削减约 1–2%（见 T006 证据 §3.2）。
 
-T008 进入条件：T001/T002 通过、已有可恢复工程 —— **均已满足**（T003 提供了从零克隆可运行的验证）。
-T006 可明确阻塞并使用静态占位，但不得据此启动正式骨骼生产。
+**T006 已解除，不再阻塞**：骨骼链往返已被实测证明，正式骨骼资产可以开始（但仍属 P6，需按阶段门排期）。
 T028 若只有自测，则 awaiting-review，不冒充真实玩家验证。
 
 P4 前先阅读 TechnicalDesign 数据契约，T036 是契约实现检查与持久化准备，不是首次想数据结构。
@@ -93,7 +99,9 @@ P4 前先阅读 TechnicalDesign 数据契约，T036 是契约实现检查与持�
 | ~~Blender 资产路线未定~~ | ~~T005/T006~~ | **已解除**（负责人决定：用 Blender 3.3.1 自带无头 CLI） |
 | 真实按键输入无安全自动化手段 | T007 的"输入"项、P7 试玩 | 受审查的输入自动化工具（**需授权**），或真人操作录像。**禁止盲发按键**；合成输入已覆盖 |
 | C: 仅剩 13.7 GB | 产物落盘 | 确认工程与产物落 D:/E: |
-| Godot 渲染器未定（T600 4GB 能否跑 Forward+） | P1 起的画质与性能 | **P1 实测帧率后再定**；现在不宣称性能基线 |
+| Godot 渲染器（T600 4GB 能否跑 Forward+） | P1 起的画质与性能 | 渲染器**已确认可用**（T009 捕获工具实测 `renderer=forward_plus`、1280×720 正常出图）；**帧率仍未测**，不宣称性能基线 |
+| 相机轴语义 D1 / 蹲姿高度 D2 待确认 | T010 起沿用同一套实现 | 负责人确认即可（改回只需改一行实现 + 1 条断言，见 `Docs/Evidence/T009.md` §4/§9） |
+| 台阶抬升会前移 0.2 m（单级"跳一下"的手感） | 关卡手感与窄台阶（T011/T013） | 改成"只抬起 y、由 `move_and_slide()` 推进"，并重跑 T008/T009 断言 |
 
 > ## ⚠ 一条重要教训（2026-10-13）
 >

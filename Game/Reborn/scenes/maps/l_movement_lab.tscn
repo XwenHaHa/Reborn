@@ -1,7 +1,9 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/characters/player_greybox.gd" id="1_player"]
 [ext_resource type="PackedScene" path="res://assets/tests/sm_probe_cube.glb" id="2_otuhr"]
+[ext_resource type="PackedScene" path="res://scenes/characters/animal_body.tscn" id="2_tce56"]
+[ext_resource type="Script" path="res://scripts/characters/animal_body.gd" id="3_4ph2g"]
+[ext_resource type="Resource" path="res://resources/species/cat.tres" id="4_wgikf"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hv681"]
 albedo_color = Color(0.32, 0.34, 0.36, 1)
@@ -26,10 +28,6 @@ roughness = 0.6
 
 [sub_resource type="BoxMesh" id="BoxMesh_marker"]
 size = Vector3(0.2, 0.2, 0.2)
-
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
-radius = 0.16
-height = 0.48
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_tce56"]
 
@@ -69,19 +67,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 0.11, -1.2)
 material_override = SubResource("StandardMaterial3D_q5lvl")
 mesh = SubResource("BoxMesh_marker")
 
-[node name="Player" type="CharacterBody3D" parent="." unique_id=669611895]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
-collision_layer = 2
-script = ExtResource("1_player")
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=1346921903]
-shape = SubResource("CapsuleShape3D_player")
-
-[node name="Camera3D" type="Camera3D" parent="Player" unique_id=1441627111]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
-current = true
-fov = 90.0
-
 [node name="SunLight" type="DirectionalLight3D" parent="." unique_id=592017213]
 transform = Transform3D(0.81915206, 0.4055798, -0.4055798, 0, 0.70710677, 0.70710677, 0.57357645, -0.579228, 0.579228, 0, 0, 0)
 light_energy = 1.2
@@ -98,3 +83,10 @@ collision_mask = 0
 
 [node name="ProbeShape" type="CollisionShape3D" parent="ProbeAsset" unique_id=1369773872]
 shape = SubResource("BoxShape3D_q5lvl")
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1764450873 instance=ExtResource("2_tce56")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+collision_layer = 2
+script = ExtResource("3_4ph2g")
+species_config = ExtResource("4_wgikf")
+make_camera_current = true

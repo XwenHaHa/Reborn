@@ -89,6 +89,42 @@ PowerShell 路径含空格时必须用调用运算符 `&`，全部示例已遵�
 
 ---
 
+### 2.6 T009 移动验收与试验世界（VERIFIED — 2026-10-13）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+
+# 1) 生成/重建移动试验世界（幂等；改完会重新加载并核对几何）
+& $g --headless --path $p --script 'res://tests/tool_make_move_fixtures.gd'
+#    -> TOOL|make_move_fixtures|done，全部 VERIFY|...|OK
+
+# 2) 把 lab 场景的灰盒玩家换成正式猫（幂等；带"无意外变更"自检）
+& $g --headless --path $p --script 'res://tests/tool_set_lab_player.gd'
+#    -> TOOL|set_lab_player|done
+
+# 3) T009 断言（81 条）
+& $g --headless --path $p --script 'res://tests/run_t009_cat_movement.gd' --quit-after 40000
+#    -> SUMMARY|checks=81|failures=0  RESULT|PASS   EXIT=0
+
+# 4) 视觉捕获（**不能加 --headless**：无头是 dummy 渲染器，没有画面）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 12000 -- t009
+#    -> user://t009_{ramp,low_ceiling,platform}_{tp,fp}.png
+#       （%APPDATA%\Godot\app_userdata\Reborn\，本仓库拷贝到 Art/Probes/）
+
+# 5) 包内复验（导出产物见 §5.1；包内断言必须用编辑器二进制 + --main-pack）
+& $g --headless --main-pack 'E:\Reborn\Builds\P0-Win64\RebornSelfTest.pck' \
+    --script 'res://tests/run_t009_cat_movement.gd' --quit-after 40000
+#    -> SUMMARY|checks=81|failures=0  EXIT=0
+```
+
+- 试验世界 `scenes/maps/l_move_fixtures.tscn` 的四个区**分道布置**（坡道 x∈[−1,1]、低顶 x=−6、
+  墙角 x/z≈−6、50 cm 高台 x=6.5）；**改几何前先看 `tool_make_move_fixtures.gd` 头部的分道说明**。
+- T009 断言脚本会**从场景节点读几何**（触发距离等），但把"设计意图常量"（50 cm / 42 cm / 25°）写死在断言里：
+  谁改了试验世界而没改设计，测试直接失败。
+
+---
+
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -293,6 +329,37 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 - **绝对不要用 Windows Search 索引代替文件遍历**：本机索引**只覆盖 C: 的部分目录**，按名查确知存在于 D: 的 `blender.exe` **0 命中**。用索引 0 命中推断"文件不存在"是**错误推理**（本项目已作废过一次这样的结论）。
 - **判断文件是否损坏前先看 `PSIsContainer`**：Godot 那个"0 字节 exe"实际是目录。
 - **推荐**：`python -u Tools/Probes/scan_for_ue.py`（`os.walk`，只读，带进度与汇总）。
+- **新增/修改带 `class_name` 的脚本后，无头运行前必须先跑一次 `--import`**：全局类名注册在
+  `.godot/global_script_class_cache.cfg`，否则引用它的脚本会报
+  `Parse Error: Identifier "Xxx" not declared in the current scope`（2026-10-13 实测踩到）。
+- **`AnimationPlayer.play()` 在 Godot 4.7 返回 void**：判断是否在播要查 `is_playing()` / `current_animation`，
+  不要读返回值（`var e := ap.play(...)` 会报 "Cannot get return value of call to play() because it returns void"）。
+- **动画轨道插值的真实 API 是 `Animation.rotation_track_interpolate(track, t)`**（同族还有
+  `position_/scale_/blend_shape_/value_/bezier_track_interpolate`）；**没有**通用的 `track_interpolate`（实测报错）。
+- **`Skeleton3D.get_bone_pose_rotation()` 返回"含静止位姿"的父骨相对旋转**：t=0 时腿骨就已经是 rest（实测 −90°），
+  想断言"作者转了多少度"要读**动画轨道键值**，不要读姿态角。
+
+---
+
+- **读渲染帧前必须等"真正画完的那一帧"**：只 `await process_frame` 若干次，读到的内容可能仍是**上一帧** ——
+  实测在**切换相机**后，`tp`/`fp` 两张图**文件名不同、内容 MD5 完全相同**（而日志里活动相机已切换）。
+  正确写法：`await RenderingServer.frame_post_draw`（等 2 次更稳）再 `get_texture().get_image()`。
+  **判据：换机位/换视角后先用 MD5 或像素差确认两图真的不同，再拿去视觉判读**（"文件存在 + 名字对"不代表内容对）。
+- **场景实例的"子节点属性覆盖"不会被 `PackedScene.pack()` 序列化**（T009 实测）：脚本里给实例的子节点
+  （如 `Player/Camera3D.current`）赋值，工具自检通过、但存出的 `.tscn` 里**没有这一行**，重载回来就丢了。
+  要在场景里表达，就用**该节点自己的导出属性**（T009 的 `AnimalBody.make_camera_current` 就是为此加的）。
+- **不要对"未入树"的节点调用 `Node.get_path()`**：会刷满 `Cannot get path of node as it is not in a scene tree.`，
+  而且返回空串会让"节点集合比对"变成**永远相等**的假通过。自己用父路径拼（见 `tool_set_lab_player.gd`）。
+- **视觉工具会漏小/暗目标**：T009 低顶那张 1280×720 帧里，蹲姿猫只占约 150 px 且在阴影中，
+  视觉模型两次都回答"板下是空的"。**不要就此下"看不见"的结论** —— 客观做法：
+  同一机位拍"有/无主体"两张、逐像素求差拿到变化区域的外接框，再把该框裁出来单独提问（T009 就是这么做的）。
+- **台阶（自实现 MaxStepHeight）两个实测坑**（详见 `Docs/Evidence/T009.md` §5，代码里也有注释）：
+  ① 落点高度**不能**用运动测试的 `get_travel()`：它会在接触前停下，且形状越小停得越早
+     （3 cm 台阶：鼠高 2.655 mm、猫 0.249 mm）→ 小物种的台阶会被算高而拒绝；
+  ② **可站立面的阻挡不算台阶**（斜坡）：判据必须只看"真正阻挡本次运动"的接触（`n·dir < 0` 且 `n.y ≥ cos45°`），
+     少了 `n·dir < 0` 这一条，连正常台阶都上不去（脚下地面的接触会被误判）。
+- **试验世界要分道布置**：T009 第一次把低顶和 50 cm 高台放在同一条 x=6 线上，
+  平台助跑直接撞进低顶里（猫被压在地面、用例全废）。分区之前先看 `tool_make_move_fixtures.gd` 头部说明。
 
 ---
 
@@ -302,3 +369,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 |---|---|
 | 2026-10-12 | 首次建立。锁定 Blender/Node/Git/Python 路径与版本；UE 相关全部标 PENDING/BLOCKED。 |
 | 2026-10-13 | **引擎切换 Godot 4**。新增 §2 Godot 命令（无头运行、`--check-only`、能力清单）；§5 导出改为 PENDING 并定位真阻塞为导出模板缺失；新增 §8 排查方法坑；§4.1 记录代理推送路径。 |
+| 2026-10-13 | **T009 完成**。新增 §2.6 移动验收与试验世界命令（含"捕获不能加 `--headless`"）；§8 补 5 条实测坑（pack 不序列化实例子节点覆盖、`get_path()` 未入树报错导致假通过、视觉工具漏小目标→改用差异像素法、台阶两处判据坑、试验世界必须分道）。 |

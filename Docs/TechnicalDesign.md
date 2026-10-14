@@ -118,10 +118,11 @@ class_name SpeciesConfig extends Resource
 @export var walk_speed: float
 @export var sprint_speed: float
 @export var crouch_speed: float
+@export var crouch_half_height: float    # m，蹲姿胶囊半高（T009 新增，`Parameters.md` 原表没有）
 @export var max_step_height: float
 @export var jump_velocity: float
 @export var max_acceleration: float
-@export var camera_offset_z: float
+@export var camera_offset_z: float       # 相对胶囊中心的**竖直（本地 +Y）**偏移：UE 命名沿用，Godot 里是 Y
 @export var fov: float
 @export_group("Perception")
 @export var vision_range: float
