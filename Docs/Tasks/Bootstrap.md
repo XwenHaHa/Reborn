@@ -79,12 +79,12 @@
 - [x] 列出当前可用工具，记录实现与版本。**结论：无任何 MCP 配置**；Blender 与 Godot 均由 CLI 独立驱动。
 - [x] 检查 Blender 3.3.1 支持范围；无头 CLI 实测通过（`--background --python`，退出码 0）。
 - [x] 记录实际使用的接口名、输入/返回字段及保存方式（见 `BlenderPipeline.md` 的 CLI 调用契约）。
-- [ ] **待做**：开新测试场景，查询对象列表；创建命名 `ProbeCube`，边长 **1 m**（注意 Blender 出厂 Cube 是 2 m）。
-- [ ] **待做**：保存独立 `.blend`，再重开查询名称和尺寸。
-- [ ] **待做**：导出 **glTF 2.0（`.glb`）** 并在 Godot 导入，实测确认单位与轴向（T005 的主体工作）。
+- [x] **已完成**：新场景为空文件起步（实测 `object_count=0`，未删除任何对象）；创建命名 `ProbeCube`，边长 **1.000000 m**（**未用出厂 Cube**——出厂 Cube 实测 2.000000 m）。
+- [x] **已完成**：保存 `Art/Blender/Tests/StaticProbe_v001.blend`（525,116 B），**重开该文件**再查名称与尺寸，仍为 1.000000 m。
+- [x] **已完成（T005）**：导出 **glTF 2.0（`.glb`）** 并在 Godot 导入，实测单位与轴向（见 `Docs/Evidence/T005.md`）。
 
 **通过**：查询 → 创建 → 保存 → 重开均实测。
-**状态**：引擎侧与路线决策 **done**；Blender 资产侧**未开始**（属 T005 范围）。
+**状态**：引擎侧与路线决策 **done**；**Blender 资产侧 done（T005，2026-10-13）**。
 
 ---
 
@@ -92,12 +92,13 @@
 
 文件：`Art/Blender/Tests/StaticProbe_v001.blend`、`Art/Exports/Tests/SM_ProbeCube.glb`；Godot `res://assets/tests/sm_probe_cube.glb`。
 
-- [ ] 在 Blender 查看单位与对象实测尺寸，保存源版本。
-- [ ] 导出 **glTF 2.0（`.glb`）**；记录缩放、轴向、单位设置。
-- [ ] Godot 导入静态网格并保存；记录真实导入设置。
-- [ ] 在 `l_movement_lab` 对照 **100 cm 标尺**，检查长宽高，误差 ≤1 cm；加方向标记检查朝向。
-- [ ] 玩家走上物体测试简单碰撞；检查材质与法线，**保留图像验证结果**。
-- [ ] **无头验证**：用脚本加载场景，读取导入体的 `AABB`/`mesh.get_aabb()` 尺寸并断言，输出到日志。
+- [x] **已完成**：Blender 单位 METRIC / `scale_length=1.0` / METERS；对象尺寸与保存版本均已记录（`Art/Blender/Tests/StaticProbe_v001.blend`）。
+- [x] **已完成**：导出 **glTF 2.0（`.glb`）**；实际生效设置与 SHA256 写入证据（`export_yup=True`、`export_apply=True`、`export_materials=EXPORT`…）。
+- [x] **已完成**：Godot 导入（`--headless --import`，退出码 0）；**真实导入设置**逐项记录（`nodes/apply_root_scale=true`、`nodes/use_name_suffixes=true`、`gltf/naming_version=2`…）。
+- [x] **已完成**：接入 `l_movement_lab` 对照 **100 cm 标尺**：数值断言"立方体宽 = 标尺长 ±1 cm"（`probe_width_equals_ruler_length`），并用方向标记实测朝向
+      （**实测结论：Blender `−Y` → Godot `+Z`**，已据实改正 `BlenderPipeline.md`）。
+- [x] **已完成**：用导入网格 AABB 生成碰撞体，猫胶囊落到 1 m 立方体顶面（落点高度差 **1.0001 m**，无穿透、无侧滑）；材质/明暗用正交视图 + `vision.js` 检查，图像与逐条问答已留证（`Art/Probes/t005_lab_probe_render.png`）。
+- [x] **已完成**：无头断言 `tests/run_t005_asset.gd`（**50 条**，全部读引擎真实数据），stdout 与退出码见 `Docs/Evidence/T005.md`。
 
 **通过**：源 1 m 物体在 Godot 是 **1.0 m**（不是 0.01 或 100）；素材与碰撞在运行中正确。
 **注意**：Godot `+Y` 向上与 glTF 一致，Blender `+Z` 向上——导出器负责转换，**不要手工旋转**。
@@ -108,14 +109,14 @@
 
 文件：`Art/Blender/Tests/RigProbe_v001.blend`、`Art/Exports/Tests/SK_RigProbe.glb`；Godot 测试骨骼与动画资源。
 
-- [ ] 创建不追求动物外观的躯干/肢体和少量骨骼，测试绑定。
-- [ ] 制作 1 s 动作循环，**首末姿态一致**；**原地动画，不启用根运动**。
-- [ ] 导出、导入骨骼网格和动画，检查方向、缩放、动画长度和循环。
-- [ ] 在编辑器与运行场景播放，查看是否变形/滑动或根骨缩放异常。
-- [ ] Godot 侧用 `AnimationPlayer` / `AnimationTree`；`--headless` 下可断言动画长度与循环。
-- [ ] 保存导入/导出预设和测试证据；失败可留作 **blocked**，允许灰盒移动任务推进，**不允许正式骨骼批量生产**。
+- [x] **已完成**：躯干/前后腿共 3 个盒体 + 4 根骨骼（`root/spine/leg_front/leg_back`），**刚性权重**（1 骨/顶点，权重和实测 1.0）。
+- [x] **已完成**：1 s 循环动作（24 fps，帧 0→24），**首末姿态一致**（Godot 侧首末键值实测完全相同）；**原地、无根运动**（播放全程节点与 root 骨位移 0.000）。
+- [x] **已完成**：导出/导入骨骼与动画；长度 **1.0 s**、方向/缩放（骨骼静止缩放全为 1.0）、骨骼名与层级保留（详见 `Docs/Evidence/T006.md`）。
+- [x] **已完成**：运行中播放（无头 `play()+seek` 采样 t=0/0.5/1.0，前腿摆 35.4°、脚端位移 0.176 m；循环闭合 0.000）；两帧视觉留证未见变形/爆点/滑动。
+- [x] **已完成**：Godot 侧用 `AnimationPlayer`，`--headless` 下断言动画长度与循环模式（`LOOP_LINEAR`）与轨道数据。
+- [x] **已完成**：导出/导入设置与证据入库；T006 **未阻塞**（因此不再有"仅静态占位"的限制，但正式骨骼批量生产仍属 P6 阶段门）。
 
-**通过**：循环实际播放，尺寸与 T005 标尺一致；**只生成 glb 文件不通过**。
+**通过**：循环实际播放（65/65 断言 + 两帧视觉），尺寸与 T005 的米制链路一致；**只生成 glb 文件不通过**。
 
 ---
 
