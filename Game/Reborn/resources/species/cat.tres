@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="SpeciesConfig" load_steps=2 format=3]
+
+; 猫的起测配置。数值来源：Docs/Parameters.md（厘米 → 米，÷100）。
+; 改数值请改这里，不要在系统代码里另写一份（见 Docs/Tasks/T008.md）。
+
+[ext_resource type="Script" path="res://scripts/data/species_config.gd" id="1_cfg"]
+
+[resource]
+script = ExtResource("1_cfg")
+species_id = &"Cat"
+capsule_radius = 0.16
+capsule_half_height = 0.24
+crouch_half_height = 0.15
+walk_speed = 1.8
+sprint_speed = 4.5
+crouch_speed = 0.9
+max_step_height = 0.12
+jump_velocity = 3.2
+max_acceleration = 10.0
+camera_offset_z = 0.1
+fov = 90.0
+vision_range = 9.0
+vision_half_angle_deg = 60.0
+hearing_range = 12.0
+hunger_loss_per_sec = 0.08
+thirst_loss_per_sec = 0.06
+sprint_stamina_per_sec = 15.0
+stamina_regen_per_sec = 18.0
+regen_delay = 1.0
+interaction_range = 1.0
+allowed_food_types = Array[int]([0])
+can_jump = true
+can_pounce = true
+can_use_mouse_tunnel = false

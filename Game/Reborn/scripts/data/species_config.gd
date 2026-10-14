@@ -1,0 +1,124 @@
+class_name SpeciesConfig
+extends Resource
+## 物种配置 —— **两个物种的差异只写在这里**，代码里不做物种名判断
+##
+## 字段与含义按 `Docs/TechnicalDesign.md` §3 的数据契约；数值按 `Docs/Parameters.md`（厘米 → 米，÷100）。
+## 谁要改数值：改 `Game/Reborn/resources/species/*.tres`，**不要**在系统代码里另写一份。
+##
+## 校验：`validate_config()` 用于加载后检查（T008 断言两个实例都返回空）。
+
+## 食物类型（契约枚举，`Docs/TechnicalDesign.md` §2）
+enum FoodType { MEAT, SEED }
+
+## 稳定物种 ID：`&"Cat"` / `&"Mouse"`（**拼写固定**，不要用大小写变体）
+@export var species_id: StringName = &""
+
+@export_group("Movement")
+## 胶囊半径（米）
+@export var capsule_radius: float = 0.0
+## 胶囊**半高**（米）。注意 Godot 的 `CapsuleShape3D.height` 是**含两端半球的总高** = 2×本值
+@export var capsule_half_height: float = 0.0
+## 潜伏（蹲姿）时的胶囊半高（米）。**比站姿小**，蹲下时胶囊变矮、视线变低（T009）
+##
+## 事实说明：`Docs/Parameters.md` **没有**蹲姿碰撞高度这一项（只有 `CrouchSpeed`）。
+## 这是 T009 新增参数，取值见 `Docs/Tasks/T009.md` §4.2，**待负责人并入正式起测值**。
+@export var crouch_half_height: float = 0.0
+@export var walk_speed: float = 0.0
+@export var sprint_speed: float = 0.0
+@export var crouch_speed: float = 0.0
+## 可上台阶高度（米）。由 `StepClimb` 组件消费
+@export var max_step_height: float = 0.0
+@export var jump_velocity: float = 0.0
+@export var max_acceleration: float = 0.0
+## 相机相对胶囊中心的**竖直（本地 +Y）**偏移（米），T009 实测确认。
+##
+## 为什么不是 +Z：`Parameters.md` 的参数表源自 UE 版（`CameraZ`/`JumpZVelocity`/`MaxStepHeight`），
+## UE 里 Z 是上方向；按本地 +Z 实现会把第一人称相机放到身体**后面**而不是眼高。
+## 字段名沿用契约（`TechnicalDesign.md` §3），只改轴向语义。见 `Docs/Tasks/T009.md` §4.1。
+@export var camera_offset_z: float = 0.0
+@export var fov: float = 90.0
+
+@export_group("Perception")
+## 视距（米）
+@export var vision_range: float = 0.0
+@export var vision_half_angle_deg: float = 0.0
+## 听觉范围（米，对应"标准跑步声"Loudness=1.0）
+@export var hearing_range: float = 0.0
+
+@export_group("Survival")
+@export var hunger_loss_per_sec: float = 0.0
+@export var thirst_loss_per_sec: float = 0.0
+@export var sprint_stamina_per_sec: float = 0.0
+@export var stamina_regen_per_sec: float = 0.0
+@export var regen_delay: float = 0.0
+## 交互距离（米）
+@export var interaction_range: float = 0.0
+
+@export_group("Abilities")
+## 可食食物类型（`FoodType` 值）
+@export var allowed_food_types: Array[int] = []
+@export var can_jump: bool = false
+@export var can_pounce: bool = false
+## 能否使用鼠洞（猫为 false —— 鼠洞是猫的硬边界）
+@export var can_use_mouse_tunnel: bool = false
+
+
+## Godot 的 `CapsuleShape3D.height` 是含两端半球的总高
+func capsule_height() -> float:
+	return capsule_half_height * 2.0
+
+
+## 潜伏（蹲姿）时的胶囊总高（米），口径与 `CapsuleShape3D.height` 一致
+func crouch_height() -> float:
+	return crouch_half_height * 2.0
+
+
+## 蹲下时胶囊顶面相对站姿顶面的下降量（米）= 相机应下降的量
+func crouch_drop() -> float:
+	return maxf(0.0, capsule_half_height - crouch_half_height)
+
+
+## 胶囊长度与半径的比值（调试用：鼠比猫更"长条"）
+func capsule_aspect() -> float:
+	return capsule_height() / capsule_radius if capsule_radius > 0.0 else INF
+
+
+func can_eat(food_type: int) -> bool:
+	return allowed_food_types.has(food_type)
+
+
+## 加载后校验。返回问题列表（空 = 通过）。
+## 只检查"必须成立"的量，不做平衡判断。
+func validate_config() -> PackedStringArray:
+	var problems := PackedStringArray()
+	if species_id == &"":
+		problems.append("species_id 为空")
+	if capsule_radius <= 0.0 or not is_finite(capsule_radius):
+		problems.append("capsule_radius 必须 > 0")
+	if capsule_half_height <= 0.0 or not is_finite(capsule_half_height):
+		problems.append("capsule_half_height 必须 > 0")
+	# 蹲姿必须真的更矮（否则"潜伏"没有意义，低顶通行也无从谈起）
+	if crouch_half_height <= 0.0 or not is_finite(crouch_half_height):
+		problems.append("crouch_half_height 必须 > 0")
+	elif crouch_half_height >= capsule_half_height:
+		problems.append("crouch_half_height 必须小于 capsule_half_height（蹲姿要更矮）")
+	if max_step_height < 0.0 or not is_finite(max_step_height):
+		problems.append("max_step_height 不能为负")
+	if not is_finite(camera_offset_z):
+		problems.append("camera_offset_z 必须是有限值")
+	if fov <= 0.0 or fov >= 180.0:
+		problems.append("fov 必须在 (0,180)")
+	if walk_speed <= 0.0 or crouch_speed <= 0.0:
+		problems.append("walk_speed/crouch_speed 必须 > 0")
+	if sprint_speed < walk_speed:
+		problems.append("sprint_speed 不应低于 walk_speed")
+	if allowed_food_types.is_empty():
+		problems.append("allowed_food_types 不能为空")
+	if can_jump and jump_velocity <= 0.0:
+		problems.append("can_jump 为 true 时 jump_velocity 必须 > 0")
+	if not can_jump and jump_velocity > 0.0:
+		problems.append("can_jump 为 false 时 jump_velocity 应为 0")
+	# 台阶不能超过胶囊总高的一半（否则"上台阶"退化成"爬墙"）
+	if max_step_height > capsule_height() * 0.5:
+		problems.append("max_step_height 不应超过胶囊总高的一半")
+	return problems

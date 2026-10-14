@@ -37,6 +37,8 @@ var STEP_TOLERANCE: float = 0.002
 const RADIUS_SAFE: float = 0.20
 
 var _results: Dictionary = {}
+## 台阶抬升组件（同一算法只实现一次；见 scripts/characters/step_climb.gd）
+var _climb: StepClimb = null
 
 
 func _initialize() -> void:
@@ -93,7 +95,7 @@ var _cur_key: String = ""
 
 ## 每个试验用全新世界，结束后销毁，杜绝互相污染
 func _run_trial(species: String, cfg: Dictionary, step_height: float, mode: String) -> void:
-	_base_y = INF
+	_climb = null   # 每个试验用全新的组件实例（落脚面基准随实例复位）
 	_cur_key = "%s|%.2f" % [species, step_height]
 	if not _gains.has(_cur_key):
 		_gains[_cur_key] = []
@@ -120,13 +122,16 @@ func _run_trial(species: String, cfg: Dictionary, step_height: float, mode: Stri
 	body.position = Vector3(START_X, cfg.half_height + 0.002, 0)
 	world.add_child(body)
 
+	# 组件化后的台阶抬升：上限来自本用例的物种配置值（探针里是 CAPSULES 表）
+	_climb = StepClimb.new(body, cfg.max_step, STEP_TOLERANCE, RADIUS_SAFE)
+
 	await process_frame
 	for i in SETTLE_STEPS:
 		body.velocity = Vector3.ZERO
 		await physics_frame
 
 	# 站稳后确定"当前落脚面"基准
-	_update_base_y(body)
+	_climb.update_base_y()
 	var y_before: float = body.global_position.y
 	var dt := 1.0 / float(Engine.physics_ticks_per_second)
 	var motion := Vector3(SPEED * dt, 0.0, 0.0)
@@ -139,15 +144,11 @@ func _run_trial(species: String, cfg: Dictionary, step_height: float, mode: Stri
 			body.velocity = motion / dt
 			body.move_and_slide()
 		else:
-			if not _try_step_up(body, motion, cfg.max_step):
-				body.velocity = motion / dt
-				body.move_and_slide()
-			else:
-				body.velocity = Vector3.ZERO
+			_climb.step_or_slide(motion, dt)
 		max_x = maxf(max_x, body.global_position.x)
 		await physics_frame
 		if mode == "stepup":
-			_update_base_y(body)
+			_climb.update_base_y()
 
 	# 再稳一会，避免把"正在下落"当成落点
 	for i in 20:
@@ -188,108 +189,9 @@ func _add_box(parent: Node3D, nm: String, size: Vector3, pos: Vector3) -> void:
 	parent.add_child(body)
 
 
-## 自实现台阶抬升（v4 —— 基于实测根因重写）
-##
-## 根因（实测，见 Docs/Evidence/T009-probe.md）：
-##   胶囊底部是半球。面对台阶时它停在"底心仍在台阶面左侧、圆底蹭到台阶顶棱"
-##   的位置。向下探测在该处命中的是**棱角**：
-##     碰撞点 (0.0, 0.12, 0.0)，法线 (-0.864, 0.504, 0)
-##   法线与竖直方向夹角 59.7°，超出 Godot 默认 floor_max_angle（45°），
-##   因此引擎判定为**墙面、不可站立**，落点也停在半空（胶囊底 0.0407）。
-##
-## 结论：不能只看"下落有没有命中"，必须**要求落点是可站立面**（法线足够竖直）。
-##   同时在抬高前先让水平位移推进到被挡，使胶囊真正贴住台阶，再抬高前进。
-##
-## 判据（三条同时成立）：
-##   1. 头顶有抬高空间
-##   2. 抬高并前移后不被阻挡
-##   3. 下落命中，且碰撞法线属于可站立面（n.y ≥ cos(floor_max_angle)），
-##      并且落点相对当前落脚面的抬升 ∈ (0, max_step]
-func _try_step_up(body: CharacterBody3D, motion: Vector3, max_step: float) -> bool:
-	var flat := Vector3(motion.x, 0.0, motion.z)
-	if flat.length() < 0.000001:
-		return false
-
-	var y_start: float = body.global_position.y
-	var base: float = _base_y if is_finite(_base_y) else y_start
-	# Godot 默认 floor_max_angle 是 45°，这里用同一判据认定"可站立"
-	var min_walkable_ny: float = cos(deg_to_rad(45.0))
-
-	# 前方必须有障碍（否则不是台阶场景）
-	if not body.test_move(body.global_transform, flat):
-		return false
-
-	# 关键（v5）：**探测用的抬高量必须大于台阶阈值**，与 max_step 解耦。
-	#
-	# 原因：胶囊底部是半球。贴住台阶时圆底蹭在台阶顶棱上，底心高度比台阶顶
-	# 还低。要让平底越过棱角，抬高量必须超过台阶高度本身，而不是只抬 max_step。
-	# 实测：抬 max_step 时猫上不了 12cm 台阶（抬到 0.122 vs 台阶顶 0.120，
-	# 只差 2mm，前进仍然蹭棱 → 可站立面判据拒绝）。
-	#
-	# 放宽抬高量**不会**放过更高台阶：过高的台阶会在"抬高后仍被挡"或最终
-	# 增益上界校验处被拒绝。阈值把关靠 total_gain，不靠抬高量。
-	var probe_raise: float = max_step * 2.0 + 0.05
-	# 头顶空间：抬这么高会顶到天花板就放弃（低顶下不应上台阶）
-	if body.test_move(body.global_transform, Vector3.UP * probe_raise):
-		return false
-
-	var raised := body.global_transform.translated(Vector3.UP * probe_raise)
-
-	# 关键（v6）：**前移量必须足够让胶囊底心越过台阶竖直面**。
-	#
-	# 前一版用一帧的位移（motion，约 1.67cm）当前移量，结果底心根本没跨过
-	# 台阶面（x=0），下探永远撞在台阶**顶棱**上：
-	#   normal=(-0.868, 0.497, 0)  夹角 60° → 不可站立 → 被拒绝
-	# 实测：把抬高量加到 0.29 也没用，因为问题在前移量而不是抬高量。
-	#
-	# 前移量取"至少一个半径 + 一个帧位移"，使平底足以落到台阶顶面之上。
-	var forward_dist: float = maxf(flat.length(), 0.0)
-	var probe_forward: float = RADIUS_SAFE + forward_dist
-	var fwd_dir: Vector3 = flat.normalized()
-	var forward := raised.translated(fwd_dir * probe_forward)
-	if body.test_move(raised, fwd_dir * probe_forward):
-		return false  # 抬起后仍被挡 → 台阶高于阈值
-
-	# 下落探测，并收集所有碰撞的法线
-	var params := PhysicsTestMotionParameters3D.new()
-	params.from = forward
-	params.motion = Vector3.DOWN * (probe_raise + 0.5)
-	params.margin = 0.001
-	params.max_collisions = 8
-	var res := PhysicsTestMotionResult3D.new()
-	if not PhysicsServer3D.body_test_motion(body.get_rid(), params, res):
-		return false  # 前方悬空
-
-	# 必须有**可站立**的接触面；只有棱角接触时返回 false
-	var walkable := false
-	for i in res.get_collision_count():
-		if res.get_collision_normal(i).y >= min_walkable_ny:
-			walkable = true
-			break
-	if not walkable:
-		return false
-
-	var landed_y: float = forward.origin.y + res.get_travel().y
-	var total_gain: float = landed_y - base
-	if total_gain <= 0.0 or total_gain > max_step + STEP_TOLERANCE:
-		return false
-
-	body.global_position = Vector3(forward.origin.x, landed_y, forward.origin.z)
-	return true
-
-
-## 跟踪当前所站的平面高度。只在真正站定时更新，避免被棘轮过程带偏。
-var _base_y: float = INF
-
-
-## 跟踪当前所站的平面高度。只在真正站定时更新。
-## 注意：不能要求 velocity < 0.05——_try_step_up 分支里把速度清零后
-## move_and_slide 会重新写入速度，条件不稳定，导致 _base_y 一直是 INF（已实测踩到）。
-## 改用"在地面上"这一个稳定条件。
-func _update_base_y(body: CharacterBody3D) -> void:
-	if body.is_on_floor():
-		_base_y = body.global_position.y
-
+## 台阶抬升算法已**组件化**到 `res://scripts/characters/step_climb.gd`（`class_name StepClimb`），
+## 本探针调用的是**同一实现**，不再保留本地副本 —— 因此下面的 6/6 判定同时也是该组件的回归证据。
+## 实测根因、判据与标定记录见 `Docs/Evidence/T009-probe.md` 与组件文件头注释。
 
 func _verdicts() -> void:
 	print("---- 判定 ----")

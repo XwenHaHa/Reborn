@@ -1,0 +1,37 @@
+[gd_scene load_steps=5 format=3]
+
+; 最小动物身体（T008/T009）：由 SpeciesConfig 驱动成型（胶囊/相机/碰撞层/台阶上限）。
+; 场景里的 CapsuleShape3D / CapsuleMesh 只是**占位默认值**，入树时 apply_config() 会按配置重建，
+; 且 `_rebuild_capsule()` 保证 **视觉网格与碰撞胶囊同尺寸**（蹲下时一起变矮）。
+; BodyMesh 是灰盒占位：正式模型属 P6 资产任务（T044+），本阶段只要能看见身体与姿态。
+; 刻意不设 Camera3D.current：谁生成谁决定（避免多身体抢相机）。
+
+[ext_resource type="Script" path="res://scripts/characters/animal_body.gd" id="1_body"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.16
+height = 0.48
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_body"]
+radius = 0.16
+height = 0.48
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
+albedo_color = Color(0.68, 0.62, 0.55, 1)
+roughness = 0.85
+
+[node name="AnimalBody" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_body")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="BodyMesh" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_body")
+material_override = SubResource("StandardMaterial3D_body")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.1)
+fov = 90.0

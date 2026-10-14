@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="SpeciesConfig" load_steps=2 format=3]
+
+; 鼠的起测配置。数值来源：Docs/Parameters.md（厘米 → 米，÷100）。
+; 与猫的关键差异：更小（0.06/0.09）、更慢、MaxStepHeight 3 cm、禁止跳跃、可用鼠洞、吃种子。
+
+[ext_resource type="Script" path="res://scripts/data/species_config.gd" id="1_cfg"]
+
+[resource]
+script = ExtResource("1_cfg")
+species_id = &"Mouse"
+capsule_radius = 0.06
+capsule_half_height = 0.09
+crouch_half_height = 0.06
+walk_speed = 1.1
+sprint_speed = 3.0
+crouch_speed = 0.65
+max_step_height = 0.03
+jump_velocity = 0.0
+max_acceleration = 16.0
+camera_offset_z = 0.03
+fov = 90.0
+vision_range = 6.5
+vision_half_angle_deg = 75.0
+hearing_range = 10.0
+hunger_loss_per_sec = 0.1
+thirst_loss_per_sec = 0.08
+sprint_stamina_per_sec = 35.0
+stamina_regen_per_sec = 25.0
+regen_delay = 0.7
+interaction_range = 0.45
+allowed_food_types = Array[int]([1])
+can_jump = false
+can_pounce = false
+can_use_mouse_tunnel = true
