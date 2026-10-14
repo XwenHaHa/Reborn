@@ -16,7 +16,22 @@ extends SceneTree
 const LAB := "res://scenes/maps/l_movement_lab.tscn"
 const OUT_USER := "user://render_capture.png"
 const SETTLE_FRAMES := 90   # 1.5s @60Hz，等场景稳定与光照生效
-
+const OUT_USER_T005_ORTHO := "user://t005_lab_probe_ortho.png"
+## 正交对照相机的固定参数（写在代码里，避免"凭记忆"复现）
+## 取景要求：**同时**包含 1 m 标尺（x 0.7–1.7, y≈0.11）、探针立方体（x 1.9–2.9, y 0.1–1.1）
+## 与顶部标记（y=2.6），否则"比长度/看标记"的视觉检查会缺一块（第一版 size=3.0 就把顶部标记切掉了）。
+## 视野：竖直 4.0 m、水平 4.0×(1280/720)=7.11 m → x 覆盖 -1.16..5.96，y 覆盖 -0.6..3.4。
+## 1 m 在画面上恒为 4.0/7.11*1280 = 180 px（正交、两物同深度 → 可直接比长度）。
+const T005_CAM_POS := Vector3(2.4, 1.4, 3.0)
+const T005_CAM_SIZE := 4.0
+## T006：骨骼位姿两帧视图（同一相机、同一光照，只改动画时间）
+## 位置放在 lab 地面左侧（x=-1.0），相机在其 +X 侧沿 -X 看 → 侧视能看到腿前后摆动。
+## 刻意避开标尺（x 0.7–1.7）与 T005 探针（x 1.9–2.9）：相机放在两者之间靠左，标尺在相机背后。
+const T006_ASSET := "res://assets/tests/sk_rig_probe.glb"
+const T006_RIG_POS := Vector3(-1.0, 0.10, -2.5)
+const T006_CAM_POS := Vector3(0.10, 0.45, -2.5)
+const T006_CAM_TARGET := Vector3(-1.0, 0.22, -2.5)
+const T006_TIMES := [0.0, 0.5]
 
 func _initialize() -> void:
 	print("CAP|start|renderer=%s" % ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"))
@@ -65,8 +80,281 @@ func _initialize() -> void:
 	var err := img.save_png(OUT_USER)
 	print("CAP|save_png_result=%d (%s)" % [err, "OK" if err == OK else "FAIL"])
 	print("CAP|saved_to=%s" % ProjectSettings.globalize_path(OUT_USER))
+
+	# T005：可选的正交对照视图。必须显式传 `-- t005`，默认行为完全不变。
+	if OS.get_cmdline_user_args().has("t005"):
+		await _capture_t005_ortho(lab)
+	# T006：骨骼位姿两帧视图。同样只在显式传 `-- t006` 时执行。
+	if OS.get_cmdline_user_args().has("t006"):
+		await _capture_t006_frames(lab)
+	# T009：猫移动三帧（坡道 / 低顶蹲姿 / 跳上 50 cm 高台）。只在显式传 `-- t009` 时执行。
+	if OS.get_cmdline_user_args().has("t009"):
+		await _capture_t009_frames(lab)
+
 	print("CAP|done")
 	quit(0)
+
+
+## T005 正交对照捕获：正交投影下"1 m 就是同样宽"，用于真正比较探针立方体与 100 cm 标尺。
+## 视角沿 -Z 平视；探针在标尺右端旁边，两者 z 相同（同一深度）→ 像素宽度可直接比较。
+## 只在显式传 `-- t005` 时执行，不影响原有捕获行为。
+func _capture_t005_ortho(lab: Node) -> void:
+	print("CAP|t005_ortho|start")
+	var cam := Camera3D.new()
+	cam.name = "T005OrthoCamera"
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = T005_CAM_SIZE
+	cam.near = 0.05
+	cam.far = 100.0
+	lab.add_child(cam)
+	cam.global_position = T005_CAM_POS
+	cam.rotation_degrees = Vector3.ZERO
+	cam.current = true
+
+	for i in SETTLE_FRAMES:
+		await process_frame
+
+	var vp := root.get_viewport()
+	var active := vp.get_camera_3d()
+	var active_name := "<none>"
+	var proj := -1
+	var csize := 0.0
+	var cpos := Vector3.ZERO
+	if active != null:
+		active_name = active.name
+		proj = active.projection
+		csize = active.size
+		cpos = active.global_position
+	print("CAP|t005_ortho|active_camera=%s|projection=%d|size=%.2f|pos=%s" % [
+		active_name, proj, csize, cpos
+	])
+
+	var tex := vp.get_texture()
+	if tex == null:
+		print("CAP|t005_ortho|ERROR|no viewport texture")
+		return
+	var img := tex.get_image()
+	if img == null:
+		print("CAP|t005_ortho|ERROR|no image")
+		return
+	print("CAP|t005_ortho|image_size=%dx%d" % [img.get_width(), img.get_height()])
+	_pixel_stats(img)
+	var err := img.save_png(OUT_USER_T005_ORTHO)
+	print("CAP|t005_ortho|save_png_result=%d (%s)" % [err, "OK" if err == OK else "FAIL"])
+	print("CAP|t005_ortho|saved_to=%s" % ProjectSettings.globalize_path(OUT_USER_T005_ORTHO))
+
+
+## T006 骨骼两帧捕获
+func _capture_t006_frames(lab: Node) -> void:
+	print("CAP|t006|start")
+	var packed: PackedScene = load(T006_ASSET)
+	if packed == null:
+		print("CAP|t006|ERROR|asset load failed")
+		return
+	var rig: Node3D = packed.instantiate() as Node3D
+	lab.add_child(rig)
+	rig.global_position = T006_RIG_POS
+
+	var cam := Camera3D.new()
+	cam.name = "T006Camera"
+	cam.fov = 45.0
+	cam.near = 0.02
+	lab.add_child(cam)
+	cam.global_position = T006_CAM_POS
+	cam.look_at(T006_CAM_TARGET, Vector3.UP)
+	cam.current = true
+
+	var ap := _find_node(rig, "AnimationPlayer") as AnimationPlayer
+	var sk := _find_node(rig, "Skeleton3D") as Skeleton3D
+	if ap == null or sk == null:
+		print("CAP|t006|ERROR|missing AnimationPlayer/Skeleton3D")
+		return
+	print("CAP|t006|rig_pos=%s|cam_pos=%s|fov=%.1f|animations=%s" % [
+		rig.global_position, cam.global_position, cam.fov, str(ap.get_animation_list())
+	])
+
+	for i in SETTLE_FRAMES:
+		await process_frame
+
+	var idx := 0
+	for t in T006_TIMES:
+		ap.play("Loop")
+		await process_frame
+		# 关键（第一版踩到的真 bug）：play() 之后若一直等帧，播放器会把动画**推过头**
+		# （实测等 90 帧后 t=0 那一张其实是 35° 摆动态）。必须先 pause 冻结，等场景稳定后再 seek。
+		ap.pause()
+		for i in SETTLE_FRAMES:
+			await process_frame
+		ap.seek(t, true)
+		await process_frame
+		await process_frame
+		var vp := root.get_viewport()
+		var tex := vp.get_texture()
+		if tex == null:
+			print("CAP|t006|ERROR|no viewport texture")
+			return
+		var img := tex.get_image()
+		if img == null:
+			print("CAP|t006|ERROR|no image")
+			return
+		print("CAP|t006|frame=%d|t=%.2f|leg_front_dir=%s|leg_back_dir=%s" % [
+			idx, t, _bone_dir(sk, "leg_front"), _bone_dir(sk, "leg_back")
+		])
+		_pixel_stats(img)
+		var path := "user://t006_rig_t%03d.png" % int(round(t * 100.0))
+		var err := img.save_png(path)
+		print("CAP|t006|save_result=%d (%s)|path=%s|global=%s" % [
+			err, "OK" if err == OK else "FAIL", path, ProjectSettings.globalize_path(path)
+		])
+		idx += 1
+
+
+## ---------------------------------------------------------------------------
+## T009：猫移动三帧（坡道 / 低顶蹲姿 / 跳上 50 cm 高台）
+##
+## 为什么单独建一个世界：试验世界 `l_move_fixtures.tscn` 是 16×16 地面，与 lab 的 10×10
+## 地面重叠同高，放在一起会互相遮挡/互相碰撞。所以这里先释放 lab，再装试验世界。
+## 猫由工具自己实例化并**直接喂意图**（`player_controlled = false`），避免捕获时抢鼠标。
+## ---------------------------------------------------------------------------
+
+const T009_FIXTURES := "res://scenes/maps/l_move_fixtures.tscn"
+const T009_BODY := "res://scenes/characters/animal_body.tscn"
+const T009_CAT := "res://resources/species/cat.tres"
+
+func _capture_t009_frames(lab: Node) -> void:
+	print("CAP|t009|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+
+	var packed: PackedScene = load(T009_FIXTURES)
+	if packed == null:
+		print("CAP|t009|ERROR|fixtures load failed")
+		return
+	var world: Node3D = packed.instantiate() as Node3D
+	root.add_child(world)
+	await process_frame
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+	var cam := Camera3D.new()
+	cam.name = "T009Camera"
+	cam.fov = 45.0
+	cam.near = 0.05
+	world.add_child(cam)
+	cam.current = true
+
+	# 帧 1：走上 25° 坡道
+	await _t009_case(world, cam, "t009_ramp", Vector3(0.0, 0.36, 3.0),
+		{"forward_frames": 150, "crouch": false}, Vector3(2.6, 1.5, 2.4))
+	# 帧 2：蹲姿钻低顶（板底 0.52），并尝试站起来（被挡住）
+	# 相机必须**低于板底**并贴近地面平视，否则俯视时板子会把蹲着的猫整个遮住（实测踩到过）
+	await _t009_case(world, cam, "t009_low_ceiling", Vector3(-6.0, 0.36, 3.0),
+		{"forward_frames": 200, "crouch": true, "then_release_crouch": 60}, Vector3(0.0, 0.16, 1.7))
+	# 帧 3：助跑跳上 50 cm 高台
+	await _t009_case(world, cam, "t009_platform", Vector3(6.5, 0.36, -1.5),
+		{"jump_at_distance": 0.78, "forward_frames": 240}, Vector3(2.4, 1.3, 2.4))
+
+
+## 一个 T009 捕获场景：在新世界里放猫、按 script 驱动、再放第三人称相机拍一张
+func _t009_case(world: Node3D, cam: Camera3D, tag: String, spawn: Vector3, script: Dictionary, cam_off: Vector3) -> void:
+	var body: AnimalBody = (load(T009_BODY) as PackedScene).instantiate() as AnimalBody
+	body.species_config = load(T009_CAT) as SpeciesConfig
+	body.player_controlled = false
+	world.add_child(body)
+	body.global_position = spawn
+	body.velocity = Vector3.ZERO
+	for i in 180:
+		await physics_frame
+		if body.is_on_floor():
+			break
+
+	var intent := Vector2(0.0, -1.0)
+	body.move_intent = intent
+	body.want_crouch = bool(script.get("crouch", false))
+	var jump_dist: float = float(script.get("jump_at_distance", -1.0))
+	var frames: int = int(script.get("forward_frames", 150))
+	var jumped := false
+	for i in frames:
+		if jump_dist >= 0.0 and not jumped and body.is_on_floor():
+			var pf := world.get_node_or_null("Platform50") as Node3D
+			if pf != null and absf(body.global_position.z - (pf.position.z + 1.0)) <= jump_dist:
+				jumped = true
+				body.want_jump = true
+		# 上到台顶就停下，别再往前走（否则会从台子另一侧走下去、掉出地面——实测踩到过）
+		if jumped and body.is_on_floor() and body.global_position.y > spawn.y + 0.3:
+			body.move_intent = Vector2.ZERO
+			break
+		await physics_frame
+	if script.has("then_release_crouch"):
+		body.move_intent = Vector2.ZERO
+		body.want_crouch = false
+		for i in int(script["then_release_crouch"]):
+			await physics_frame
+	body.move_intent = Vector2.ZERO
+	for i in 30:
+		await physics_frame
+
+	# 第三人称（看得到身体与姿态）
+	cam.global_position = body.global_position + cam_off
+	cam.look_at(body.global_position + Vector3(0.0, 0.05, 0.0), Vector3.UP)
+	cam.current = true
+	await _t009_shot("%s_tp" % tag, body, cam)
+	# 第一人称（玩家真正的视角：眼高与视野是否正常）
+	cam.current = false
+	body.camera.current = true
+	body.camera.rotation = Vector3.ZERO
+	await _t009_shot("%s_fp" % tag, body, body.camera)
+	body.camera.current = false
+
+	body.queue_free()
+	await process_frame
+
+
+## 拍一张并存 PNG + 打印客观像素统计
+func _t009_shot(tag: String, body: AnimalBody, cam: Camera3D) -> void:
+	for i in SETTLE_FRAMES:
+		await process_frame
+	# 必须等"真正画完一帧"再读：只 await process_frame 时，读到的是**上一帧**（换机位后会拿到上一机位的画面，
+	# 实测：tp/fp 两张图会字节完全相同）。`RenderingServer.frame_post_draw` 才是"这一帧已绘制完"的信号。
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	var vp := root.get_viewport()
+	var tex := vp.get_texture()
+	if tex == null:
+		print("CAP|t009|ERROR|no viewport texture")
+		return
+	var img := tex.get_image()
+	if img == null:
+		print("CAP|t009|ERROR|no image")
+		return
+	print("CAP|t009|%s|cat_pos=%s|crouch=%s|capsule_h=%.3f|cam_pos=%s|active=%s" % [
+		tag, body.global_position, str(body.is_crouching),
+		(body.shape_node.shape as CapsuleShape3D).height, cam.global_position,
+		vp.get_camera_3d().name if vp.get_camera_3d() != null else "<none>"
+	])
+	_pixel_stats(img)
+	var path := "user://%s.png" % tag
+	var err := img.save_png(path)
+	print("CAP|t009|save_result=%d (%s)|path=%s|global=%s" % [
+		err, "OK" if err == OK else "FAIL", path, ProjectSettings.globalize_path(path)
+	])
+
+
+func _find_node(node: Node, cls: String) -> Node:
+	if node.is_class(cls):
+		return node
+	for c in node.get_children():
+		var r := _find_node(c, cls)
+		if r:
+			return r
+	return null
+
+
+func _bone_dir(sk: Skeleton3D, bone: String) -> String:
+	var i := sk.find_bone(bone)
+	if i < 0:
+		return "<missing>"
+	return str(sk.get_bone_global_pose(i).basis.y.normalized())
 
 
 ## 客观像素统计：用于判断"是否渲染出了有内容的三维画面"，

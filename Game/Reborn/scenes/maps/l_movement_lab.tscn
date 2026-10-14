@@ -1,6 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/characters/player_greybox.gd" id="1_player"]
+[ext_resource type="PackedScene" path="res://assets/tests/sm_probe_cube.glb" id="2_otuhr"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hv681"]
 albedo_color = Color(0.32, 0.34, 0.36, 1)
@@ -40,6 +41,8 @@ background_mode = 2
 sky = SubResource("Sky_4ph2g")
 ambient_light_source = 3
 tonemap_mode = 2
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_q5lvl"]
 
 [node name="MovementLab" type="Node3D" unique_id=1942012810]
 
@@ -86,3 +89,12 @@ shadow_enabled = true
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=717411104]
 environment = SubResource("Environment_wgikf")
+
+[node name="ProbeAsset" type="StaticBody3D" parent="." unique_id=1066097385]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4, 0.6, -2.5)
+collision_mask = 0
+
+[node name="sm_probe_cube" type="Node3D" parent="ProbeAsset" unique_id=658871477 instance=ExtResource("2_otuhr")]
+
+[node name="ProbeShape" type="CollisionShape3D" parent="ProbeAsset" unique_id=1369773872]
+shape = SubResource("BoxShape3D_q5lvl")

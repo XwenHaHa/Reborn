@@ -84,3 +84,6 @@ _commitmsg*.txt
 # 临时提交消息文件
 _msg.txt
 _commitmsg*.txt
+
+# Blender 自动备份（*.blend1 **不匹配** *.blend，不加这条会以原始二进制入库）
+*.blend1
