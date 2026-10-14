@@ -1,10 +1,10 @@
-# 开发交接：2026-10-13（T011 完成 —— **P1 进行中**）
+# 开发交接：2026-10-13（T012 完成 —— **P1 进行中**）
 
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
 
-**T001 / T002 / T003 / T004（路线决策）/ T005 / T006 / T007 / T008 / T009 / T010 / T011 全部完成**；台阶能力已组件化；技术层文档为 Godot 版。
+**T001 / T002 / T003 / T004（路线决策）/ T005 / T006 / T007 / T008 / T009 / T010 / T011 / T012 全部完成**；台阶与导航能力已落地；技术层文档为 Godot 版。
 
 | 任务 | 状态 | 关键证据 |
 |---|---|---|
@@ -19,12 +19,13 @@
 | T009 | **done（2026-10-13）** | 猫移动（走/跑/蹲/跳 + 第一人称相机）；斜坡・低顶・落地・相机穿墙全过；**81/81** ×3 + 包内 81/81；lab 玩家换成正式猫，T002/T005/T006/T007/T008 回归全绿；过程中修掉 `step_climb` 两处判据缺陷 |
 | T010 | **done（2026-10-13）** | 鼠移动与通道尺度：**站立**过 24×30 cm 洞（胶囊 0.18 不变、0 空中帧）、**猫站立与蹲姿都过不去**、禁高跳、0.15 m 低顶下不扩碰撞；**95/95** ×3 + 包内 95/95；**gameplay 代码零改动**（差异全在 `mouse.tres`）→ 说明 T009 的抽象没漏东西 |
 | T011 | **done（2026-10-13）** | 生态灰盒 `l_courtyard.tscn`：四区域**恰好铺满** 72×56 可玩矩形；策划 §8.2 五条结构全部落地并用**两种物种真实胶囊**验证（猫跳越 0.50 屏障、鼠穿 0.24×0.30 洞、猫在洞/溪缝前被挡、鼠穿溪缝）；四条出生点→补给走廊 0 阻挡；**210/210** ×3 + 包内 210/210；**gameplay 代码零改动**；视觉 7 帧 |
+| T012 | **done（2026-10-13）** | 导航可行性：**分物种双导航图 + 分层**（鼠 layer1 r=0.07 / 猫 layer2 r=0.17、cell 0.03）；鼠层穿 0.24 洞 9.00 m、穿溪缝 12.00 m；猫层同一对端点 **35.44 m 且不穿洞**、**洞里没有猫的导航面**；真实胶囊行走（鼠进洞 236 帧 0 重叠；猫 900 帧 **0 帧进入洞口走廊**）；**79/79** ×3 + 包内 79/79；**视觉证据 NOT-RUN**（运行时导航调试绘制不可见）；**gameplay 代码零改动** |
 | 台阶能力 | **done（已组件化）** | 探针 6/6；组件 `scripts/characters/step_climb.gd`；T009 期间修正"落点高度"与"斜坡误判为台阶"两处判据（`Docs/Evidence/T009.md` §5） |
 
-**未完成**：游戏玩法实现（T012 起：导航 / 捕猎 / 双物种策略 / 轮回 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证。**T012～T063 全部 pending。**
+**未完成**：游戏玩法实现（T013 起：捕猎 / 双物种策略 / 轮回 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证。**T013～T063 全部 pending。**
 
 **P0 阶段门完成**：E01 部分通过（视觉已补验）、打包通过（T007）、**E02 通过**（T005）、**E03 通过**（T006）。
-**P1 进行中：T008 + T009 + T010 + T011 通过**（配置与身体、猫移动与相机、鼠移动与通道尺度、**生态灰盒**）→ 下一步 **T012 导航可行性试验**。
+**P1 进行中：T008 + T009 + T010 + T011 + T012 通过**（配置与身体、猫移动与相机、鼠移动与通道尺度、生态灰盒、**导航可行性**）→ 下一步 **T013 调试入口与移动回归**。
 
 > ## ⚠ 本次最重要的教训
 >
@@ -58,6 +59,7 @@ Game/Reborn/                       正式 Godot 工程（纯文本，agent 可�
     ├── run_t009_cat_movement.gd   **T009 猫移动与相机断言（81 条：速度/潜伏/斜坡/墙角/跳跃）**
     ├── run_t010_mouse_movement.gd  **T010 鼠移动与通道尺度断言（95 条：三档速度/窄缝/低顶/禁高跳）**
     ├── run_t011_greybox.gd        **T011 生态灰盒断言（210 条：四区域/补给走廊/§8.2 五条结构 + 6 组物理探针）**
+    ├── run_t012_navigation.gd     **T012 导航可行性断言（79 条：双图参数/分层路径矩阵/结构判据 + 4 组真实胶囊行走）**
     ├── run_t007_input.gd          输入链路断言（22 条；现在跑在正式猫控制器上）
     ├── probe_step_height.gd       台阶能力探针（6 条判定；**现调用 StepClimb 组件**）
     ├── debug_stepup.gd            台阶逐条件诊断工具
@@ -67,7 +69,7 @@ Game/Reborn/                       正式 Godot 工程（纯文本，agent 可�
     ├── tool_set_lab_player.gd     **T009 把 lab 的灰盒玩家换成正式猫（幂等 + 无意外变更自检）**
     ├── tool_make_courtyard.gd     **T011 生成生态灰盒关卡（幂等 + 重载核对几何 + 走廊自检）**
     ├── tool_dump_scene_tree.gd    dump 任意 PackedScene 真实结构（含骨骼/动画/蒙皮）
-    └── tool_capture_render.gd     引擎侧渲染捕获 + 像素统计（不能 headless；`-- t005` / `-- t006` / `-- t009` / `-- t010` / `-- t011`）
+    └── tool_capture_render.gd     引擎侧渲染捕获 + 像素统计（不能 headless；`-- t005` / `-- t006` / `-- t009` / `-- t010` / `-- t011` / `-- t012`）
 
 Art/Blender/Tests/StaticProbe_v001.blend   T005 可编辑源（LFS；**逐字节不可复现**）
 Art/Exports/Tests/SM_ProbeCube.glb         T005 导出产物（LFS，sha256 629750364847…，**可复现**）
@@ -77,7 +79,7 @@ Tools/Blender/t005_static_probe.py / t006_rig_probe.py   Blender 无头脚本（
 Art/Probes/t005_lab_probe_render.png       正交对照帧（T005 视觉证据，LFS）
 Art/Probes/t006_rig_t000.png / t050.png    骨骼两帧位姿（T006 视觉证据，LFS）
 
-Builds/P0-Win64/                   导出产物（.gitignore 已排除；**T011 后已重新导出并复验，SelfTest.pck 282,456 B**）
+Builds/P0-Win64/                   导出产物（.gitignore 已排除；**T012 后已重新导出并复验，SelfTest.pck 327,196 B**）
 ├── Reborn.exe / Reborn.pck / Reborn.console.exe
 └── RebornSelfTest.exe / .pck / .console.exe
 ```
@@ -151,30 +153,29 @@ $proj = 'E:\Reborn\Game\Reborn'
   模型只会答"洞里是空的"（详见 `Docs/Commands.md` §8 与 `Docs/Evidence/T010.md` §5.1）。
 
 ## 下一步（按建议优先级）
-   **先写 `Docs/Tasks/T012.md`**；失败**不许用瞬移伪装寻路成功**（`Docs/TechnicalDesign.md` §5）。
-1. **T012 导航可行性试验**（P1，4～8h，前置 T011）：在 `scenes/maps/l_courtyard.tscn` 上建 `NavigationMesh`，
-   验证**猫/鼠两套代理尺寸**：NPC 能走各自合法路线、**猫进不了 0.24 × 0.30 的树根洞**（几何已由 T011 的物理探针验收）。
-   **先写 `Docs/Tasks/T012.md`**；失败**不许用瞬移伪装寻路成功**（`TechnicalDocs` 见 `Docs/TechnicalDesign.md` §5）。
-2. **T013（调试入口与移动回归）**：切换两种玩家、显示碰撞与路径；带上遗留项 **单级台阶前移 0.2 m**（`Docs/Evidence/T009.md` §5.3）。
-3. ~~T008 / T009 / T010 / T011~~ **已完成**；正式角色/骨骼资产仍属 **P6** 阶段门，不得提前。
+1. **T013（调试入口与移动回归）**（P1，2～4h，前置 T009～T012）：测试切换两种玩家、显示碰撞与路径、记录移动参数与问题视频；
+   带上两条遗留项：**单级台阶抬升会水平前移 0.2 m**（`Docs/Evidence/T009.md` §5.3）与
+   **猫跨 0.50 屏障在导航层不可达**（`Docs/Evidence/T012.md` §9；是否加 `NavigationLink3D` 由负责人定）。
+   **先写 `Docs/Tasks/T013.md`**。
+2. ~~T008 / T009 / T010 / T011 / T012~~ **已完成**；正式角色/骨骼资产仍属 **P6** 阶段门，不得提前。
 
 ## 待负责人处理
 
 | 事项 | 说明 |
 |---|---|
-| **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T005~T009 分 4 个提交：`562fba4`/`0a7442b`/`bcc65be`/`44eb062`，提交策略 `965120a`，T010 → `8140d6f`，T011 → `1f71f46`）；当前 `main` 比 `origin/main` **ahead 7，未推送** |
+| **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T005~T009 分 4 个提交：`562fba4`/`0a7442b`/`bcc65be`/`44eb062`，提交策略 `965120a`，T010 → `8140d6f`，T011 → `1f71f46`）；当前 `main` 比 `origin/main` **ahead 8，未推送** |
 | **Git 推送 / 发布** | 仍需确认。推送要经本机代理 `127.0.0.1:7897`（`Docs/Commands.md` §4.1），推送前先确认远端无他人提交 |
-| 是否发布新构建 | `Builds/P0-Win64/` 已按 T011 改动**重新导出并再复验**（SelfTest.pck **282,456 B**；包内 T008 103/103、T009 81/81、T010 95/95、T011 210/210）；是否对外发布请确认 |
+| 是否发布新构建 | `Builds/P0-Win64/` 已按 T012 改动**重新导出并再复验**（SelfTest.pck **327,196 B**；包内 T008 103/103、T009 81/81、T010 95/95、T011 210/210、T012 79/79）；是否对外发布请确认 |
 | 真实按键输入验证方式 | 需受审查的输入自动化工具（**需授权**），或真人操作录像。**不要盲发按键** |
 | 相机轴语义 D1 / 蹲姿高度 D2 | 见上方"关键事实"：D1 已按竖直偏移实现并断言锁定；D2 需并入 `Parameters.md` 正式起测值 |
 | 50 cm 高台的跳跃余量 | 净空 0.5502 m vs 台高 0.50 m（端到端实跳已通过，窗口窄）；是否提高 `JumpZVelocity` 由负责人定 |
 | 确认脚本语言 | 默认 GDScript（无需额外工具链）。改 C# 需追加 .NET 配置 |
 | Godot 渲染器 | **Forward+ 已确认可渲染**（T009 捕获工具实测 `renderer=forward_plus`、1280×720 出图正常）；**帧率未测** |
 
-## 本次边界声明（T011）
+## 本次边界声明（T012）
 
 - **未安装/卸载任何软件**；未连接 MCP；未改 git 全局配置；**未删除任何源资产**。
-- **已按任务提交 Git**（T005~T009 → `562fba4` / `0a7442b` / `bcc65be` / `44eb062`；提交策略 `965120a`；T010 → `8140d6f`；T011 → `1f71f46`）；
+- **已按任务提交 Git**（…T010 → `8140d6f`；T011 → `1f71f46`）；T012 按"每任务一次"**单独提交一次**（哈希由下一次交接回填）；
   **未推送**（推送需另行授权）。
 - 运行过的受限程序：Godot **非 headless** 渲染捕获（创建窗口并短暂捕获鼠标，工具立即放开）。
 - **未做真实按键注入**（禁止盲发按键）；输入验证仍是合成输入。
@@ -190,7 +191,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 > 改完脚本**先跑 `--check-only`**，再跑 `--headless ... --quit-after N`（**不加 `--quit-after` 会挂死**）；
 > **新增/修改 `class_name` 脚本后先跑一次 `--import`**（否则引用方报 "Identifier not declared"）。
 > Godot 用**米**，Parameters.md 是**厘米**，需 ÷100。`CapsuleShape3D.height` 是含半球的总高。
-> **验收脚本模板**：`run_t002.gd`(18)、`run_t005_asset.gd`(50)、`run_t006_rig.gd`(65)、`run_t008_species.gd`(114)、`run_t009_cat_movement.gd`(81)、`run_t010_mouse_movement.gd`(95)、`run_t011_greybox.gd`(210)、`run_t007_input.gd`(22)、`probe_step_height.gd`(6)。
+> **验收脚本模板**：`run_t002.gd`(18)、`run_t005_asset.gd`(50)、`run_t006_rig.gd`(65)、`run_t008_species.gd`(114)、`run_t009_cat_movement.gd`(81)、`run_t010_mouse_movement.gd`(95)、`run_t011_greybox.gd`(210)、`run_t012_navigation.gd`(79)、`run_t007_input.gd`(22)、`probe_step_height.gd`(6)。
 > **资产链已打通**：Blender → `.glb` → Godot（T005 静态 / T006 骨骼）；脚本在 `Tools/Blender/`；
 > 结构 dump 用 `tests/tool_dump_scene_tree.gd`（支持骨骼/动画/蒙皮）。
 > **资产约定（全部实测）**：轴向 `(x,y,z)_Blender → (x,z,−y)_Godot`——**角色在 Blender 里要面朝 `+Y`**；
@@ -201,12 +202,13 @@ $proj = 'E:\Reborn\Game\Reborn'
 > 台阶用 `scripts/characters/step_climb.gd`（每帧 `climb.update_base_y()`，移动时 `climb.step_or_slide(motion, dt)`）。
 > **关卡**：试验世界 `scenes/maps/l_move_fixtures.tscn`（生成器 `tests/tool_make_move_fixtures.gd`）；
 > **生态灰盒 `scenes/maps/l_courtyard.tscn`（T011：80×80 m、四区域 + 树根屏障/鼠洞/溪边缝隙；生成器 `tests/tool_make_courtyard.gd`）**；
-> **视觉捕获**：`tests/tool_capture_render.gd -- t009` / `-- t010` / `-- t011`（**不能加 `--headless`**，`--quit-after` 给到 30000+；
+> **导航数据（T012）**：`resources/nav/l_courtyard_{mouse,cat}.tres`（**鼠 layer1 / 猫 layer2**，生成器 `tests/tool_make_courtyard_nav.gd`）；
+> **视觉捕获**：`tests/tool_capture_render.gd -- t009` / `-- t010` / `-- t011` / `-- t012`（**不能加 `--headless`**，`--quit-after` 给到 30000+；
 > **必须检查 `CAP|done` 与每张 `save_result=OK`** —— T011 实测遇到过一次"中途静默退出、退出码却仍是 0"）。
 > **不要写物种名分支**：能力差异走配置字段（`can_jump` / `can_pounce` / `can_use_mouse_tunnel`），有静态断言守着。
 > 打包：`export_presets.cfg` 两个预设；**导出产物拒绝 `--script`**，包内断言用 `--main-pack` + 编辑器二进制。
-> **P0 已完成；P1 进行中（T008 + T009 + T010 + T011 done）**。下一个动作：**写 `Docs/Tasks/T012.md` 并做导航可行性试验**
-> （在 T011 已验收的 `l_courtyard.tscn` 上建 `NavigationMesh`：猫/鼠两套代理尺寸，**猫不能进 0.24×0.30 树根洞**；失败不许用瞬移伪装）。
+> **P0 已完成；P1 进行中（T008 + T009 + T010 + T011 + T012 done）**。下一个动作：**写 `Docs/Tasks/T013.md` 并做调试入口与移动回归**
+> （切换两种玩家、显示碰撞与路径；带上**单级台阶前移 0.2 m** 与 **猫跨屏障需跳跃链接**两条遗留项）。
 > 已知阻塞：真实按键输入无安全自动化手段（**禁止盲发按键**）。
 > 不要在没有实测证据时把任何游戏任务标为 done；不要因无头断言通过就宣称画面正确。
 

@@ -163,6 +163,32 @@ $p = 'E:\Reborn\Game\Reborn'
   （谁改了不一致就红）。常量表见 `Docs/Parameters.md`「生态灰盒关卡常量」与 `Docs/Tasks/T011.md` §4。
 - 结构特写要**低角度、正对开口**拍：纯俯瞰会被顶板挡住"三面墙 + 开口"（T011 踩过，见 §8 取景坑）。
 
+
+---
+
+## 2.8 T012 导航数据与导航可行性（VERIFIED — 2026-10-13）
+
+```powershell
+# 1) 生成导航数据（三步：不入树加分组/区域 → 入树烘焙 → 不入树赋回 .tres；约 15 s）
+& $g --headless --path $p --script 'res://tests/tool_make_courtyard_nav.gd'
+#    -> resources/nav/l_courtyard_mouse.tres（layer 1）/ l_courtyard_cat.tres（layer 2）
+#       scenes/maps/l_courtyard.tscn 里出现 NavRegion_Mouse / NavRegion_Cat
+
+# 2) T012 断言（79 条：双图参数 + 分层路径矩阵 + 结构判据 + 4 组真实胶囊行走）
+& $g --headless --path $p --script 'res://tests/run_t012_navigation.gd' --quit-after 60000
+#    -> SUMMARY|checks=79|failures=0  RESULT|PASS   EXIT=0
+
+# 3) 包内复验
+& $g --headless --main-pack 'E:\Reborn\Builds\P0-Win64\RebornSelfTest.pck' `
+    --script 'res://tests/run_t012_navigation.gd' --quit-after 60000
+#    -> SUMMARY|checks=79|failures=0  EXIT=0
+```
+
+- **分层**：鼠层（`navigation_layers = 1`）能穿 0.24 树根洞 / 溪边缝；猫层（`= 2`）同端点只能绕行，
+  且**洞里没有猫的导航面**（结构判据）。
+- **禁止**用瞬移或直接设位置"让寻路看起来成功"（`Docs/TechnicalDesign.md` §5）：断言必须包含真实 `AnimalBody` 逐帧行走。
+- 视觉：`-- t012` 已实现，但运行时导航调试绘制**看不到**（见 §8）→ 记 NOT-RUN，别拿重复图当证据。
+
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -410,6 +436,16 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 - **大坐标下的浮点容差**：关卡尺度到 36 m 时 float32 的间隔约 4e-6，用 `1e-6` 做"严格相等"会误杀自己。
   统一用 `GEO_EPS = 1e-4`（0.1 mm）。另外**出生点那种"正好站在地面上"的位置**做 `intersect_shape` 会把地面接触算 1 次重叠，
   探测胶囊要**收紧 1 cm**（`shrink`）。
+- **导航烘焙的几何源**：`NavigationRegion3D.bake_navigation_mesh()` 按 `geometry_source_geometry_mode` 取几何 ——
+  `ROOT_NODE_CHILDREN`（默认）只认**区域自己的子节点**（把几何放在兄弟节点上烘出 **0 面**）；
+  要让**多张图烘同一套几何**，用 `GROUPS_WITH_CHILDREN` + `geometry_source_group_name`（T012 用分组 `nav_source_courtyard`）。
+- **烘焙格必须与地图格一致，且不能太粗**：不一致会刷 `cell size mismatch … rasterization errors`；
+  `cell 0.05` 会把 **0.24 的窄缝吃掉**（路径改绕行），`region_min_size` 相对 cell 太小还会让 `map_get_path` **恒空**。
+  T012 口径：`cell 0.03 / rmin 0.02` + `project.godot` 的 `[navigation] 3d/default_cell_size/height` 同步。
+- **运行期换 navmesh 后同进程查询不可靠**：给 region 换 navmesh 再烘，**同进程等 600 帧仍 0 路径点**；
+  **落盘 `.tres` 后新进程加载**第 **1** 帧就有路径 → 烘焙与断言必须**分开进程**做（工具只烘焙+落盘，断言脚本另跑）。
+- **导航调试绘制在运行时看不到**：`NavigationServer3D.set_debug_enabled(true)` 调用成功，但捕获出的鼠/猫两张图 **MD5 逐字节相同**
+  → 不要拿"名字不同"当视觉证据；T012 的判定改用**结构判据**（洞里有没有导航面）+ 路径矩阵 + 真实胶囊行走。
 
 ---
 
@@ -422,3 +458,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-13 | **T009 完成**。新增 §2.6 移动验收与试验世界命令（含"捕获不能加 `--headless`"）；§8 补 5 条实测坑（pack 不序列化实例子节点覆盖、`get_path()` 未入树报错导致假通过、视觉工具漏小目标→改用差异像素法、台阶两处判据坑、试验世界必须分道）。 |
 | 2026-10-13 | **T010 完成**。§2.6 改名并补 `-- t010` 捕获与包内两条命令（含"捕获的 `--quit-after` 要给足"）；§8 补 2 条实测坑（取景/视线几何决定可判读性；不许为了过测试改产品参数）。 |
 | 2026-10-13 | **T011 完成**。新增 §2.7 生态灰盒关卡命令（生成器 + 210 条断言 + `-- t011` 捕获 7 视角 + 包内复验）；§8 补 3 条实测坑（`add_to_group` 默认非持久 → 分组不会被序列化；非 headless 捕获可能半途静默退出、必须看 `CAP|done`；大坐标浮点容差用 `GEO_EPS = 1e-4`）。 |
+| 2026-10-13 | **T012 完成**。新增 §2.8 导航数据与导航可行性命令（烘焙工具 + 79 条断言 + 包内复验）；§8 补 3 条实测坑（烘焙几何源只认区域子节点/分组模式、烘焙格与地图格必须一致且过小的 cell 会吃掉窄缝、运行期换 navmesh 后同进程查询不可靠要分进程）。 |

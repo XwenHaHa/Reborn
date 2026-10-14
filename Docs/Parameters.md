@@ -51,6 +51,17 @@
 - 这些是**关卡设计值**：真源在生成器 `tests/tool_make_courtyard.gd` 的常量，
   `tests/run_t011_greybox.gd` 会从场景几何 + 物种配置复核（改了不一致就红）。
 
+### 导航数据常量（T012 新增；分物种导航图 + 分层）
+
+- 两张**落盘导航图**：`resources/nav/l_courtyard_mouse.tres`（**layer 1**）、`l_courtyard_cat.tres`（**layer 2**），
+  由 `tests/tool_make_courtyard_nav.gd` 烘焙；关卡里对应 `NavRegion_Mouse` / `NavRegion_Cat`。
+- **代理参数从物种配置派生**：`agent_radius = 胶囊半径 + 0.01`（鼠 0.07 / 猫 0.17）、
+  `agent_height = 胶囊总高 + 0.02`（0.20 / 0.50）、`agent_max_climb = max_step_height`（0.03 / 0.12）、`agent_max_slope = 45°`。
+- **烘焙格**：`cell_size = cell_height = 0.03`、`region_min_size = 0.02`（实测口径：0.03 才留得住 0.24 的洞）。
+  `project.godot` 的 `[navigation] 3d/default_cell_size/height = 0.03` 必须与之一致，否则刷格失配警告。
+- **几何源**：分组 `nav_source_courtyard`（关卡所有 `StaticBody3D`）+ `PARSED_GEOMETRY_STATIC_COLLIDERS`。
+- 判据（断言守着）：鼠层能穿 0.24 洞 / 溪缝；**猫层在洞与缝里没有导航面、路径不穿**。
+
 共同：Hunger/Thirst≤25 发警告；任一归零后各扣 Health 1/s，两项均零则 2/s；Health 不自动恢复。Sprint 只有 Stamina≥5 可开始，耗尽转行走；运动消耗使用实际经过时间。起测跌落：落地前垂直速度绝对值≤700 无伤；超过按 (speed-700)*0.1 伤害，最大100，后续分别调试两物种。
 
 猫扑击：最大水平距离 140，持续 0.25s，体力成本25，恢复0.6s，只在地面 Idle 时启动；期间锁定朝向，不允许其他扑击/跳跃/交互，连续扫掠停止于障碍。实际位移不能超预算，不用直接 SetActorLocation 穿过阻挡。

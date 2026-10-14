@@ -1,5 +1,8 @@
 [gd_scene format=3]
 
+[ext_resource type="NavigationMesh" path="res://resources/nav/l_courtyard_mouse.tres" id="1_ux1g4"]
+[ext_resource type="NavigationMesh" path="res://resources/nav/l_courtyard_cat.tres" id="2_vy0cc"]
+
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5bbik"]
 albedo_color = Color(0.32, 0.34, 0.36, 1)
 roughness = 0.8
@@ -279,7 +282,7 @@ ambient_light_source = 3
 
 [node name="Courtyard" type="Node3D" unique_id=692166114]
 
-[node name="Ground" type="StaticBody3D" parent="." unique_id=135145868]
+[node name="Ground" type="StaticBody3D" parent="." unique_id=135145868 groups=["nav_source_courtyard"]]
 collision_mask = 0
 
 [node name="Mesh" type="MeshInstance3D" parent="Ground" unique_id=1446599171]
@@ -289,7 +292,7 @@ mesh = SubResource("BoxMesh_xleja")
 [node name="Shape" type="CollisionShape3D" parent="Ground" unique_id=1611406545]
 shape = SubResource("BoxShape3D_ux1g4")
 
-[node name="FenceNorth" type="StaticBody3D" parent="." unique_id=1928874]
+[node name="FenceNorth" type="StaticBody3D" parent="." unique_id=1928874 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 30.1)
 collision_mask = 0
 
@@ -300,7 +303,7 @@ mesh = SubResource("BoxMesh_k32ae")
 [node name="Shape" type="CollisionShape3D" parent="FenceNorth" unique_id=1516065834]
 shape = SubResource("BoxShape3D_mocf4")
 
-[node name="FenceSouth" type="StaticBody3D" parent="." unique_id=1389402823]
+[node name="FenceSouth" type="StaticBody3D" parent="." unique_id=1389402823 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, -26.1)
 collision_mask = 0
 
@@ -311,7 +314,7 @@ mesh = SubResource("BoxMesh_2p44x")
 [node name="Shape" type="CollisionShape3D" parent="FenceSouth" unique_id=832292336]
 shape = SubResource("BoxShape3D_q7dxt")
 
-[node name="FenceWest" type="StaticBody3D" parent="." unique_id=1384188207]
+[node name="FenceWest" type="StaticBody3D" parent="." unique_id=1384188207 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -36.1, 1.6, 2)
 collision_mask = 0
 
@@ -322,7 +325,7 @@ mesh = SubResource("BoxMesh_bqfnd")
 [node name="Shape" type="CollisionShape3D" parent="FenceWest" unique_id=2061375541]
 shape = SubResource("BoxShape3D_0a7ug")
 
-[node name="FenceEast" type="StaticBody3D" parent="." unique_id=1685285926]
+[node name="FenceEast" type="StaticBody3D" parent="." unique_id=1685285926 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 36.1, 1.6, 2)
 collision_mask = 0
 
@@ -425,7 +428,7 @@ metadata/supply_type = "water"
 metadata/species = "Both"
 metadata/region = "Creek"
 
-[node name="ShelterWallWest" type="StaticBody3D" parent="." unique_id=1936639407]
+[node name="ShelterWallWest" type="StaticBody3D" parent="." unique_id=1936639407 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.4, 0.9, 27.3)
 collision_mask = 0
 
@@ -436,7 +439,7 @@ mesh = SubResource("BoxMesh_73dx6")
 [node name="Shape" type="CollisionShape3D" parent="ShelterWallWest" unique_id=396167278]
 shape = SubResource("BoxShape3D_b11a2")
 
-[node name="ShelterWallNorth" type="StaticBody3D" parent="." unique_id=969168631]
+[node name="ShelterWallNorth" type="StaticBody3D" parent="." unique_id=969168631 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0.9, 28.9)
 collision_mask = 0
 
@@ -447,7 +450,7 @@ mesh = SubResource("BoxMesh_8qmn1")
 [node name="Shape" type="CollisionShape3D" parent="ShelterWallNorth" unique_id=1689251113]
 shape = SubResource("BoxShape3D_4itpo")
 
-[node name="ShelterWallSouth" type="StaticBody3D" parent="." unique_id=540195003]
+[node name="ShelterWallSouth" type="StaticBody3D" parent="." unique_id=540195003 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0.9, 25.7)
 collision_mask = 0
 
@@ -458,7 +461,7 @@ mesh = SubResource("BoxMesh_rgyyu")
 [node name="Shape" type="CollisionShape3D" parent="ShelterWallSouth" unique_id=844361543]
 shape = SubResource("BoxShape3D_0jahv")
 
-[node name="ShelterRoof" type="StaticBody3D" parent="." unique_id=1262161473]
+[node name="ShelterRoof" type="StaticBody3D" parent="." unique_id=1262161473 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 1.8, 27.3)
 collision_mask = 0
 
@@ -469,7 +472,7 @@ mesh = SubResource("BoxMesh_sixp6")
 [node name="Shape" type="CollisionShape3D" parent="ShelterRoof" unique_id=1973157120]
 shape = SubResource("BoxShape3D_f37q0")
 
-[node name="CourtyardDebris1" type="StaticBody3D" parent="." unique_id=113050394]
+[node name="CourtyardDebris1" type="StaticBody3D" parent="." unique_id=113050394 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0.25, 27.6)
 collision_mask = 0
 
@@ -480,7 +483,7 @@ mesh = SubResource("BoxMesh_fdvk4")
 [node name="Shape" type="CollisionShape3D" parent="CourtyardDebris1" unique_id=257791358]
 shape = SubResource("BoxShape3D_i8mfj")
 
-[node name="CourtyardDebris2" type="StaticBody3D" parent="." unique_id=910745506]
+[node name="CourtyardDebris2" type="StaticBody3D" parent="." unique_id=910745506 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.4, 0.25, 26.6)
 collision_mask = 0
 
@@ -491,7 +494,7 @@ mesh = SubResource("BoxMesh_l78cf")
 [node name="Shape" type="CollisionShape3D" parent="CourtyardDebris2" unique_id=751252549]
 shape = SubResource("BoxShape3D_p2b7t")
 
-[node name="CourtyardDebris3" type="StaticBody3D" parent="." unique_id=702469835]
+[node name="CourtyardDebris3" type="StaticBody3D" parent="." unique_id=702469835 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.4, 0.25, 25.4)
 collision_mask = 0
 
@@ -570,7 +573,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0.55, -22)
 material_override = SubResource("StandardMaterial3D_ajoow")
 mesh = SubResource("BoxMesh_as4xb")
 
-[node name="GrassMoundA" type="StaticBody3D" parent="." unique_id=310632814]
+[node name="GrassMoundA" type="StaticBody3D" parent="." unique_id=310632814 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0.35, -12)
 collision_mask = 0
 
@@ -581,7 +584,7 @@ mesh = SubResource("BoxMesh_coj4m")
 [node name="Shape" type="CollisionShape3D" parent="GrassMoundA" unique_id=1205298927]
 shape = SubResource("BoxShape3D_se0jr")
 
-[node name="GrassMoundB" type="StaticBody3D" parent="." unique_id=1270321517]
+[node name="GrassMoundB" type="StaticBody3D" parent="." unique_id=1270321517 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0.35, -8)
 collision_mask = 0
 
@@ -592,7 +595,7 @@ mesh = SubResource("BoxMesh_e8qe7")
 [node name="Shape" type="CollisionShape3D" parent="GrassMoundB" unique_id=1746560679]
 shape = SubResource("BoxShape3D_jpemt")
 
-[node name="RootBarrierWest" type="StaticBody3D" parent="." unique_id=1832856316]
+[node name="RootBarrierWest" type="StaticBody3D" parent="." unique_id=1832856316 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.19, 0.35, 19)
 collision_mask = 0
 
@@ -603,7 +606,7 @@ mesh = SubResource("BoxMesh_2wl04")
 [node name="Shape" type="CollisionShape3D" parent="RootBarrierWest" unique_id=526273865]
 shape = SubResource("BoxShape3D_p8hs8")
 
-[node name="RootBarrierEast" type="StaticBody3D" parent="." unique_id=1112262206]
+[node name="RootBarrierEast" type="StaticBody3D" parent="." unique_id=1112262206 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 31.31, 0.35, 19)
 collision_mask = 0
 
@@ -614,7 +617,7 @@ mesh = SubResource("BoxMesh_jcmui")
 [node name="Shape" type="CollisionShape3D" parent="RootBarrierEast" unique_id=161383467]
 shape = SubResource("BoxShape3D_uyw4h")
 
-[node name="RootBarrierLintel" type="StaticBody3D" parent="." unique_id=236108156]
+[node name="RootBarrierLintel" type="StaticBody3D" parent="." unique_id=236108156 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 26.5, 0.5, 19)
 collision_mask = 0
 
@@ -631,7 +634,7 @@ material_override = SubResource("StandardMaterial3D_1ap0h")
 mesh = SubResource("BoxMesh_toxak")
 metadata/water_depth = 0.03
 
-[node name="CreekBankWallA" type="StaticBody3D" parent="." unique_id=571727878]
+[node name="CreekBankWallA" type="StaticBody3D" parent="." unique_id=571727878 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -32, 0.6, 10)
 collision_mask = 0
 
@@ -642,7 +645,7 @@ mesh = SubResource("BoxMesh_45x3b")
 [node name="Shape" type="CollisionShape3D" parent="CreekBankWallA" unique_id=168010034]
 shape = SubResource("BoxShape3D_j3o34")
 
-[node name="CreekBankWallB" type="StaticBody3D" parent="." unique_id=146841159]
+[node name="CreekBankWallB" type="StaticBody3D" parent="." unique_id=146841159 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -31.46, 0.6, 10)
 collision_mask = 0
 
@@ -653,7 +656,7 @@ mesh = SubResource("BoxMesh_f8833")
 [node name="Shape" type="CollisionShape3D" parent="CreekBankWallB" unique_id=1817203798]
 shape = SubResource("BoxShape3D_nacun")
 
-[node name="CreekBoulder" type="StaticBody3D" parent="." unique_id=159425438]
+[node name="CreekBoulder" type="StaticBody3D" parent="." unique_id=159425438 groups=["nav_source_courtyard"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 0.7, 8)
 collision_mask = 0
 
@@ -703,3 +706,18 @@ shadow_enabled = true
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=253112282]
 environment = SubResource("Environment_jgl22")
+
+[node name="NavRegion_Mouse" type="NavigationRegion3D" parent="." unique_id=1408438954]
+navigation_mesh = ExtResource("1_ux1g4")
+metadata/agent_radius = 0.06999999999999999
+metadata/agent_height = 0.2
+metadata/agent_max_climb = 0.03
+metadata/species_id = &"Mouse"
+
+[node name="NavRegion_Cat" type="NavigationRegion3D" parent="." unique_id=665401425]
+navigation_mesh = ExtResource("2_vy0cc")
+navigation_layers = 2
+metadata/agent_radius = 0.17
+metadata/agent_height = 0.5
+metadata/agent_max_climb = 0.12
+metadata/species_id = &"Cat"

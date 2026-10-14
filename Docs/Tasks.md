@@ -37,7 +37,8 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T009 | **done（2026-10-13）** | `Docs/Evidence/T009.md`；`Docs/Tasks/T009.md`；`tests/run_t009_cat_movement.gd`；`scenes/maps/l_move_fixtures.tscn`（+`tests/tool_make_move_fixtures.gd`）；`Art/Probes/t009_*.png` | 猫移动：行走/奔跑/潜伏/跳跃 + 相机；斜坡/低顶/落地/相机穿墙全过；**81/81** ×3 + 包内 81/81；lab 玩家已换成正式猫（T002/T005/T006/T007/T008 回归全绿）；过程中修掉 `step_climb` 两处真实判据缺陷 |
 | T010 | **done（2026-10-13）** | `Docs/Evidence/T010.md`；`Docs/Tasks/T010.md`；`tests/run_t010_mouse_movement.gd`；`scenes/maps/l_move_fixtures.tscn`（新增鼠洞 + 鼠低顶）；`Art/Probes/t010_*.png` | 鼠移动与通道尺度：**站立**过 24×30 cm 洞、猫（站/蹲）都过不去、禁高跳（`can_jump=false`）、0.15 m 低顶下不扩碰撞；**95/95** ×3 + 包内 95/95；**gameplay 代码零改动**（差异全在 `mouse.tres`） |
 | T011 | **done（2026-10-13）** | `Docs/Evidence/T011.md`；`Docs/Tasks/T011.md`；`tests/tool_make_courtyard.gd` + `scenes/maps/l_courtyard.tscn`；`tests/run_t011_greybox.gd`；`Art/Probes/t011_*.png` | 生态灰盒：四区域铺满 72×56 可玩矩形、§8.2 五条结构全部落地；**210/210** ×3 + 包内 210/210；**gameplay 代码零改动**；猫跳越 0.50 屏障、鼠穿 0.24×0.30 洞、四条补给走廊 0 阻挡 |
-| T012～T063 | pending | 无 | **T012（导航可行性试验）前置已满足**：`l_courtyard.tscn` 几何已验收（洞/屏障/溪缝/走廊）；先写 `Docs/Tasks/T012.md` |
+| T012 | **done（2026-10-13）** | `Docs/Evidence/T012.md`；`Docs/Tasks/T012.md`；`tests/tool_make_courtyard_nav.gd` + `resources/nav/l_courtyard_{mouse,cat}.tres`；`tests/run_t012_navigation.gd` | 导航可行性：**分物种双图 + 分层**（鼠 layer1 r=0.07 / 猫 layer2 r=0.17，cell 0.03）；鼠层穿 0.24 洞 9.00 m、穿溪缝 12.00 m；猫层同一对端点 35.44 m 且**不穿洞**、洞里无导航面；真实胶囊行走（鼠进洞 236 帧 0 重叠、猫 900 帧 0 帧进入洞口走廊）；**79/79** ×3 + 包内 79/79；**视觉证据 NOT-RUN**（运行时导航调试不可见） |
+| T013～T063 | pending | 无 | **T013（调试入口与移动回归）**：切两种玩家、显示碰撞与路径、记录移动参数；带上遗留项（单级台阶前移 0.2 m、猫跨屏障需跳跃链接） |
 
 ### T001 判定明细（Godot 版）
 
@@ -68,17 +69,15 @@ E01 的视觉部分**已补验通过**；**E02 本次通过**（`Docs/Evidence/T
 
 ## 选择顺序
 
-T001 / T002 / T003 / T005 / T006 / T007 / T008 / T009 / T010 / **T011 均已完成**；台阶能力已组件化并修掉两处判据缺陷。
-**P0 阶段门完成**；**P1 进行中**（T008/T009/T010/T011 完成 → 下一步 **T012 导航可行性试验**）。
+T001 / T002 / T003 / T005 / T006 / T007 / T008 / T009 / T010 / T011 / **T012 均已完成**；台阶与导航能力已落地，游戏代码仍零改动（差异在配置/关卡/导航数据）。
+**P0 阶段门完成**；**P1 进行中**（T008/T009/T010/T011/T012 完成 → 下一步 **T013 调试入口与移动回归**）。
 
 下一步可执行（按建议优先级）：
 
-1. **T012（导航可行性试验）**：猫/鼠尺寸对应的导航代理配置；NPC 可走其合法路线、**猫不能进入鼠洞**
-   （前置 T011 已满足）。在 `scenes/maps/l_courtyard.tscn` 上建 `NavigationMesh` —— 几何已验收：
-   0.24 × 0.30 树根洞、0.50 屏障顶（猫跳越）、0.24 溪缝、四条补给走廊 0 阻挡。
-2. **T013（调试入口与移动回归）**：测试切换两种玩家、显示碰撞与路径；记录移动参数与问题视频；
-   带上遗留项：**单级台阶抬升会水平前移 0.2 m**（`Docs/Evidence/T009.md` §5.3）。
-3. ~~T005 / T006 / T007 / T008 / T009 / T010 / T011~~ **已完成**。
+1. **T013（调试入口与移动回归）**：测试切换两种玩家、显示碰撞与路径；记录移动参数与问题视频；
+   带上遗留项：**单级台阶抬升会水平前移 0.2 m**（`Docs/Evidence/T009.md` §5.3）与
+   **猫跨 0.50 屏障在导航层不可达**（`Docs/Evidence/T012.md` §9，是否加 `NavigationLink3D` 待负责人定）。
+2. ~~T008 / T009 / T010 / T011 / T012~~ **已完成**；正式角色/骨骼资产仍属 **P6** 阶段门，不得提前。
 
 **做角色资产时必须遵守 T005/T006 实测的两条约定**：
 ① 在 Blender 里**面朝 `+Y`**（导入 Godot 后才朝 `-Z` 前方）；

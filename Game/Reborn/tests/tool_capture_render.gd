@@ -98,6 +98,10 @@ func _initialize() -> void:
 	if OS.get_cmdline_user_args().has("t011"):
 		await _capture_t011_frames(lab)
 
+	# T012：导航面调试视图（按层分别只看一个 region）。只在显式传 `-- t012` 时执行。
+	if OS.get_cmdline_user_args().has("t012"):
+		await _capture_t012_frames(lab)
+
 	print("CAP|done")
 	quit(0)
 
@@ -432,6 +436,49 @@ func _capture_view(tag: String, cam: Camera3D) -> void:
 	print("CAP|%s|save_result=%d (%s)|path=%s|global=%s" % [
 		prefix, err, "OK" if err == OK else "FAIL", path, ProjectSettings.globalize_path(path)
 	])
+
+
+## T012：导航面调试视图（按层分别只开一个 region，便于对比"鼠图有洞、猫图没洞"）。
+## 只在显式传 `-- t012` 时执行。注意：**导航调试是否真的画出来必须靠客观像素对比确认**。
+const T012_LEVEL := "res://scenes/maps/l_courtyard.tscn"
+const T012_AREAS := [
+	{"tag": "t012_tree_hole", "pos": Vector3(26.5, 11.0, 31.0), "look": Vector3(26.5, 0.0, 19.0), "fov": 50.0},
+	{"tag": "t012_creek_gap", "pos": Vector3(-31.73, 13.0, 23.0), "look": Vector3(-31.73, 0.0, 10.0), "fov": 50.0},
+]
+
+
+func _capture_t012_frames(lab: Node) -> void:
+	print("CAP|t012|start")
+	var packed: PackedScene = load(T012_LEVEL)
+	if packed == null:
+		print("CAP|t012|ERROR|level load failed")
+		return
+	var world: Node3D = packed.instantiate() as Node3D
+	root.add_child(world)
+	var rn := world.get_node_or_null("NavRegion_Mouse") as NavigationRegion3D
+	var rc := world.get_node_or_null("NavRegion_Cat") as NavigationRegion3D
+	print("CAP|t012|regions|mouse=%s|cat=%s" % [str(rn != null), str(rc != null)])
+	NavigationServer3D.set_debug_enabled(true)
+	print("CAP|t012|nav_debug_enabled=%s" % str(NavigationServer3D.get_debug_enabled()))
+	var cam := Camera3D.new()
+	cam.name = "T012Camera"
+	cam.near = 0.05
+	cam.far = 400.0
+	world.add_child(cam)
+	for area in T012_AREAS:
+		for which in ["mouse", "cat"]:
+			if rn != null:
+				rn.enabled = which == "mouse"
+			if rc != null:
+				rc.enabled = which == "cat"
+			for i in 3:
+				await physics_frame
+			cam.fov = float(area["fov"])
+			cam.global_position = area["pos"]
+			cam.look_at(area["look"], Vector3.UP)
+			cam.current = true
+			print("CAP|t012|view=%s_%s|enabled_region=%s" % [area["tag"], which, which])
+			await _capture_view("%s_%s" % [area["tag"], which], cam)
 
 ## 拍一张并存 PNG + 打印客观像素统计（T009/T010 共用：只看 tag 与相机，与物种无关）
 ## 输出前缀从 tag 推导（`t009_*` → `CAP|t009|`，`t010_*` → `CAP|t010|`），保证 T009 的日志格式不变。
