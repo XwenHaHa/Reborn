@@ -90,6 +90,9 @@ func _initialize() -> void:
 	# T009：猫移动三帧（坡道 / 低顶蹲姿 / 跳上 50 cm 高台）。只在显式传 `-- t009` 时执行。
 	if OS.get_cmdline_user_args().has("t009"):
 		await _capture_t009_frames(lab)
+	# T010：鼠的两个尺度场景（洞里 / 15 cm 低顶下）。只在显式传 `-- t010` 时执行。
+	if OS.get_cmdline_user_args().has("t010"):
+		await _capture_t010_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -220,6 +223,7 @@ func _capture_t006_frames(lab: Node) -> void:
 const T009_FIXTURES := "res://scenes/maps/l_move_fixtures.tscn"
 const T009_BODY := "res://scenes/characters/animal_body.tscn"
 const T009_CAT := "res://resources/species/cat.tres"
+const T009_MOUSE := "res://resources/species/mouse.tres"
 
 func _capture_t009_frames(lab: Node) -> void:
 	print("CAP|t009|start")
@@ -244,21 +248,65 @@ func _capture_t009_frames(lab: Node) -> void:
 	cam.current = true
 
 	# 帧 1：走上 25° 坡道
-	await _t009_case(world, cam, "t009_ramp", Vector3(0.0, 0.36, 3.0),
+	await _capture_case(world, cam, "t009_ramp", load(T009_CAT), Vector3(0.0, 0.36, 3.0),
 		{"forward_frames": 150, "crouch": false}, Vector3(2.6, 1.5, 2.4))
 	# 帧 2：蹲姿钻低顶（板底 0.52），并尝试站起来（被挡住）
 	# 相机必须**低于板底**并贴近地面平视，否则俯视时板子会把蹲着的猫整个遮住（实测踩到过）
-	await _t009_case(world, cam, "t009_low_ceiling", Vector3(-6.0, 0.36, 3.0),
+	await _capture_case(world, cam, "t009_low_ceiling", load(T009_CAT), Vector3(-6.0, 0.36, 3.0),
 		{"forward_frames": 200, "crouch": true, "then_release_crouch": 60}, Vector3(0.0, 0.16, 1.7))
 	# 帧 3：助跑跳上 50 cm 高台
-	await _t009_case(world, cam, "t009_platform", Vector3(6.5, 0.36, -1.5),
+	await _capture_case(world, cam, "t009_platform", load(T009_CAT), Vector3(6.5, 0.36, -1.5),
 		{"jump_at_distance": 0.78, "forward_frames": 240}, Vector3(2.4, 1.3, 2.4))
 
 
-## 一个 T009 捕获场景：在新世界里放猫、按 script 驱动、再放第三人称相机拍一张
-func _t009_case(world: Node3D, cam: Camera3D, tag: String, spawn: Vector3, script: Dictionary, cam_off: Vector3) -> void:
+## ---------------------------------------------------------------------------
+## T010：鼠的两个尺度场景（24×30 cm 洞里 / 15 cm 低顶下）
+##
+## 取景要点（都踩过）：
+##   * 洞里：相机在洞的 +z 侧、略高，视线穿过 24 cm 宽的开口看到鼠——正好也是"洞真的只有这么宽"的证据；
+##   * 鼠低顶下：相机**必须低于板底（0.25）**并沿鼠的车道平视，否则板子把鼠整个遮住（与 T009 同一坑）。
+## ---------------------------------------------------------------------------
+
+func _capture_t010_frames(lab: Node) -> void:
+	print("CAP|t010|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+
+	var packed: PackedScene = load(T009_FIXTURES)
+	if packed == null:
+		print("CAP|t010|ERROR|fixtures load failed")
+		return
+	var world: Node3D = packed.instantiate() as Node3D
+	root.add_child(world)
+	await process_frame
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+	var cam := Camera3D.new()
+	cam.name = "T010Camera"
+	cam.fov = 45.0
+	cam.near = 0.02
+	world.add_child(cam)
+	cam.current = true
+
+	var mouse: SpeciesConfig = load(T009_MOUSE) as SpeciesConfig
+	# 帧 1：鼠**站立**停在 24×30 cm 洞里（洞中心 z=−2.0）
+	# 相机必须**在鼠的车道上**（x 偏移 0）才不会让洞的侧壁挡住视线——第一版用了 x 偏移 1.6，
+	# 视线在洞面处 x=2.78 落在洞口（2.38..2.62）之外，鼠被侧壁完全遮住（视觉判读两次都说"洞里是空的"）。
+	await _capture_case(world, cam, "t010_tunnel", mouse, Vector3(2.5, 0.21, 2.1),
+		{"forward_frames": 400, "crouch": false, "stop_z": -2.0}, Vector3(0.0, 0.20, 0.55))
+	# 帧 2：鼠蹲在 0.15 m 净空低顶下（板底 0.25）
+	await _capture_case(world, cam, "t010_mouse_low", mouse, Vector3(-3.5, 0.21, 4.0),
+		{"forward_frames": 300, "crouch": true, "stop_z": 1.8}, Vector3(0.0, 0.06, 1.6))
+
+
+## 一个捕获场景：放一个身体（cfg）、按 script 驱动、再拍第三人称 + 第一人称两张。
+## script 支持：`crouch` / `forward_frames` / `jump_at_distance` / `then_release_crouch` /
+## `stop_z`（向 −z 走到该 z 就停下，用于"停在洞/低顶里"这种取景）。
+func _capture_case(world: Node3D, cam: Camera3D, tag: String, cfg: SpeciesConfig, spawn: Vector3,
+		script: Dictionary, cam_off: Vector3) -> void:
 	var body: AnimalBody = (load(T009_BODY) as PackedScene).instantiate() as AnimalBody
-	body.species_config = load(T009_CAT) as SpeciesConfig
+	body.species_config = cfg
 	body.player_controlled = false
 	world.add_child(body)
 	body.global_position = spawn
@@ -273,6 +321,7 @@ func _t009_case(world: Node3D, cam: Camera3D, tag: String, spawn: Vector3, scrip
 	body.want_crouch = bool(script.get("crouch", false))
 	var jump_dist: float = float(script.get("jump_at_distance", -1.0))
 	var frames: int = int(script.get("forward_frames", 150))
+	var stop_z: float = float(script.get("stop_z", -1e9))   # 默认不停（走满 frames）
 	var jumped := false
 	for i in frames:
 		if jump_dist >= 0.0 and not jumped and body.is_on_floor():
@@ -282,6 +331,10 @@ func _t009_case(world: Node3D, cam: Camera3D, tag: String, spawn: Vector3, scrip
 				body.want_jump = true
 		# 上到台顶就停下，别再往前走（否则会从台子另一侧走下去、掉出地面——实测踩到过）
 		if jumped and body.is_on_floor() and body.global_position.y > spawn.y + 0.3:
+			body.move_intent = Vector2.ZERO
+			break
+		# 走到指定 z 就停下（取景"停在洞里/低顶下"用）
+		if body.global_position.z <= stop_z:
 			body.move_intent = Vector2.ZERO
 			break
 		await physics_frame
@@ -298,20 +351,22 @@ func _t009_case(world: Node3D, cam: Camera3D, tag: String, spawn: Vector3, scrip
 	cam.global_position = body.global_position + cam_off
 	cam.look_at(body.global_position + Vector3(0.0, 0.05, 0.0), Vector3.UP)
 	cam.current = true
-	await _t009_shot("%s_tp" % tag, body, cam)
+	await _capture_shot("%s_tp" % tag, body, cam)
 	# 第一人称（玩家真正的视角：眼高与视野是否正常）
 	cam.current = false
 	body.camera.current = true
 	body.camera.rotation = Vector3.ZERO
-	await _t009_shot("%s_fp" % tag, body, body.camera)
+	await _capture_shot("%s_fp" % tag, body, body.camera)
 	body.camera.current = false
 
 	body.queue_free()
 	await process_frame
 
 
-## 拍一张并存 PNG + 打印客观像素统计
-func _t009_shot(tag: String, body: AnimalBody, cam: Camera3D) -> void:
+## 拍一张并存 PNG + 打印客观像素统计（T009/T010 共用：只看 tag 与相机，与物种无关）
+## 输出前缀从 tag 推导（`t009_*` → `CAP|t009|`，`t010_*` → `CAP|t010|`），保证 T009 的日志格式不变。
+func _capture_shot(tag: String, body: AnimalBody, cam: Camera3D) -> void:
+	var prefix: String = String(tag).split("_")[0]
 	for i in SETTLE_FRAMES:
 		await process_frame
 	# 必须等"真正画完一帧"再读：只 await process_frame 时，读到的是**上一帧**（换机位后会拿到上一机位的画面，
@@ -321,22 +376,22 @@ func _t009_shot(tag: String, body: AnimalBody, cam: Camera3D) -> void:
 	var vp := root.get_viewport()
 	var tex := vp.get_texture()
 	if tex == null:
-		print("CAP|t009|ERROR|no viewport texture")
+		print("CAP|%s|ERROR|no viewport texture" % prefix)
 		return
 	var img := tex.get_image()
 	if img == null:
-		print("CAP|t009|ERROR|no image")
+		print("CAP|%s|ERROR|no image" % prefix)
 		return
-	print("CAP|t009|%s|cat_pos=%s|crouch=%s|capsule_h=%.3f|cam_pos=%s|active=%s" % [
-		tag, body.global_position, str(body.is_crouching),
+	print("CAP|%s|%s|body_pos=%s|crouch=%s|capsule_h=%.3f|cam_pos=%s|active=%s" % [
+		prefix, tag, body.global_position, str(body.is_crouching),
 		(body.shape_node.shape as CapsuleShape3D).height, cam.global_position,
 		vp.get_camera_3d().name if vp.get_camera_3d() != null else "<none>"
 	])
 	_pixel_stats(img)
 	var path := "user://%s.png" % tag
 	var err := img.save_png(path)
-	print("CAP|t009|save_result=%d (%s)|path=%s|global=%s" % [
-		err, "OK" if err == OK else "FAIL", path, ProjectSettings.globalize_path(path)
+	print("CAP|%s|save_result=%d (%s)|path=%s|global=%s" % [
+		prefix, err, "OK" if err == OK else "FAIL", path, ProjectSettings.globalize_path(path)
 	])
 
 

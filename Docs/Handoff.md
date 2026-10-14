@@ -1,10 +1,10 @@
-# 开发交接：2026-10-13（T009 完成 —— **P1 进行中**）
+# 开发交接：2026-10-13（T010 完成 —— **P1 进行中**）
 
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
 
-**T001 / T002 / T003 / T004（路线决策）/ T005 / T006 / T007 / T008 / T009 全部完成**；台阶能力已组件化；技术层文档为 Godot 版。
+**T001 / T002 / T003 / T004（路线决策）/ T005 / T006 / T007 / T008 / T009 / T010 全部完成**；台阶能力已组件化；技术层文档为 Godot 版。
 
 | 任务 | 状态 | 关键证据 |
 |---|---|---|
@@ -17,12 +17,13 @@
 | T007 | **done**（真实按键 awaiting-review） | 导出/运行/退出/重启/视觉均通过；包内断言 18/18 + 22/22 |
 | T008 | **done（2026-10-13）** | 台阶组件化 + `SpeciesConfig`/`AnimalBody`；**配置驱动的物理台阶实测**；**114/114** ×2、包内 103/103 |
 | T009 | **done（2026-10-13）** | 猫移动（走/跑/蹲/跳 + 第一人称相机）；斜坡・低顶・落地・相机穿墙全过；**81/81** ×3 + 包内 81/81；lab 玩家换成正式猫，T002/T005/T006/T007/T008 回归全绿；过程中修掉 `step_climb` 两处判据缺陷 |
+| T010 | **done（2026-10-13）** | 鼠移动与通道尺度：**站立**过 24×30 cm 洞（胶囊 0.18 不变、0 空中帧）、**猫站立与蹲姿都过不去**、禁高跳、0.15 m 低顶下不扩碰撞；**95/95** ×3 + 包内 95/95；**gameplay 代码零改动**（差异全在 `mouse.tres`）→ 说明 T009 的抽象没漏东西 |
 | 台阶能力 | **done（已组件化）** | 探针 6/6；组件 `scripts/characters/step_climb.gd`；T009 期间修正"落点高度"与"斜坡误判为台阶"两处判据（`Docs/Evidence/T009.md` §5） |
 
-**未完成**：游戏玩法实现（T010 起）、正式角色与骨骼资产（P6）、真实按键输入验证。**T010～T063 全部 pending。**
+**未完成**：游戏玩法实现（T011 起：生态灰盒 / 导航 / 捕猎 / 双物种策略 / 轮回 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证。**T011～T063 全部 pending。**
 
 **P0 阶段门完成**：E01 部分通过（视觉已补验）、打包通过（T007）、**E02 通过**（T005）、**E03 通过**（T006）。
-**P1 进行中：T008 + T009 通过**（配置与身体、猫移动与相机）→ 下一步 **T010 鼠移动与通道尺度**。
+**P1 进行中：T008 + T009 + T010 通过**（配置与身体、猫移动与相机、鼠移动与通道尺度）→ 下一步 **T011 搭建生态灰盒**。
 
 > ## ⚠ 本次最重要的教训
 >
@@ -40,7 +41,7 @@ Game/Reborn/                       正式 Godot 工程（纯文本，agent 可�
 ├── scenes/core/main.tscn          主入口
 ├── scenes/maps/l_movement_lab.tscn  10×10m 地面、PlayerStart、**Player（= 猫 AnimalBody 实例，T009 换的）**、
 │                                    100cm 标尺、**ProbeAsset（T005 资产：1 m 立方体 + BoxShape3D 碰撞）**
-├── scenes/maps/l_move_fixtures.tscn  **T009 移动试验世界（25° 坡道 / 42 cm 低顶 / 墙角 / 50 cm 高台）**
+├── scenes/maps/l_move_fixtures.tscn  **移动试验世界（25° 坡道 / 猫低顶 42 cm / 墙角 / 50 cm 高台 / T010 加：鼠洞 24×30 cm、鼠低顶 15 cm）**
 ├── scripts/characters/step_climb.gd      **台阶抬升组件（自实现 MaxStepHeight；T009 修正两处判据）**
 ├── scripts/characters/animal_body.gd     **身体与移动控制器：成型/走跑蹲跳/相机（配置驱动，无物种名分支）**
 ├── scripts/data/species_config.gd        **物种配置类（字段按 TechnicalDesign §3）**
@@ -53,6 +54,7 @@ Game/Reborn/                       正式 Godot 工程（纯文本，agent 可�
     ├── run_t006_rig.gd            骨骼往返断言（65 条）
     ├── run_t008_species.gd        **物种配置/身体/台阶能力断言（114 条）**
     ├── run_t009_cat_movement.gd   **T009 猫移动与相机断言（81 条：速度/潜伏/斜坡/墙角/跳跃）**
+    ├── run_t010_mouse_movement.gd  **T010 鼠移动与通道尺度断言（95 条：三档速度/窄缝/低顶/禁高跳）**
     ├── run_t007_input.gd          输入链路断言（22 条；现在跑在正式猫控制器上）
     ├── probe_step_height.gd       台阶能力探针（6 条判定；**现调用 StepClimb 组件**）
     ├── debug_stepup.gd            台阶逐条件诊断工具
@@ -61,7 +63,7 @@ Game/Reborn/                       正式 Godot 工程（纯文本，agent 可�
     ├── tool_make_move_fixtures.gd **T009 生成移动试验世界（幂等 + 重载核对几何）**
     ├── tool_set_lab_player.gd     **T009 把 lab 的灰盒玩家换成正式猫（幂等 + 无意外变更自检）**
     ├── tool_dump_scene_tree.gd    dump 任意 PackedScene 真实结构（含骨骼/动画/蒙皮）
-    └── tool_capture_render.gd     引擎侧渲染捕获 + 像素统计（不能 headless；`-- t005` / `-- t006` / `-- t009`）
+    └── tool_capture_render.gd     引擎侧渲染捕获 + 像素统计（不能 headless；`-- t005` / `-- t006` / `-- t009` / `-- t010`）
 
 Art/Blender/Tests/StaticProbe_v001.blend   T005 可编辑源（LFS；**逐字节不可复现**）
 Art/Exports/Tests/SM_ProbeCube.glb         T005 导出产物（LFS，sha256 629750364847…，**可复现**）
@@ -71,7 +73,7 @@ Tools/Blender/t005_static_probe.py / t006_rig_probe.py   Blender 无头脚本（
 Art/Probes/t005_lab_probe_render.png       正交对照帧（T005 视觉证据，LFS）
 Art/Probes/t006_rig_t000.png / t050.png    骨骼两帧位姿（T006 视觉证据，LFS）
 
-Builds/P0-Win64/                   导出产物（.gitignore 已排除；**T005 后已重导出**）
+Builds/P0-Win64/                   导出产物（.gitignore 已排除；**T010 后已重新导出并复验，SelfTest.pck 205,232 B**）
 ├── Reborn.exe / Reborn.pck / Reborn.console.exe
 └── RebornSelfTest.exe / .pck / .console.exe
 ```
@@ -138,34 +140,38 @@ $proj = 'E:\Reborn\Game\Reborn'
   `STATIC|NOT-APPLICABLE`（不假装通过、也不误判为失败）。
 - **实例子节点的属性覆盖不会被 `PackedScene.pack()` 序列化**（T009 实测）：改子节点 `Camera3D.current`
   存盘文件里**没有这行**，重载回来相机不 current（视觉捕获会黑屏）；要在场景里表达，就用**节点自己的导出属性**。
+- **新关卡尺度常量（T010）**：鼠洞 **0.24 × 0.30 m**、鼠低顶净空 **0.15 m**（属**试验世界设计**，不是物种参数；
+  记在 `Docs/Parameters.md`）。改 `tool_make_move_fixtures.gd` 的常量时 T010 的尺度断言会一起失败。
+  **`0.15 m` 待负责人确认为关卡设计基线。**
+- **视觉判读的取景前提（T010 实测）**：相机要**正对**主体所在通道，否则洞口侧壁会把主体完全遮住、
+  模型只会答"洞里是空的"（详见 `Docs/Commands.md` §8 与 `Docs/Evidence/T010.md` §5.1）。
 
 ## 下一步（按建议优先级）
 
-1. **T010 老鼠移动与通道尺度**（P1）：`can_jump=false` 禁高跳、窄缝（M01：能过 24×30 cm 洞）、
-   低顶下不得卡入障碍。复用 `AnimalBody` + `mouse.tres` + `l_move_fixtures.tscn`（可按 `tool_make_move_fixtures.gd` 加鼠洞）。
-   **先写 `Docs/Tasks/T010.md`**。
-2. **T011～T013**：生态灰盒、导航可行性、调试入口与移动回归；
+1. **T011 搭建生态灰盒**（P1，4～8h，前置 T009/T010）：四个简化区域、高台、鼠洞、风险近路、
+   安全绕路与补给位置。**先写 `Docs/Tasks/T011.md`**；几何沿用 `tool_make_move_fixtures.gd`（分道 + 幂等 + 重载核对几何）。
+2. **T012 / T013**：导航可行性（猫/鼠的导航代理尺寸、猫不能进鼠洞）与调试入口 + 移动回归；
    T013 请把 T009 的遗留项带上：**单级台阶抬升会水平前移 0.2 m**（`Docs/Evidence/T009.md` §5.3）。
-3. ~~T008 / T009~~ **已完成**；正式角色/骨骼资产仍属 **P6** 阶段门，不得提前。
+3. ~~T008 / T009 / T010~~ **已完成**；正式角色/骨骼资产仍属 **P6** 阶段门，不得提前。
 
 ## 待负责人处理
 
 | 事项 | 说明 |
 |---|---|
-| **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T005~T009 已分 4 个提交，`562fba4`/`0a7442b`/`bcc65be`/`44eb062`）；当前 `main` 比 `origin/main` **ahead 4，未推送** |
+| **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T005~T009 分 4 个提交：`562fba4`/`0a7442b`/`bcc65be`/`44eb062`，另有提交策略提交 `965120a`）；T010 单独提交一次；当前 `main` 比 `origin/main` **ahead 6，未推送** |
 | **Git 推送 / 发布** | 仍需确认。推送要经本机代理 `127.0.0.1:7897`（`Docs/Commands.md` §4.1），推送前先确认远端无他人提交 |
-| 是否发布新构建 | `Builds/P0-Win64/` 已按 T009 改动**重新导出**（SelfTest.pck 176,436 B）；是否对外发布请确认 |
+| 是否发布新构建 | `Builds/P0-Win64/` 已按 T010 改动**重新导出并再复验**（SelfTest.pck **205,232 B**；包内 T008 103/103、T009 81/81、T010 95/95）；是否对外发布请确认 |
 | 真实按键输入验证方式 | 需受审查的输入自动化工具（**需授权**），或真人操作录像。**不要盲发按键** |
 | 相机轴语义 D1 / 蹲姿高度 D2 | 见上方"关键事实"：D1 已按竖直偏移实现并断言锁定；D2 需并入 `Parameters.md` 正式起测值 |
 | 50 cm 高台的跳跃余量 | 净空 0.5502 m vs 台高 0.50 m（端到端实跳已通过，窗口窄）；是否提高 `JumpZVelocity` 由负责人定 |
 | 确认脚本语言 | 默认 GDScript（无需额外工具链）。改 C# 需追加 .NET 配置 |
 | Godot 渲染器 | **Forward+ 已确认可渲染**（T009 捕获工具实测 `renderer=forward_plus`、1280×720 出图正常）；**帧率未测** |
 
-## 本次边界声明（T009）
+## 本次边界声明（T010）
 
-- **未安装/卸载任何软件**；未连接 MCP；未改 git 全局配置；**未删除源资产**（只删了 T002 时期自己写的临时控制器 `player_greybox.gd`）。
-- **已按任务提交 Git**（T005~T009 → `562fba4` / `0a7442b` / `bcc65be` / `44eb062`）；**未推送**（推送需另行授权）。
-- 覆盖了 `Builds/P0-Win64/`（本地构建产物，已 gitignore）。
+- **未安装/卸载任何软件**；未连接 MCP；未改 git 全局配置；**未删除任何源资产**。
+- **已按任务提交 Git**（T005~T009 → `562fba4` / `0a7442b` / `bcc65be` / `44eb062`，外加提交策略 `965120a`）；
+  T010 的成果按"每任务一次"的规矩**单独提交一次**（哈希由下一次交接回填）；**未推送**（推送需另行授权）。
 - 运行过的受限程序：Godot **非 headless** 渲染捕获（创建窗口并短暂捕获鼠标，工具立即放开）。
 - **未做真实按键注入**（禁止盲发按键）；输入验证仍是合成输入。
 - 临时诊断脚本全部写在 `$env:PI_SCRATCH_DIR`，**没有落入工程**。
@@ -173,14 +179,14 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 ## 可直接发给下一个 agent
 
-> 请在 E:/Reborn 工作。先读 AGENTS.md、Docs/Handoff.md、Docs/Environment.md、Docs/Evidence/T009.md、Docs/Evidence/T008.md、Docs/Tasks.md、Docs/BlenderPipeline.md。
+> 请在 E:/Reborn 工作。先读 AGENTS.md、Docs/Handoff.md、Docs/Environment.md、Docs/Evidence/T010.md、Docs/Evidence/T009.md、Docs/Evidence/T008.md、Docs/Tasks.md、Docs/BlenderPipeline.md。
 > **引擎是 Godot 4.7.2 / GDScript**，不是 UE5（UE5 路线已废止）。工程在 `Game/Reborn/`，纯文本可直接编辑。
 > 工具：`E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe`（**外层同名项是目录不是文件**）；
 > Blender：`D:\SoftWare\Blender\blender.exe`（3.3.1，`--background --factory-startup --python <脚本>`）。
 > 改完脚本**先跑 `--check-only`**，再跑 `--headless ... --quit-after N`（**不加 `--quit-after` 会挂死**）；
 > **新增/修改 `class_name` 脚本后先跑一次 `--import`**（否则引用方报 "Identifier not declared"）。
 > Godot 用**米**，Parameters.md 是**厘米**，需 ÷100。`CapsuleShape3D.height` 是含半球的总高。
-> **验收脚本模板**：`run_t002.gd`(18)、`run_t005_asset.gd`(50)、`run_t006_rig.gd`(65)、`run_t008_species.gd`(114)、`run_t009_cat_movement.gd`(81)、`run_t007_input.gd`(22)、`probe_step_height.gd`(6)。
+> **验收脚本模板**：`run_t002.gd`(18)、`run_t005_asset.gd`(50)、`run_t006_rig.gd`(65)、`run_t008_species.gd`(114)、`run_t009_cat_movement.gd`(81)、`run_t010_mouse_movement.gd`(95)、`run_t007_input.gd`(22)、`probe_step_height.gd`(6)。
 > **资产链已打通**：Blender → `.glb` → Godot（T005 静态 / T006 骨骼）；脚本在 `Tools/Blender/`；
 > 结构 dump 用 `tests/tool_dump_scene_tree.gd`（支持骨骼/动画/蒙皮）。
 > **资产约定（全部实测）**：轴向 `(x,y,z)_Blender → (x,z,−y)_Godot`——**角色在 Blender 里要面朝 `+Y`**；
@@ -190,11 +196,11 @@ $proj = 'E:\Reborn\Game\Reborn'
 > **移动已落地（T009）**：同一个 `AnimalBody` 就是控制器（走/跑/蹲/跳/相机），
 > 台阶用 `scripts/characters/step_climb.gd`（每帧 `climb.update_base_y()`，移动时 `climb.step_or_slide(motion, dt)`）。
 > **试验世界**：`scenes/maps/l_move_fixtures.tscn`（生成器 `tests/tool_make_move_fixtures.gd`）；
-> **视觉捕获**：`tests/tool_capture_render.gd -- t009`（**不能加 `--headless`**）。
+> **视觉捕获**：`tests/tool_capture_render.gd -- t009`（或 `-- t010`；**不能加 `--headless`**，`--quit-after` 给到 30000+）。
 > **不要写物种名分支**：能力差异走配置字段（`can_jump` / `can_pounce` / `can_use_mouse_tunnel`），有静态断言守着。
 > 打包：`export_presets.cfg` 两个预设；**导出产物拒绝 `--script`**，包内断言用 `--main-pack` + 编辑器二进制。
-> **P0 已完成；P1 进行中（T008 + T009 done）**。下一个动作：**写 `Docs/Tasks/T010.md` 并实现鼠移动**
-> （用 `AnimalBody` + `mouse.tres`：禁高跳、窄缝通过、低顶不卡；复用 `l_move_fixtures.tscn` 与两套工具脚本）。
+> **P0 已完成；P1 进行中（T008 + T009 + T010 done）**。下一个动作：**写 `Docs/Tasks/T011.md` 并搭建生态灰盒**
+> （四个简化区域 + 高台 + 鼠洞 + 风险近路 / 安全绕路 + 补给位置；几何做法沿用 `l_move_fixtures.tscn` 的分道 + 幂等工具）。
 > 已知阻塞：真实按键输入无安全自动化手段（**禁止盲发按键**）。
 > 不要在没有实测证据时把任何游戏任务标为 done；不要因无头断言通过就宣称画面正确。
 

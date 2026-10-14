@@ -35,6 +35,9 @@ const LOW_CEILING_SIZE := Vector3(2.6, 0.2, 2.6)
 ##   * 墙角：内侧面 x=−5.85（wall A 的 z∈[−6,−2]）与 z=−5.85（wall B 的 x∈[−6,−2]）
 ##   * 50 cm 高台：x=6.5，z∈[−6,−4]；**它的助跑车道 x=6.5 必须空着**（平台测试从 z=−1.5 直冲）
 ##     曾经把低顶放在 x=6，结果平台助跑直接撞进低顶里（猫被压在地面、测不下去）。
+##   * 鼠洞（T010）：x=2.5（两侧墙 x∈[1.5,2.38] 与 [2.62,3.5]），z≈−2；鼠的车道沿 x=2.5 从 z=+2 走到 z=−4
+##   * 鼠低顶（T010）：x=−3.5，z∈[1.0,3.0]（支柱 ±0.8）；鼠从 z=5.0 往 −z 进
+##     —— 这两个新车道都避开了 T009 的坡道(x∈[−1,1])、猫低顶(x=−6)、墙角(x/z≈−6)、高台(x=6.5)
 const LOW_CEILING_POS := Vector3(-6.0, 0.0, 0.0)
 const PILLAR_SIZE := Vector3(0.2, 0.42, 0.2)
 const PILLAR_OFFSET := 1.2
@@ -50,6 +53,24 @@ const PLATFORM_HEIGHT := 0.5
 const PLATFORM_SIZE := Vector3(2.0, PLATFORM_HEIGHT, 2.0)
 const PLATFORM_POS := Vector3(6.5, 0.0, -5.0)
 
+## 鼠洞（T010，M01 的"内宽 24 / 高 30 cm 通道"）：三块盒子围出一个矩形开口，
+## 不做 CSG（避免引入未验证的布尔几何）。开口中心 x = 2.5、z 厚度 0.2。
+const TUNNEL_X_CENTER := 2.5
+const TUNNEL_HALF_SPAN := 1.0          # 两侧墙从中心各延伸 1.0 m
+const TUNNEL_THICK := 0.2              # 沿 z 的厚度
+const TUNNEL_Z := -2.0                 # 洞所在 z
+const TUNNEL_OPENING_W := 0.24         # 内宽（M01）
+const TUNNEL_OPENING_H := 0.30         # 高（M01）
+const TUNNEL_WALL_TOP := 1.10          # 两侧墙相对地面的顶高
+
+## 鼠低顶（T010，M02 鼠部分）：净空必须夹在鼠蹲高 0.12 与鼠站高 0.18 之间。
+## （猫蹲高 0.30 > 0.15 ⇒ 猫连蹲都进不去，顺带成为尺度对照。）
+const MOUSE_LOW_CLEARANCE := 0.15
+const MOUSE_LOW_SIZE := Vector3(2.0, 0.2, 2.0)
+const MOUSE_LOW_POS := Vector3(-3.5, 0.0, 2.0)
+const MOUSE_LOW_PILLAR := Vector3(0.2, MOUSE_LOW_CLEARANCE, 0.2)
+const MOUSE_LOW_PILLAR_OFFSET := 0.8
+
 var _fails := 0
 
 
@@ -64,6 +85,8 @@ func _initialize() -> void:
 	_add_low_ceiling(root_node)
 	_add_wall_corner(root_node)
 	_add_platform(root_node)
+	_add_mouse_tunnel(root_node)
+	_add_mouse_low_ceiling(root_node)
 	_add_spawn(root_node)
 	_add_light_and_env(root_node)
 
@@ -135,6 +158,54 @@ func _add_platform(parent: Node3D) -> void:
 	print("TOOL|Platform50|top=%.3f|height_above_ground=%.3f" % [
 		center.y + PLATFORM_SIZE.y * 0.5, PLATFORM_HEIGHT
 	])
+
+
+## 鼠洞（T010）：三块盒子围出矩形开口（不做 CSG，避免引入未验证的布尔几何）
+func _add_mouse_tunnel(parent: Node3D) -> void:
+	var wall_top := TUNNEL_WALL_TOP                      # 绝对高度
+	var wall_h: float = wall_top - GROUND_TOP
+	var wall_cy: float = GROUND_TOP + wall_h * 0.5
+	var half_w: float = TUNNEL_OPENING_W * 0.5
+	var side_w: float = TUNNEL_HALF_SPAN - half_w
+	var opening_top: float = GROUND_TOP + TUNNEL_OPENING_H
+	var lintel_h: float = wall_top - opening_top
+	var lintel_cy: float = opening_top + lintel_h * 0.5
+	var wall_color := Color(0.50, 0.55, 0.62)
+
+	_mk_box(parent, "MouseTunnelLeft", Vector3(side_w, wall_h, TUNNEL_THICK),
+		Vector3(TUNNEL_X_CENTER - half_w - side_w * 0.5, wall_cy, TUNNEL_Z), Vector3.ZERO, wall_color)
+	_mk_box(parent, "MouseTunnelRight", Vector3(side_w, wall_h, TUNNEL_THICK),
+		Vector3(TUNNEL_X_CENTER + half_w + side_w * 0.5, wall_cy, TUNNEL_Z), Vector3.ZERO, wall_color)
+	_mk_box(parent, "MouseTunnelLintel", Vector3(TUNNEL_OPENING_W, lintel_h, TUNNEL_THICK),
+		Vector3(TUNNEL_X_CENTER, lintel_cy, TUNNEL_Z), Vector3.ZERO, wall_color)
+	print("TOOL|MouseTunnel|opening=%.3f x %.3f|center_x=%.3f|z=%.3f|wall_top=%.3f" % [
+		TUNNEL_OPENING_W, TUNNEL_OPENING_H, TUNNEL_X_CENTER, TUNNEL_Z, wall_top
+	])
+
+
+## 鼠低顶（T010）：板底净空必须夹在鼠蹲高与鼠站高之间
+func _add_mouse_low_ceiling(parent: Node3D) -> void:
+	var slab_bottom: float = GROUND_TOP + MOUSE_LOW_CLEARANCE
+	var center := Vector3(MOUSE_LOW_POS.x, slab_bottom + MOUSE_LOW_SIZE.y * 0.5, MOUSE_LOW_POS.z)
+	_mk_box(parent, "MouseLowCeiling", MOUSE_LOW_SIZE, center, Vector3.ZERO, Color(0.25, 0.60, 0.65))
+	print("TOOL|MouseLowCeiling|slab_bottom=%.3f|clearance=%.3f" % [slab_bottom, MOUSE_LOW_CLEARANCE])
+	var pillar_y: float = GROUND_TOP + MOUSE_LOW_PILLAR.y * 0.5
+	var i := 0
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			i += 1
+			_mk_box(
+				parent,
+				"MouseLowCeilingPillar%d" % i,
+				MOUSE_LOW_PILLAR,
+				Vector3(
+					MOUSE_LOW_POS.x + sx * MOUSE_LOW_PILLAR_OFFSET,
+					pillar_y,
+					MOUSE_LOW_POS.z + sz * MOUSE_LOW_PILLAR_OFFSET,
+				),
+				Vector3.ZERO,
+				Color(0.20, 0.48, 0.52),
+			)
 
 
 ## 出生参考点（猫站在地面上时的身体中心高度 = 地面顶 + 半高）
@@ -267,6 +338,39 @@ func _verify() -> void:
 		print("VERIFY|Platform50|top=%.3f|height_above_ground=%.3f|footprint_x=%s|footprint_z=%s" % [
 			float(pf["top"]), height, [pf["min_x"], pf["max_x"]], [pf["min_z"], pf["max_z"]]
 		])
+
+	# 鼠洞（T010）：开口尺寸 + "鼠能过、猫过不去"的尺度关系（设计意图常量写在这里，测试从配置算）
+	var tl := _box(scene, "MouseTunnelLeft")
+	var tr := _box(scene, "MouseTunnelRight")
+	var li := _box(scene, "MouseTunnelLintel")
+	if _check("mouse_tunnel_exists", not tl.is_empty() and not tr.is_empty() and not li.is_empty()):
+		var w: float = float(tr["min_x"]) - float(tl["max_x"])
+		var h: float = float(li["bottom"]) - GROUND_TOP
+		_check("mouse_tunnel_opening_w_0.24", absf(w - TUNNEL_OPENING_W) < 1e-6)
+		_check("mouse_tunnel_opening_h_0.30", absf(h - TUNNEL_OPENING_H) < 1e-6)
+		_check("mouse_tunnel_walls_start_at_ground",
+			absf(float(tl["bottom"]) - GROUND_TOP) < 1e-6 and absf(float(tr["bottom"]) - GROUND_TOP) < 1e-6)
+		# 设计意图（鼠站立 0.12×0.18 / 蹲 0.12×0.12；猫站立 0.32×0.48 / 蹲 0.32×0.30）
+		_check("mouse_stand_fits_tunnel", 0.12 <= w and 0.18 <= h)
+		_check("mouse_crouch_fits_tunnel", 0.12 <= w and 0.12 <= h)
+		_check("cat_stand_does_not_fit_tunnel", 0.32 > w or 0.48 > h)
+		_check("cat_crouch_does_not_fit_tunnel", 0.32 > w)
+		print("VERIFY|MouseTunnel|opening_w=%.3f|opening_h=%.3f|center_x=%.3f|z=[%.2f,%.2f]" % [
+			w, h, float(tl["max_x"]) + w * 0.5, float(tl["min_z"]), float(tl["max_z"])
+		])
+
+	# 鼠低顶（T010）：净空 = 0.15，夹在鼠蹲高 0.12 与鼠站高 0.18 之间（猫蹲高 0.30 进不去）
+	var mlow := _box(scene, "MouseLowCeiling")
+	if _check("mouse_low_ceiling_exists", not mlow.is_empty()):
+		var cl: float = float(mlow["bottom"]) - GROUND_TOP
+		_check("mouse_low_clearance_0.15", absf(cl - MOUSE_LOW_CLEARANCE) < 1e-6)
+		_check("mouse_low_between_crouch_and_stand", cl > 0.12 and cl < 0.18)
+		_check("cat_crouch_cannot_enter_mouse_low", cl < 0.30)
+		print("VERIFY|MouseLowCeiling|clearance=%.3f|slab_bottom=%.3f|z=[%.2f,%.2f]" % [
+			cl, float(mlow["bottom"]), float(mlow["min_z"]), float(mlow["max_z"])
+		])
+	for i in range(1, 5):
+		_check("mouse_low_pillar%d_exists" % i, not _box(scene, "MouseLowCeilingPillar%d" % i).is_empty())
 
 	_check("spawn_exists", scene.get_node_or_null("CatSpawn") != null)
 	_check("has_light", scene.get_node_or_null("SunLight") != null)

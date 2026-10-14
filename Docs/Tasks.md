@@ -35,7 +35,8 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T007 | **done**（真实按键 awaiting-review） | `Docs/Evidence/T007.md`；`Builds/P0-Win64/` | 导出/独立运行/干净退出/重启/视觉均通过 |
 | T008 | **done** | `Docs/Evidence/T008.md`；`Docs/Tasks/T008.md`；`scripts/data/species_config.gd`；`resources/species/{cat,mouse}.tres`；`scripts/characters/animal_body.gd` + `scenes/characters/animal_body.tscn`；`tests/run_t008_species.gd` | 台阶组件化 + 配置逐字段对照 `Parameters.md`；**配置驱动的物理实测**：猫 12 cm 上/20 cm 挡、鼠 3 cm 上/12 cm 挡；**114/114** ×2、包内 103/103（T009 补了蹲姿/相机轴向断言） |
 | T009 | **done（2026-10-13）** | `Docs/Evidence/T009.md`；`Docs/Tasks/T009.md`；`tests/run_t009_cat_movement.gd`；`scenes/maps/l_move_fixtures.tscn`（+`tests/tool_make_move_fixtures.gd`）；`Art/Probes/t009_*.png` | 猫移动：行走/奔跑/潜伏/跳跃 + 相机；斜坡/低顶/落地/相机穿墙全过；**81/81** ×3 + 包内 81/81；lab 玩家已换成正式猫（T002/T005/T006/T007/T008 回归全绿）；过程中修掉 `step_climb` 两处真实判据缺陷 |
-| T010～T063 | pending | 无 | **T010（鼠移动与通道尺度）前置已满足**：`AnimalBody` / `SpeciesConfig` / `StepClimb` / 试验世界就绪；先写 `Docs/Tasks/T010.md` |
+| T010 | **done（2026-10-13）** | `Docs/Evidence/T010.md`；`Docs/Tasks/T010.md`；`tests/run_t010_mouse_movement.gd`；`scenes/maps/l_move_fixtures.tscn`（新增鼠洞 + 鼠低顶）；`Art/Probes/t010_*.png` | 鼠移动与通道尺度：**站立**过 24×30 cm 洞、猫（站/蹲）都过不去、禁高跳（`can_jump=false`）、0.15 m 低顶下不扩碰撞；**95/95** ×3 + 包内 95/95；**gameplay 代码零改动**（差异全在 `mouse.tres`） |
+| T011～T063 | pending | 无 | **T011（搭建生态灰盒）前置已满足**：移动/台阶/试验世界与两套工具就绪；先写 `Docs/Tasks/T011.md` |
 
 ### T001 判定明细（Godot 版）
 
@@ -62,19 +63,20 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T003 **恢复点** | PASS | 从零克隆后引擎实跑 18/18 通过 |
 
 关联用例：**E01 部分 PASS**（工程可加载、脚本保留、无 `SCRIPT ERROR`、`--check-only` 退出码 0）；
-E01 的视觉部分**已补验通过**；**E02 本次通过**（`Docs/Evidence/T005.md`）；E03（骨骼往返）仍 **NOT-RUN**。
+E01 的视觉部分**已补验通过**；**E02 本次通过**（`Docs/Evidence/T005.md`）；**E03 已通过**（T006 骨骼往返 65/65）。
 
 ## 选择顺序
 
-T001 / T002 / T003 / T005 / T006 / T007 / T008 / **T009 均已完成**；台阶能力已组件化并修掉两处判据缺陷。
-**P0 阶段门完成**；**P1 进行中**（T008/T009 完成 → 下一步 T010）。
+T001 / T002 / T003 / T005 / T006 / T007 / T008 / T009 / **T010 均已完成**；台阶能力已组件化并修掉两处判据缺陷。
+**P0 阶段门完成**；**P1 进行中**（T008/T009/T010 完成 → 下一步 **T011 生态灰盒**）。
 
 下一步可执行（按建议优先级）：
 
-1. **T010（老鼠移动与通道尺度）**：短冲刺、窄缝通过、**禁止高跳**（`can_jump=false`）、
-   低顶下不得扩大碰撞体卡入障碍（用 `ShapeCast3D` 判断头顶空间，**不是**改 `scale`）；
-   复用 `AnimalBody` + `mouse.tres` + `l_move_fixtures.tscn`（M01 的鼠半边：能过 24×30 cm 洞、不能上 50 cm 台）。
-   **先写 `Docs/Tasks/T010.md`**。已知可复用项：`crouch_half_height` 鼠取 0.06（待确认）。
+1. **T011（搭建生态灰盒）**：四个简化区域、高台、鼠洞、风险近路、安全绕路与补给位置
+   （前置 T009/T010 已满足）。**先写 `Docs/Tasks/T011.md`**。
+2. **T012 / T013**：导航可行性（猫/鼠的导航代理尺寸、猫不能进鼠洞）与调试入口 + 移动回归。
+   注意 T013 的移动回归里带上遗留项：**单级台阶抬升会水平前移 0.2 m**（`Docs/Evidence/T009.md` §5.3）。
+3. ~~T005 / T006 / T007 / T008 / T009 / T010~~ **已完成**。
 2. **T011～T013**（生态灰盒 / 导航可行性 / 调试入口与移动回归）。
    注意 T013 的移动回归里带上一条遗留项：单级台阶会前移 0.2 m（`Docs/Evidence/T009.md` §5.3）。
 3. ~~T005 / T006 / T007 / T008 / T009~~ **已完成**。

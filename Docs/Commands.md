@@ -89,7 +89,7 @@ PowerShell 路径含空格时必须用调用运算符 `&`，全部示例已遵�
 
 ---
 
-### 2.6 T009 移动验收与试验世界（VERIFIED — 2026-10-13）
+### 2.6 T009 / T010 移动验收与试验世界（VERIFIED — 2026-10-13）
 
 ```powershell
 $g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
@@ -103,25 +103,34 @@ $p = 'E:\Reborn\Game\Reborn'
 & $g --headless --path $p --script 'res://tests/tool_set_lab_player.gd'
 #    -> TOOL|set_lab_player|done
 
-# 3) T009 断言（81 条）
+# 3) T009 / T010 断言（81 条 / 95 条）
 & $g --headless --path $p --script 'res://tests/run_t009_cat_movement.gd' --quit-after 40000
 #    -> SUMMARY|checks=81|failures=0  RESULT|PASS   EXIT=0
+& $g --headless --path $p --script 'res://tests/run_t010_mouse_movement.gd' --quit-after 40000
+#    -> SUMMARY|checks=95|failures=0  RESULT|PASS   EXIT=0
 
-# 4) 视觉捕获（**不能加 --headless**：无头是 dummy 渲染器，没有画面）
-& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 12000 -- t009
+# 4) 视觉捕获（**不能加 --headless**：无头是 dummy 渲染器，没有画面；`--quit-after` 见下方提示）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 60000 -- t009
 #    -> user://t009_{ramp,low_ceiling,platform}_{tp,fp}.png
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 60000 -- t010
+#    -> user://t010_{tunnel,mouse_low}_{tp,fp}.png
 #       （%APPDATA%\Godot\app_userdata\Reborn\，本仓库拷贝到 Art/Probes/）
 
 # 5) 包内复验（导出产物见 §5.1；包内断言必须用编辑器二进制 + --main-pack）
-& $g --headless --main-pack 'E:\Reborn\Builds\P0-Win64\RebornSelfTest.pck' \
+& $g --headless --main-pack 'E:\Reborn\Builds\P0-Win64\RebornSelfTest.pck' `
     --script 'res://tests/run_t009_cat_movement.gd' --quit-after 40000
 #    -> SUMMARY|checks=81|failures=0  EXIT=0
+& $g --headless --main-pack 'E:\Reborn\Builds\P0-Win64\RebornSelfTest.pck' `
+    --script 'res://tests/run_t010_mouse_movement.gd' --quit-after 40000
+#    -> SUMMARY|checks=95|failures=0  EXIT=0
 ```
 
-- 试验世界 `scenes/maps/l_move_fixtures.tscn` 的四个区**分道布置**（坡道 x∈[−1,1]、低顶 x=−6、
-  墙角 x/z≈−6、50 cm 高台 x=6.5）；**改几何前先看 `tool_make_move_fixtures.gd` 头部的分道说明**。
-- T009 断言脚本会**从场景节点读几何**（触发距离等），但把"设计意图常量"（50 cm / 42 cm / 25°）写死在断言里：
-  谁改了试验世界而没改设计，测试直接失败。
+- 试验世界 `scenes/maps/l_move_fixtures.tscn` 的**六个区**分道布置（坡道 x∈[−1,1]、猫低顶 x=−6、墙角 x/z≈−6、
+  50 cm 高台 x=6.5、**鼠洞 x=2.5**、**鼠低顶 x=−3.5**）；**改几何前先看 `tool_make_move_fixtures.gd` 头部的分道说明**。
+- T009/T010 断言脚本会**从场景节点读几何**（触发距离、洞的开口、低顶净空……），但把"设计意图常量"
+  （50 cm / 42 cm / 25° / 0.24×0.30 / 0.15）写死在断言里：谁改了试验世界而没改设计，测试直接失败。
+- 捕获模式用 `-- t009` / `-- t010` 选择场景组；**`--quit-after` 要给足**：实测非 headless 下 12000 只拍完 2 个场景，
+  30000/60000 才完整 —— 迭代上限按"场景数 × 每场景帧数"给余量。
 
 ---
 
@@ -360,6 +369,11 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
      少了 `n·dir < 0` 这一条，连正常台阶都上不去（脚下地面的接触会被误判）。
 - **试验世界要分道布置**：T009 第一次把低顶和 50 cm 高台放在同一条 x=6 线上，
   平台助跑直接撞进低顶里（猫被压在地面、用例全废）。分区之前先看 `tool_make_move_fixtures.gd` 头部说明。
+- **取景决定能否判读：相机要"正对"主体所在的通道**（T010 实测）：`t010_tunnel_tp` 第一版相机横向偏了 1.6 m，
+  视线在洞面处的 x = 2.78 落在洞口（2.38–2.62）之外 → **主体被洞口侧壁完全遮住**，视觉模型两次都答"洞里是空的"。
+  判据不是"图存在 / 文件名对"，而是**"视线几何能不能真的看到主体"**；改成正对洞口（x 偏移 0）后立刻判读成功。
+- **不许为了过测试改产品参数**：T010 的鼠洞是硬约束（鼠过得去、猫过不去）。若鼠过不去，先查台阶/胶囊判据
+  （T009 的两个坑），**拿到亲测依据才动判据或车道对中**；`resources/species/*.tres` 绝不因测试而改。
 
 ---
 
@@ -370,3 +384,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-12 | 首次建立。锁定 Blender/Node/Git/Python 路径与版本；UE 相关全部标 PENDING/BLOCKED。 |
 | 2026-10-13 | **引擎切换 Godot 4**。新增 §2 Godot 命令（无头运行、`--check-only`、能力清单）；§5 导出改为 PENDING 并定位真阻塞为导出模板缺失；新增 §8 排查方法坑；§4.1 记录代理推送路径。 |
 | 2026-10-13 | **T009 完成**。新增 §2.6 移动验收与试验世界命令（含"捕获不能加 `--headless`"）；§8 补 5 条实测坑（pack 不序列化实例子节点覆盖、`get_path()` 未入树报错导致假通过、视觉工具漏小目标→改用差异像素法、台阶两处判据坑、试验世界必须分道）。 |
+| 2026-10-13 | **T010 完成**。§2.6 改名并补 `-- t010` 捕获与包内两条命令（含"捕获的 `--quit-after` 要给足"）；§8 补 2 条实测坑（取景/视线几何决定可判读性；不许为了过测试改产品参数）。 |
