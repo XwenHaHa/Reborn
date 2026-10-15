@@ -1,0 +1,45 @@
+[gd_scene load_steps=2 format=3]
+
+; 最小正式 HUD（T018）。真源：开发计划第 134 行 + Docs/TechnicalDesign.md §1 表格第 69 行 / 第 77 行。
+; 只观察状态（挂在生存与交互的信号上），**不改任何游戏状态**；文本里不出现调试数值。
+; 位置：全屏 Control + 左下角一列（VBoxContainer.alignment = 2 = END）；mouse_filter = 2 (IGNORE) 不吃输入。
+; 标签名被 scripts/ui/hud.gd 按路径读取（Margin/VBox/{VitalLabel,WarningLabel,InteractLabel}）。
+
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1_hud"]
+
+[node name="PlayerHud" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_hud")
+player_path = NodePath("")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 24.0
+offset_right = -24.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="VBox" type="VBoxContainer" parent="Margin"]
+mouse_filter = 2
+alignment = 2
+theme_override_constants/separation = 4
+
+[node name="VitalLabel" type="Label" parent="Margin/VBox"]
+mouse_filter = 2
+text = "生命  —  /  —\n饥饿  —  /  —\n水分  —  /  —\n体力  —  /  —"
+
+[node name="WarningLabel" type="Label" parent="Margin/VBox"]
+visible = false
+mouse_filter = 2
+
+[node name="InteractLabel" type="Label" parent="Margin/VBox"]
+visible = false
+mouse_filter = 2

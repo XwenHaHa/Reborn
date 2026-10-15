@@ -106,6 +106,10 @@ func _initialize() -> void:
 	if OS.get_cmdline_user_args().has("t013"):
 		await _capture_t013_frames(lab)
 
+	# T018：正式 HUD（状态 / 低值警告 / 交互提示）的屏幕可见性。只在显式传 `-- t018` 时执行。
+	if OS.get_cmdline_user_args().has("t018"):
+		await _capture_t018_frames(lab)
+
 	print("CAP|done")
 	quit(0)
 
@@ -683,3 +687,81 @@ func _capture_t013_frames(lab: Node) -> void:
 	var hud_on: bool = entry.call("toggle_hud")
 	print("CAP|t013|hud|enabled=%s" % str(hud_on))
 	await _capture_view("t013_debug_hud", cam)
+
+
+# ---------------------------------------------------------------------------
+# T018：正式 HUD 的屏幕可见性（状态 / 低值警告 / 交互提示）
+# ---------------------------------------------------------------------------
+
+const T018_LEVEL := "res://scenes/maps/l_courtyard.tscn"
+const T018_BODY := "res://scenes/characters/animal_body.tscn"
+const T018_HUD := "res://scenes/ui/hud.tscn"
+const T018_RP := "res://scenes/world/resource_point.tscn"
+const T018_MOUSE := "res://resources/species/mouse.tres"
+const T018_CAM_POS := Vector3(-4.0, 1.7, 25.6)
+const T018_CAM_LOOK := Vector3(-4.0, 0.35, 23.8)
+
+
+## 在**正式关卡**上摆玩家 + 一个食物点 + 一个水点，然后抓三张：
+## ① 正常状态 ② 低值警告 ③ 交互提示。HUD 是屏幕空间控件，所以会直接出现在图里。
+func _capture_t018_frames(lab: Node) -> void:
+	print("CAP|t018|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+	var level := (load(T018_LEVEL) as PackedScene).instantiate()
+	root.add_child(level)
+	for i in SETTLE_FRAMES:
+		await process_frame
+	var body := (load(T018_BODY) as PackedScene).instantiate() as AnimalBody
+	body.species_config = load(T018_MOUSE) as SpeciesConfig
+	body.player_controlled = false
+	body.position = Vector3(-4.0, 0.35, 24.0)
+	level.add_child(body)
+	var hud := (load(T018_HUD) as PackedScene).instantiate() as PlayerHud
+	level.add_child(hud)
+	hud.bind_player(body)
+	var food := (load(T018_RP) as PackedScene).instantiate() as ResourcePoint
+	food.kind = &"food"
+	food.food_type = SpeciesConfig.FoodType.SEED
+	food.interaction_id = "t018_seed"
+	food.position = Vector3(-4.0, 0.35, 23.6)
+	level.add_child(food)
+	var water := (load(T018_RP) as PackedScene).instantiate() as ResourcePoint
+	water.kind = &"water"
+	water.interaction_id = "t018_water"
+	water.position = Vector3(-3.5, 0.35, 23.6)
+	level.add_child(water)
+	for i in SETTLE_FRAMES:
+		await process_frame
+	var cam := Camera3D.new()
+	cam.name = "T018Camera"
+	cam.near = 0.05
+	cam.far = 400.0
+	cam.fov = 60.0
+	level.add_child(cam)
+	cam.global_position = T018_CAM_POS
+	cam.look_at(T018_CAM_LOOK, Vector3.UP)
+	cam.current = true
+	for i in 10:
+		await process_frame
+	print("CAP|t018|normal|hud_text=%s" % String(hud.hud_text()).replace("\n", " | "))
+	await _capture_view("t018_hud_normal", cam)
+	# 低值警告：直接改状态 + 发信号（与 `run_t018_hud.gd` 同一条路径；HUD 只观察）
+	body.survival.state.hunger = 18.0
+	body.survival.state.thirst = 12.0
+	body.survival.changed.emit(body.survival.state)
+	body.survival.warning_changed.emit(&"hunger", true)
+	for i in 5:
+		await process_frame
+	print("CAP|t018|warning|warning_text=%s" % hud.warning_text())
+	await _capture_view("t018_hud_warning", cam)
+	# 交互提示：把玩家挪到食物点跟前，等检测器锁到目标
+	body.global_position = Vector3(-4.0, 0.35, 23.95)
+	for i in 30:
+		await physics_frame
+	for i in 5:
+		await process_frame
+	print("CAP|t018|interact|text=%s|visible=%s" % [hud.interaction_text(), str(hud.interaction_visible())])
+	await _capture_view("t018_hud_interact", cam)
+	print("CAP|t018|done")

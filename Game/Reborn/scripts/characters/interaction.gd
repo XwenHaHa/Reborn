@@ -93,6 +93,9 @@ func effective_range() -> float:
 func detect() -> Node:
 	if is_interacting():
 		return _active_target
+	# 目标可能已被释放（例如资源点被消耗掉后销毁）：先清掉再重新找
+	if _target != null and not is_instance_valid(_target):
+		_set_target(null)
 	_candidates = _collect_candidates()
 	_set_target(_candidates[0] if not _candidates.is_empty() else null)
 	return _target
@@ -108,7 +111,7 @@ func current_target_id() -> String:
 
 
 ## 任意节点的交互 ID（诊断与断言用）
-func target_id_of(node: Node) -> String:
+func target_id_of(node: Variant) -> String:
 	return _target_id_of(node)
 
 
@@ -152,7 +155,8 @@ func stats() -> Dictionary:
 # ---------------------------------------------------------------------------
 
 func is_interacting() -> bool:
-	return _active_target != null
+	# 目标可能已被释放（资源点被销毁）：那种情况不算"进行中"
+	return _active_target != null and is_instance_valid(_active_target)
 
 
 func active_transaction_id() -> String:
@@ -372,8 +376,8 @@ func _set_target(node: Node) -> void:
 	target_changed.emit(_target_id_of(node), _target_allowed)
 
 
-func _query(node: Node) -> Dictionary:
-	if node == null or not node.has_method(METHOD_QUERY):
+func _query(node: Variant) -> Dictionary:
+	if node == null or not is_instance_valid(node) or not node.has_method(METHOD_QUERY):
 		return {"allowed": false, "action_id": &"", "duration": 0.0, "deny_reason": &"not_interactable"}
 	return node.call(METHOD_QUERY, _body)
 
@@ -381,7 +385,7 @@ func _query(node: Node) -> Dictionary:
 ## 提交前复检：返回拒绝理由（`&""` = 仍然有效）。
 ## 和检测阶段用同一套判定（距离 / 视线 / enabled / 目标自己的 `query_interaction`），
 ## 差别是**不排序、只看这一个目标**——用于"查询及提交时都检查"。
-func _recheck_target(t: Node) -> StringName:
+func _recheck_target(t: Variant) -> StringName:
 	if t == null or not is_instance_valid(t) or not t.is_inside_tree():
 		return &"gone"
 	if not _implements_protocol(t):
@@ -443,7 +447,7 @@ func _base_range() -> float:
 	return 0.0
 
 
-func _range_for(node: Node) -> float:
+func _range_for(node: Variant) -> float:
 	var base := _base_range()
 	if node != null and "range_override" in node:
 		var v := float(node.get("range_override"))
@@ -452,7 +456,7 @@ func _range_for(node: Node) -> float:
 	return base
 
 
-func _priority_of(node: Node) -> int:
+func _priority_of(node: Variant) -> int:
 	if node == null:
 		return 0
 	# 优先读专用字段（`Interactable`）；鸭子类型节点可以用 `priority`
@@ -463,13 +467,13 @@ func _priority_of(node: Node) -> int:
 	return 0
 
 
-func _is_enabled(node: Node) -> bool:
+func _is_enabled(node: Variant) -> bool:
 	if node != null and "enabled" in node:
 		return bool(node.get("enabled"))
 	return true
 
 
-func _point_of(node: Node) -> Vector3:
+func _point_of(node: Variant) -> Vector3:
 	if node == null:
 		return Vector3.ZERO
 	if node.has_method("interaction_point"):
@@ -479,7 +483,7 @@ func _point_of(node: Node) -> Vector3:
 	return Vector3.ZERO
 
 
-func _target_id_of(node: Node) -> String:
+func _target_id_of(node: Variant) -> String:
 	if node == null or not is_instance_valid(node):
 		return ""
 	if "interaction_id" in node:
@@ -490,7 +494,10 @@ func _target_id_of(node: Node) -> String:
 
 
 ## 鸭子类型判定：只认方法，**不做类型转换**
-func _implements_protocol(node: Node) -> bool:
+## 鸭子类型判定：只认方法，**不做类型转换**。参数不带类型：目标可能已被 `queue_free()`（带类型会报错）
+func _implements_protocol(node: Variant) -> bool:
+	if node == null or not is_instance_valid(node):
+		return false
 	return node.has_method(METHOD_QUERY) and node.has_method(METHOD_COMMIT) and node.has_method(METHOD_CANCEL)
 
 

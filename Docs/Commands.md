@@ -353,6 +353,46 @@ $out = 'E:\Reborn\Builds\P0-Win64'
 3. **`_ready()` 用真实世界时间排期，会和用假时间的测试打架**：`advance_to(2000)` 一次补掉十几个周期。
    加 `@export var auto_advance: bool`（运行期 true、假时间测试 false）+ 测试把 `next_refill_at` 归 0 后显式推进。
 4. **继承 `Interactable` 要显式 `super()`**（`_init` / `_ready` / `deny_reason_for` / `cancel_interaction` 都覆盖了）。
+## 2.14 T018 最小 HUD 与调参页（VERIFIED — 2026-10-15）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+& $g --headless --path $p --import                                                   # 0
+& $g --headless --path $p --check-only --script 'res://tests/run_t018_hud.gd'         # 0
+
+# 1) 断言 73 条（连续三次一致）
+& $g --headless --path $p --script 'res://tests/run_t018_hud.gd' --quit-after 90000
+#    -> SUMMARY|checks=73|failures=0  RESULT|PASS   EXIT=0
+
+# 2) 视觉捕获（**不能 headless**；建议后台跑 + 轮询日志，因为 --quit-after 是**帧数**）
+#    Start the same command in background; poll log
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 3000 -- t018
+#    -> CAP|t018|save_result=0 (OK) ×3 ; CAP|t018|done
+#    图先落 user://，复制到 Art/Probes/t018_hud_{normal,warning,interact}.png
+
+# 3) 包内复验
+& $g --headless --main-pack "$out\RebornSelfTest.pck" `
+    --script 'res://tests/run_t018_hud.gd' --quit-after 90000
+#    -> SUMMARY|checks=73|failures=0   EXIT=0
+```
+
+- **`Control.mouse_filter` 默认 STOP(0)**：全屏 HUD 会吃掉鼠标事件 → 显式 `MOUSE_FILTER_IGNORE(2)` 并断言。
+- **只观察不改状态**：HUD 不调 `apply_damage()` / `restore_*()` / `commit_interaction()`；测试用**同一帧**的状态快照对比 + 目标 `commit_count()==0` 证明。
+- **信号驱动**：`survival.changed` / `warning_changed` / `died` + `interaction.target_changed` / `started` / `committed` / `cancelled`；
+  `_process()` 里**唯一**每帧读取的是交互进度（连续量）。
+- **调试数值不混入**：测试对 12 条禁词逐条断言（`PARAMS|`、`MOV|`、`nav_points`、`nav_layer`、`step_climb`、`probe`、
+  `headroom`、`wish=`、`frame=`、`collision_debug`、`F1=`、`Debug`）。
+
+### 本任务踩到的坑
+
+1. **带类型的 `Node` 参数遇到已 `queue_free()` 的目标会直接报错**（`previously freed is not a subclass of the expected argument class`）：
+   检测器里所有可能收到目标的参数改成**无类型**（`Variant`）+ 内部 `is_instance_valid()`；`is_interacting()` 也要查 `is_instance_valid`。
+2. **HUD 进度必须用真实世界时间**：合成 `tick()` 会让 HUD 显示 `0%`（身体每物理帧 `tick()` 把时间拉回，T016 同一个坑）。
+3. **"状态不变"断言要在同一帧内比**：跨帧会因饥渴按时间下降而失败（实测 `hunger 99.98`）。
+4. **窗口模式捕获用后台执行 + 轮询**：`--quit-after` 是帧数，写太大等于没上限（一次前台跑 300 s 超时）；图落 `user://` 要复制。
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -652,3 +692,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-15 | **T015 完成**。新增 §2.11 消耗、警告与基础伤害命令（93 条断言 + 包内复验 + 两条测试侧坑：`spend_stamina` 是**扣减**不是赋值；期望位移要扣**加速段**）。 |
 | 2026-10-15 | **T016 完成**。新增 §2.12 交互检测与动作接口命令（118 条断言 + 包内复验 + 五条实测坑：`Area3D` 自带 native `priority`；`add_child` 后设 `global_position` 会让物理体在原点存在一帧、把身体推开 0.1877 m；每帧 `detect()` 让事件计数不能硬断言；合成 `tick()` 与真实帧混用会让进度倒退；进度基准要可读）。 |
 | 2026-10-15 | **T017 完成**。新增 §2.13 食物、饮水与可取消交互命令（128 条断言 + 包内复验 + 四条实测坑：lambda 按值捕获导致计数永远是 0；`kind` setter 重置同类型默认值；`_ready` 用真实时间排期与假时间测试冲突；继承要显式 `super()`）。 |
+| 2026-10-15 | **T018 完成**。新增 §2.14 最小 HUD 与调参页命令（73 条断言 + `-- t018` 三张截图 + 包内复验 + 四条实测坑：`mouse_filter` 默认 STOP；带类型参数遇已释放目标报错；HUD 进度必须用真实世界时间；状态不变断言要在同帧比）。 |
