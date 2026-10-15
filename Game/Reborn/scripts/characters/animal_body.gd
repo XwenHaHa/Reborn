@@ -77,6 +77,12 @@ var climb: StepClimb = null
 @onready var camera: Camera3D = $Camera3D
 
 var _pitch: float = 0.0
+## 生存状态推进器（T014）。由 `apply_config()` 建立
+var survival: SurvivalController = null
+## 无 Autoload 环境下的兜底时钟（**有 `WorldDirector` 时完全不用它**，两套时间源不会混用）
+var _fallback_world_time := 0.0
+var _world_director: Node = null
+var _world_director_checked := false
 
 
 func _ready() -> void:
@@ -135,6 +141,10 @@ func _physics_process(delta: float) -> void:
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z).move_toward(target, accel * delta)
 	velocity.x = horizontal.x
 	velocity.z = horizontal.z
+
+	# 生存状态按**世界时间**推进（统一时间入口；见 scripts/systems/survival_controller.gd 头注）
+	if survival != null:
+		survival.tick_to(world_time_now())
 
 	# 位移交给台阶组件（能上台阶就抬上去，否则普通 move_and_slide）
 	var motion := Vector3(velocity.x * delta, 0.0, velocity.z * delta)
@@ -274,6 +284,11 @@ func apply_config() -> void:
 
 	climb = StepClimb.new(self, species_config.max_step_height)
 	configured.emit(species_config.species_id)
+	# 生存推进器（T014）。重复调用 `apply_config()` 时**保留当前数值**（热改配置不清血）；
+	# 时间一律来自 `WorldDirector` 的世界时间，本文件不累加 delta
+	survival = SurvivalController.new(
+		species_config, survival.state if survival != null else null
+	)
 
 
 ## 能力查询：全部读配置，调用方不需要知道是哪个物种
@@ -320,5 +335,32 @@ func debug_state() -> Dictionary:
 		"position": global_position,
 		"velocity": velocity,
 		"wish_speed": current_speed(),
+		"survival": survival.state.to_dictionary() if survival != null else {},
+		"health": survival.state.health if survival != null else -1.0,
+		"hunger": survival.state.hunger if survival != null else -1.0,
+		"thirst": survival.state.thirst if survival != null else -1.0,
+		"stamina": survival.state.stamina if survival != null else -1.0,
 		"player_controlled": player_controlled,
 	}
+
+
+## 当前世界时间（秒）——**统一时间入口**。
+##
+## 正常运行时取 Autoload `WorldDirector` 的世界时间；只有在没有该单例的环境里
+## （例如某些裸 `SceneTree` 测试）才退回"本节点按物理帧累计"的兜底时钟。
+## **两套时间源不会同时使用**：只要能拿到单例就只用单例。
+func world_time_now() -> float:
+	if not _world_director_checked:
+		_world_director = get_node_or_null("/root/WorldDirector")
+		_world_director_checked = true
+	if _world_director != null and is_instance_valid(_world_director):
+		return float(_world_director.get("world_time"))
+	_fallback_world_time += 1.0 / float(Engine.physics_ticks_per_second)
+	return _fallback_world_time
+
+
+## 生存状态的一份**独立副本**（HUD/存档/断言用；改副本不影响身体）
+func survival_snapshot() -> SurvivalState:
+	if survival == null:
+		return SurvivalState.new()
+	return survival.state.duplicate_state()

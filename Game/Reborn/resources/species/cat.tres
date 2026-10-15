@@ -21,6 +21,11 @@ camera_offset_z = 0.1
 fov = 90.0
 vision_range = 9.0
 vision_half_angle_deg = 60.0
+; 生存容量（T014）：Parameters.md 第 15 行「初始 Health/Hunger/Thirst/Stamina 100/100/100/100」
+max_health = 100.0
+max_hunger = 100.0
+max_thirst = 100.0
+max_stamina = 100.0
 hearing_range = 12.0
 hunger_loss_per_sec = 0.08
 thirst_loss_per_sec = 0.06

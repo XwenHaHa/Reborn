@@ -512,11 +512,13 @@ func mov_line() -> String:
 	var reason := "none"
 	if player.climb != null and not player.climb.last_probe.is_empty():
 		reason = str(player.climb.last_probe.get("reason", player.climb.last_probe.keys()))
-	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f" % [
+	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f" % [
 		_frame, d["species_id"], d["position"].x, d["position"].y, d["position"].z,
 		d["velocity"].x, d["velocity"].y, d["velocity"].z, d["wish_speed"],
 		"crouch" if d["is_crouching"] else "stand", str(d["on_floor"]),
 		"free" if d["headroom_free"] else "blocked", reason, last_path_points, last_path_length,
+		float(d.get("health", -1.0)), float(d.get("hunger", -1.0)),
+		float(d.get("thirst", -1.0)), float(d.get("stamina", -1.0)),
 	]
 
 
@@ -565,6 +567,12 @@ func hud_text() -> String:
 		"on" if collision_debug_on else "off", str(collision_debug_enabled()), collision_shapes_drawn,
 		"on" if path_display_on else "off", "on" if hud_on else "off"
 	])
+	if player.survival != null:
+		# 生存状态（T014）：数值来自 `WorldDirector` 的世界时间；暂停时不会下降
+		var ss: SurvivalState = player.survival.state
+		lines.append("survival: health=%.1f hunger=%.1f thirst=%.1f stamina=%.1f  world_time=%.1f" % [
+			ss.health, ss.hunger, ss.thirst, ss.stamina, player.world_time_now()
+		])
 	lines.append("params: walk=%.2f sprint=%.2f crouch=%.2f jump=%.2f step=%.3f accel=%.0f cam=%.3f fov=%.0f can_jump=%s" % [
 		p["walk_speed"], p["sprint_speed"], p["crouch_speed"], p["jump_velocity"],
 		p["max_step_height"], p["max_acceleration"], p["camera_offset_z"], p["fov"], str(p["can_jump"])

@@ -219,6 +219,33 @@ $p = 'E:\Reborn\Game\Reborn'
   （断言守着：0 个调试节点、0 个 `CanvasLayer`）。正式 HUD 属 T018。
 - **改完 `project.godot` 立刻核对**：`git diff -- Game/Reborn/project.godot` + 跑 `run_t007_input.gd`（22/22 才算好）。
   本任务踩过：该文件被外部写成非引擎格式，`InputMap` 全空 → 五个套件大面积失败（详见 `Docs/Evidence/T013.md` §9）。
+## 2.10 T014 生存状态与统一时间入口（VERIFIED — 2026-10-15）
+
+ ```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+# 0) 新增了 class_name → 先 import（见 §8），再逐脚本 check-only
+& $g --headless --path $p --import
+& $g --headless --path $p --check-only --script 'res://scripts/systems/survival_controller.gd'   # 0
+
+# 1) 断言 106 条
+& $g --headless --path $p --script 'res://tests/run_t014_survival.gd' --quit-after 60000
+#    -> SUMMARY|checks=106|failures=0  RESULT|PASS   EXIT=0
+
+# 2) 包内复验
+& $g --headless --main-pack "$out\RebornSelfTest.pck" `
+    --script 'res://tests/run_t014_survival.gd' --quit-after 60000
+#    -> SUMMARY|checks=106|failures=0   EXIT=0
+ ```
+
+- **统一时间入口**：按时间的系统只从 `WorldDirector.world_time` 取差（`SurvivalController.tick_to()`），
+  **不要各自累加 `delta`** —— 一个渲染帧可能跑 0/1/2 次物理帧，各自累加会与世界时间漂移。
+- **暂停不消耗**：世界时间由 `WorldDirector._process` 推进；树暂停（`get_tree().paused`）或显式门闩
+  （`WorldDirector.time_advancing = false`）都会让它停 → `dt = 0` → 不消耗。
+- **帧率无关**：`SurvivalController.UPDATE_INTERVAL = 0.2 s` 批量结算，但用**累计到的实际时间**；
+  实测 30 / 60 / 144 Hz 跑 60 s 世界时间，饥渴消耗**完全一致**。
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -495,6 +522,12 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
   InputMap 全空、T007/T009/T010/T011/T012 大面积失败；连续 3 次 `EDIT_TAG_MISMATCH` 后宿主会**停止该路径编辑**。
   正确做法：先 `git status/diff` + 读文件看**当前真实内容**，别硬重试；改完配置类文件立刻跑一条对应断言（`run_t007_input.gd` 22/22）。
 
+- **不要用"等世界时间前进"的循环去测暂停**（T014）：树暂停时 `world_time` **根本不走**，
+  这种循环会死等到 `--quit-after` 才退出（现象：日志停在半路、退出码仍是 0）。
+  测暂停要**按固定帧数等待**，并同时断言"**世界时间增量为 0**"与"**数值不变**"（两条都查，避免假通过）。
+- **新增 `class_name` 的脚本必须先 `--import`**（T014 再次踩到）：否则逐个 `--check-only` 会报
+  `Identifier "Xxx" not declared in the current scope`，看着像自己写错了，其实是全局类还没注册。
+
 ---
 
 ## 9. 变更记录
@@ -508,3 +541,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-13 | **T011 完成**。新增 §2.7 生态灰盒关卡命令（生成器 + 210 条断言 + `-- t011` 捕获 7 视角 + 包内复验）；§8 补 3 条实测坑（`add_to_group` 默认非持久 → 分组不会被序列化；非 headless 捕获可能半途静默退出、必须看 `CAP|done`；大坐标浮点容差用 `GEO_EPS = 1e-4`）。 |
 | 2026-10-13 | **T012 完成**。新增 §2.8 导航数据与导航可行性命令（烘焙工具 + 79 条断言 + 包内复验）；§8 补 3 条实测坑（烘焙几何源只认区域子节点/分组模式、烘焙格与地图格必须一致且过小的 cell 会吃掉窄缝、运行期换 navmesh 后同进程查询不可靠要分进程）。 |
 | 2026-10-15 | **T013 完成**。新增 §2.9 调试入口与移动回归命令（159+73 条断言 + `-- t013` 六张截图 + 包内复验）；§8 补 6 条实测坑（引擎碰撞显示运行时画不出来→MD5 判据、`NavigationAgent3D` 无变换、代理路径短暂为空要服务端兜底、`.pck` 内文本不可读导致断言退化、站稳判据必须连续帧、并发写手覆盖 `project.godot`）。 |
+| 2026-10-15 | **T014 完成**。新增 §2.10 生存状态与统一时间入口命令（106 条断言 + 包内复验）；§8 补 2 条实测坑（测暂停不能用"等世界时间前进"的循环、`class_name` 新脚本先 `--import`）。 |

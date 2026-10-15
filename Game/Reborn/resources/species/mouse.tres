@@ -22,6 +22,11 @@ fov = 90.0
 vision_range = 6.5
 vision_half_angle_deg = 75.0
 hearing_range = 10.0
+; 生存容量（T014）：Parameters.md 第 15 行「初始 Health/Hunger/Thirst/Stamina 100/100/100/100」
+max_health = 100.0
+max_hunger = 100.0
+max_thirst = 100.0
+max_stamina = 100.0
 hunger_loss_per_sec = 0.1
 thirst_loss_per_sec = 0.08
 sprint_stamina_per_sec = 35.0

@@ -36,3 +36,16 @@ func set_world_time(t: float) -> void:
 func reset_for_new_game() -> void:
 	world_time = 0.0
 	time_advancing = true
+
+
+## 当前世界时间（秒）——**统一时间入口**。
+## 所有按时间的系统（生存消耗、资源恢复、昼夜……）都从这里取差推进，**不要各自累加 `delta`**：
+## 一个渲染帧可能跑 0/1/2 次物理帧，各自累加会与世界时间漂移。
+func get_world_time() -> float:
+	return world_time
+
+
+## 显式门闩的当前状态。注意：**树暂停时 `_process` 不跑，本函数仍可能返回 true** ——
+## 要判断"时间是不是真的在走"，看 `world_time` 有没有变（见 `Docs/Tasks/T014.md` 决策 D1）。
+func is_time_advancing() -> bool:
+	return time_advancing

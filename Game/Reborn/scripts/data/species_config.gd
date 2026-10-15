@@ -46,6 +46,12 @@ enum FoodType { MEAT, SEED }
 @export var hearing_range: float = 0.0
 
 @export_group("Survival")
+## 生存容量上限（T014）。来自 `Docs/Parameters.md` 第 15 行「初始 Health/Hunger/Thirst/Stamina = 100/100/100/100」；
+## 食物/饮水"成功后全值夹紧"用的也是这四个上限。
+@export var max_health: float = 100.0
+@export var max_hunger: float = 100.0
+@export var max_thirst: float = 100.0
+@export var max_stamina: float = 100.0
 @export var hunger_loss_per_sec: float = 0.0
 @export var thirst_loss_per_sec: float = 0.0
 @export var sprint_stamina_per_sec: float = 0.0
@@ -121,4 +127,9 @@ func validate_config() -> PackedStringArray:
 	# 台阶不能超过胶囊总高的一半（否则"上台阶"退化成"爬墙"）
 	if max_step_height > capsule_height() * 0.5:
 		problems.append("max_step_height 不应超过胶囊总高的一半")
+	# 生存容量（T014）：容量必须为正，否则"夹紧"会把所有数值压到 0
+	for pair in [["max_health", max_health], ["max_hunger", max_hunger],
+			["max_thirst", max_thirst], ["max_stamina", max_stamina]]:
+		if float(pair[1]) <= 0.0 or not is_finite(float(pair[1])):
+			problems.append("%s 必须 > 0（生存容量）" % pair[0])
 	return problems

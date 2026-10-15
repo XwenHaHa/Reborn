@@ -83,3 +83,12 @@
 保存节流1s；死亡/退出绕过等待但仍串行。存活读档 NPC 距玩家至少300，玩家免伤2s。初始昼夜周期1200s，WorldTime=0 为白天起点；夜晚仍需看清基本路线。
 
 更改物种尺度后必须同时重测胶囊、摄像机、台阶、鼠洞、导航和模型导出，不能只改速度或模型缩放。
+
+## 生存与时间（T014 落地口径）
+
+- **容量上限**：上表「初始 Health/Hunger/Thirst/Stamina = 100/100/100/100」在 T014 起由
+  `SpeciesConfig.max_health / max_hunger / max_thirst / max_stamina` 承载（`SurvivalState` 的初值取同值）。
+- **结算间隔**：`SurvivalController.UPDATE_INTERVAL = 0.2 s`（`TechnicalDesign.md` §5 允许的低频结算）；
+  结算用的是**累计到的实际时间**，所以 30/60/144 Hz 结果一致（T014 实测 60 s 的消耗 spread = 0）。
+- **时间源**：所有按时间的消耗取 `WorldDirector.world_time` 的差；暂停 / 结算 / 选择 / 加载时世界时间不推进 →
+  数值不消耗（T014 实测：树暂停与显式门闩两条路径都成立）。
