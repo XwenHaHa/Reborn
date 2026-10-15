@@ -40,7 +40,8 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T012 | **done（2026-10-13）** | `Docs/Evidence/T012.md`；`Docs/Tasks/T012.md`；`tests/tool_make_courtyard_nav.gd` + `resources/nav/l_courtyard_{mouse,cat}.tres`；`tests/run_t012_navigation.gd` | 导航可行性：**分物种双图 + 分层**（鼠 layer1 r=0.07 / 猫 layer2 r=0.17，cell 0.03）；鼠层穿 0.24 洞 9.00 m、穿溪缝 12.00 m；猫层同一对端点 35.44 m 且**不穿洞**、洞里无导航面；真实胶囊行走（鼠进洞 236 帧 0 重叠、猫 900 帧 0 帧进入洞口走廊）；**79/79** ×3 + 包内 79/79；**视觉证据 NOT-RUN**（运行时导航调试不可见） |
 | T013 | **done（2026-10-15）** | `Docs/Evidence/T013.md`；`Docs/Tasks/T013.md`；`scenes/debug/debug_entry.tscn` + `scripts/debug/debug_entry.gd`；`tests/run_t013_{debug_entry,movement_regression}.gd`；`tests/tool_capture_render.gd -- t013`；`Art/Probes/t013_*.png` | 调试入口（切猫/鼠 + 碰撞线框 + 导航路径 + 调试 HUD + `PARAMS|`/`MOV|` 记录）；**遗留项 ① 修好**：台阶抬升帧水平位移 = 该帧正常位移（0.0300 = 0.0300，修复前 ≥0.2 m）；遗留项 ② 只记录并可视化（猫层 34.77 m 绕行不穿洞 / 鼠层 5.00 m 直穿洞口）；**159/159 + 73/73** ×3 + 包内同；全量回归（T002→T012）全绿；包 388,320 B；视觉 6 图（引擎碰撞开关实测**不可见** → 自绘线框兜底） |
 | T014 | **done（2026-10-15）** | `Docs/Evidence/T014.md`；`Docs/Tasks/T014.md`；`scripts/data/survival_state.gd` + `scripts/systems/survival_controller.gd`；`tests/run_t014_survival.gd` | 生存状态与统一时间入口：**只吃世界时间**（`tick_to()`，不累加 delta）；饥渴按参数速率、体力 `RegenDelay` 后恢复；**暂停两条路径实测不消耗**；**30/60/144 Hz 跑 60 s 消耗完全一致（spread = 0）**；**106/106** ×3 + 包内 106/106；全量回归全绿；包 411,140 B |
-| T015～T063 | pending | 无 | **T015（消耗、警告与基础伤害）**：奔跑/扑击有代价、体力耗尽仍保留行走；饥渴警告后持续伤害；危险跌落测试（前置 T014/T009/T010） |
+| T015 | **done（2026-10-15）** | `Docs/Evidence/T015.md`；`Docs/Tasks/T015.md`；`tests/run_t015_costs.gd`；`species_config.gd` 六个新参数 + `survival_controller.gd` 警告/危机 + `animal_body.gd` 双门控与跌落 | 消耗、警告与基础伤害：冲刺 15.01/35.02 per 1 s、**双门控**（≥5 开始 / 耗尽转行走）、`RegenDelay` 恢复；`≤25` 预警（不扣血）、归零各扣 1/s（两项 2/s）；跌落 ≤7 m/s 无伤、超过 (v−7)×10、上限 100；**93/93** ×3 + 包内 93/93；全量回归全绿；包 433,020 B |
+| T016～T063 | pending | 无 | **T016（交互检测与动作接口）**：有效目标优先级、距离与遮挡检测；只显示并执行一个交互（前置 T011） |
 
 ### T001 判定明细（Godot 版）
 
@@ -73,13 +74,13 @@ E01 的视觉部分**已补验通过**；**E02 本次通过**（`Docs/Evidence/T
 
 T001 / T002 / T003 / T005 / T006 / T007 / T008 / T009 / T010 / T011 / T012 / **T013 / T014 均已完成**；台阶、导航、调试入口与生存时间入口已落地。
 （口径变化：T011/T012 是"游戏代码零改动、差异全在配置/关卡/导航数据"；**T013/T014 起开始真的改游戏代码** —— `step_climb` 抬升修复、调试入口、`SurvivalState`/`SurvivalController` 与 `AnimalBody` 接入。）
-**P0 阶段门完成**；**P1 进行中**（T008/T009/T010/T011/T012/T013/**T014** 完成 → 下一步 **T015 消耗、警告与基础伤害**）。
+**P0 阶段门完成**；**P1 进行中**（T008/T009/T010/T011/T012/T013/T014/**T015** 完成 → 下一步 **T016 交互检测与动作接口**）。
 
 下一步可执行（按建议优先级）：
 
-1. **T015（消耗、警告与基础伤害）**（4～8h，前置 T014/T009/T010）：奔跑/扑击有代价、体力耗尽仍保留行走；
-   饥渴 ≤25 发警告、归零后按 `Parameters.md` 第 65 行扣血；危险跌落测试。
-   顺带带上 T013 的遗留项 ②：**猫跨 0.50 屏障是否加 `NavigationLink3D`** 仍待负责人决定。
+1. **T016（交互检测与动作接口）**（4～8h，前置 T011）：有效目标优先级、距离与遮挡检测；只显示并执行一个交互。
+   顺带带上两条待定：**猫跨 0.50 屏障是否加 `NavigationLink3D`**（T013 遗留项 ②）、
+   **跳跃是否消耗体力**（T015 §9；`Parameters.md` 未给数值）。
 2. ~~T008 / T009 / T010 / T011 / T012~~ **已完成**；正式角色/骨骼资产仍属 **P6** 阶段门，不得提前。
 
 **做角色资产时必须遵守 T005/T006 实测的两条约定**：

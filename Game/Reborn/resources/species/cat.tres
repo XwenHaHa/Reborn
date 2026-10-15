@@ -26,6 +26,13 @@ max_health = 100.0
 max_hunger = 100.0
 max_thirst = 100.0
 max_stamina = 100.0
+; 消耗与伤害（T015）：Parameters.md 第 65 行标"共同"，两物种同值
+sprint_min_stamina = 5.0
+low_stat_threshold = 25.0
+starvation_damage_per_sec = 1.0
+dehydration_damage_per_sec = 1.0
+fall_safe_vertical_speed = 7.0
+fall_damage_scale = 10.0
 hearing_range = 12.0
 hunger_loss_per_sec = 0.08
 thirst_loss_per_sec = 0.06

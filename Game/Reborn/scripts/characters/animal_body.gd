@@ -79,6 +79,12 @@ var climb: StepClimb = null
 var _pitch: float = 0.0
 ## 生存状态推进器（T014）。由 `apply_config()` 建立
 var survival: SurvivalController = null
+## 冲刺档实际是否生效（受"开始/继续"双门控；T015）
+var _sprint_active := false
+## 最近一次落地前的**最大下落速度**（米/秒，正数）。落地后保留，供诊断与断言（T015）
+var last_fall_speed := 0.0
+var _fall_speed := 0.0
+var _was_on_floor := true
 ## 无 Autoload 环境下的兜底时钟（**有 `WorldDirector` 时完全不用它**，两套时间源不会混用）
 var _fallback_world_time := 0.0
 var _world_director: Node = null
@@ -144,7 +150,12 @@ func _physics_process(delta: float) -> void:
 
 	# 生存状态按**世界时间**推进（统一时间入口；见 scripts/systems/survival_controller.gd 头注）
 	if survival != null:
-		survival.tick_to(world_time_now())
+		var dt_sim: float = survival.tick_to(world_time_now())
+		# 冲刺代价（T015）：用**世界时间差**扣（`Parameters.md`「运动消耗使用实际经过时间」）
+		if dt_sim > 0.0 and is_sprinting():
+			survival.spend_stamina(species_config.sprint_stamina_per_sec * dt_sim)
+		# 跌落结算（T015）：每物理帧跟踪腾空速度，落地那帧扣血
+		_track_fall()
 
 	# 位移交给台阶组件（能上台阶就抬上去，否则普通 move_and_slide）
 	var motion := Vector3(velocity.x * delta, 0.0, velocity.z * delta)
@@ -161,7 +172,9 @@ func current_speed() -> float:
 		return 0.0
 	if is_crouching:
 		return species_config.crouch_speed
-	if want_sprint:
+	# 冲刺档要过**双门控**（T015）：这里顺手刷新一次，保证"直接读档位"（HUD/测试）也拿到正确结果
+	_update_sprint_latch()
+	if _sprint_active:
 		return species_config.sprint_speed
 	return species_config.walk_speed
 
@@ -340,6 +353,12 @@ func debug_state() -> Dictionary:
 		"hunger": survival.state.hunger if survival != null else -1.0,
 		"thirst": survival.state.thirst if survival != null else -1.0,
 		"stamina": survival.state.stamina if survival != null else -1.0,
+		"sprinting": _sprint_active,
+		"last_fall_speed": last_fall_speed,
+		"low_hunger": survival.is_low_hunger() if survival != null else false,
+		"low_thirst": survival.is_low_thirst() if survival != null else false,
+		"starving": survival.is_starving() if survival != null else false,
+		"dehydrated": survival.is_dehydrated() if survival != null else false,
 		"player_controlled": player_controlled,
 	}
 
@@ -364,3 +383,52 @@ func survival_snapshot() -> SurvivalState:
 	if survival == null:
 		return SurvivalState.new()
 	return survival.state.duplicate_state()
+
+
+# ---------------------------------------------------------------------------
+# 消耗与伤害（T015）
+# ---------------------------------------------------------------------------
+
+## 冲刺档是否**真的**生效（双门控，`Docs/Parameters.md` 第 65 行）：
+##   * 开始：`Stamina ≥ SpeciesConfig.sprint_min_stamina`（5）
+##   * 继续：`Stamina > 0` —— 耗尽后**自动转行走**，不会停下、不会掉出移动能力
+func is_sprinting() -> bool:
+	_update_sprint_latch()
+	return _sprint_active
+
+
+func _update_sprint_latch() -> void:
+	if not want_sprint or is_crouching or survival == null or species_config == null:
+		_sprint_active = false
+		return
+	if _sprint_active:
+		_sprint_active = survival.has_any_stamina()
+	else:
+		_sprint_active = survival.has_min_stamina()
+
+
+## 跌落结算（T015）：腾空期间记录**最大下落速度**，落地那一帧结算一次。
+## 判据只看**垂直速度**（`Parameters.md`「落地前垂直速度绝对值」），水平速度不参与。
+func _track_fall() -> void:
+	var on_floor_now := is_on_floor()
+	if not on_floor_now:
+		_fall_speed = maxf(_fall_speed, absf(velocity.y))
+	elif not _was_on_floor:
+		_apply_fall_damage()
+	_was_on_floor = on_floor_now
+
+
+func _apply_fall_damage() -> void:
+	last_fall_speed = _fall_speed
+	_fall_speed = 0.0
+	if survival == null or species_config == null:
+		return
+	var safe: float = species_config.fall_safe_vertical_speed
+	if last_fall_speed <= safe:
+		return
+	var damage: float = minf(
+		species_config.max_health,
+		(last_fall_speed - safe) * species_config.fall_damage_scale
+	)
+	if damage > 0.0:
+		survival.apply_damage(damage, &"fall")

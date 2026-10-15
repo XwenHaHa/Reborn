@@ -52,6 +52,19 @@ enum FoodType { MEAT, SEED }
 @export var max_hunger: float = 100.0
 @export var max_thirst: float = 100.0
 @export var max_stamina: float = 100.0
+@export_group("Costs & Damage")
+## 能**开始**冲刺所需的最低体力（`Parameters.md` 第 65 行："Sprint 只有 Stamina≥5 可开始"）
+@export var sprint_min_stamina: float = 5.0
+## 饥渴**警告**阈值（`Parameters.md` 第 65 行：Hunger/Thirst ≤ 25 发警告）
+@export var low_stat_threshold: float = 25.0
+## 饥饿归零后的持续伤害（每秒）
+@export var starvation_damage_per_sec: float = 1.0
+## 水分归零后的持续伤害（每秒）。两项均归零时自然叠加为 2/s
+@export var dehydration_damage_per_sec: float = 1.0
+## 落地**无伤**的垂直速度上限（米/秒）。`Parameters.md`：「落地前垂直速度绝对值 ≤ 700」= 7 m/s
+@export var fall_safe_vertical_speed: float = 7.0
+## 超过安全速度后每 1 m/s 的伤害。`Parameters.md`：「(speed−700)×0.1」（cm/s 口径）→ 米制 ×10
+@export var fall_damage_scale: float = 10.0
 @export var hunger_loss_per_sec: float = 0.0
 @export var thirst_loss_per_sec: float = 0.0
 @export var sprint_stamina_per_sec: float = 0.0
@@ -132,4 +145,19 @@ func validate_config() -> PackedStringArray:
 			["max_thirst", max_thirst], ["max_stamina", max_stamina]]:
 		if float(pair[1]) <= 0.0 or not is_finite(float(pair[1])):
 			problems.append("%s 必须 > 0（生存容量）" % pair[0])
+	# 消耗与伤害（T015）：数值来自 `Parameters.md` 第 65 行（标"共同"，两物种同值）
+	var t015_non_negative := [
+		["sprint_min_stamina", sprint_min_stamina], ["low_stat_threshold", low_stat_threshold],
+		["starvation_damage_per_sec", starvation_damage_per_sec],
+		["dehydration_damage_per_sec", dehydration_damage_per_sec],
+		["fall_safe_vertical_speed", fall_safe_vertical_speed],
+		["fall_damage_scale", fall_damage_scale],
+	]
+	for pair in t015_non_negative:
+		if float(pair[1]) < 0.0 or not is_finite(float(pair[1])):
+			problems.append("%s 不能为负（T015 消耗/伤害）" % pair[0])
+	if fall_damage_scale <= 0.0:
+		problems.append("fall_damage_scale 必须 > 0（否则跌落永远不造成伤害）")
+	if low_stat_threshold > max_hunger or low_stat_threshold > max_thirst:
+		problems.append("low_stat_threshold 不应高于饥渴容量（否则一出生就报警）")
 	return problems

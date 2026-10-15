@@ -569,9 +569,24 @@ func hud_text() -> String:
 	])
 	if player.survival != null:
 		# 生存状态（T014）：数值来自 `WorldDirector` 的世界时间；暂停时不会下降
+		# 警告/危机标记（T015）：只读布尔量，阈值与扣血规则都在 `SurvivalController` 里
 		var ss: SurvivalState = player.survival.state
-		lines.append("survival: health=%.1f hunger=%.1f thirst=%.1f stamina=%.1f  world_time=%.1f" % [
-			ss.health, ss.hunger, ss.thirst, ss.stamina, player.world_time_now()
+		var warn := "none"
+		if player.survival.is_low_hunger() and player.survival.is_low_thirst():
+			warn = "hunger+thirst"
+		elif player.survival.is_low_hunger():
+			warn = "hunger"
+		elif player.survival.is_low_thirst():
+			warn = "thirst"
+		var crisis := "none"
+		if player.survival.is_starving() and player.survival.is_dehydrated():
+			crisis = "exhaustion"
+		elif player.survival.is_starving():
+			crisis = "starvation"
+		elif player.survival.is_dehydrated():
+			crisis = "dehydration"
+		lines.append("survival: health=%.1f hunger=%.1f thirst=%.1f stamina=%.1f  world_time=%.1f  warn=%s crisis=%s" % [
+			ss.health, ss.hunger, ss.thirst, ss.stamina, player.world_time_now(), warn, crisis
 		])
 	lines.append("params: walk=%.2f sprint=%.2f crouch=%.2f jump=%.2f step=%.3f accel=%.0f cam=%.3f fov=%.0f can_jump=%s" % [
 		p["walk_speed"], p["sprint_speed"], p["crouch_speed"], p["jump_velocity"],

@@ -246,6 +246,35 @@ $out = 'E:\Reborn\Builds\P0-Win64'
   （`WorldDirector.time_advancing = false`）都会让它停 → `dt = 0` → 不消耗。
 - **帧率无关**：`SurvivalController.UPDATE_INTERVAL = 0.2 s` 批量结算，但用**累计到的实际时间**；
   实测 30 / 60 / 144 Hz 跑 60 s 世界时间，饥渴消耗**完全一致**。
+## 2.11 T015 消耗、警告与基础伤害（VERIFIED — 2026-10-15）
+
+ ```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+& $g --headless --path $p --import
+& $g --headless --path $p --check-only --script 'res://tests/run_t015_costs.gd'          # 0
+
+# 1) 断言 93 条
+& $g --headless --path $p --script 'res://tests/run_t015_costs.gd' --quit-after 60000
+#    -> SUMMARY|checks=93|failures=0  RESULT|PASS   EXIT=0
+
+# 2) 包内复验
+& $g --headless --main-pack "$out\RebornSelfTest.pck" `
+    --script 'res://tests/run_t015_costs.gd' --quit-after 60000
+#    -> SUMMARY|checks=93|failures=0   EXIT=0
+ ```
+
+- **冲刺代价**：`sprint_stamina_per_sec` × **世界时间差**（不读 physics `delta`）；`spend_stamina()` 会重置
+  "消耗后延迟"，所以**冲刺期间不回复**（与 `RegenDelay` 语义一致）。
+- **双门控**：`Stamina ≥ sprint_min_stamina(5)` 才能**开始**冲刺；已经开始后跑到 **0** 才转行走（**保留基础移动**）。
+- **警告 / 危机**：`≤ low_stat_threshold(25)` 只是警告（不扣血）；任一归零后各扣 1/s、两项均零 2/s；`Health` 不自动恢复。
+- **跌落**：只算**落地前垂直速度**；`≤ fall_safe_vertical_speed(7 m/s)` 无伤，超过 `(v−7) × fall_damage_scale(10)`，上限 `max_health`。
+- **测试侧两条坑**（写测试时踩到）：① `spend_stamina(x)` 是**扣减**不是赋值 —— 想把体力设成某值要用
+  `spend_stamina(当前 − 目标)`，或直接赋值但要知道"消耗后延迟"从**上次 spend** 起算（直接赋值不重置延迟 → 测试期间体力会自动回复）；
+  ② 期望位移要扣**加速段**：`walk_speed×t − 0.5·walk_speed²/max_acceleration`（实测 0.963 vs 期望 0.930）。
+
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -542,3 +571,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-13 | **T012 完成**。新增 §2.8 导航数据与导航可行性命令（烘焙工具 + 79 条断言 + 包内复验）；§8 补 3 条实测坑（烘焙几何源只认区域子节点/分组模式、烘焙格与地图格必须一致且过小的 cell 会吃掉窄缝、运行期换 navmesh 后同进程查询不可靠要分进程）。 |
 | 2026-10-15 | **T013 完成**。新增 §2.9 调试入口与移动回归命令（159+73 条断言 + `-- t013` 六张截图 + 包内复验）；§8 补 6 条实测坑（引擎碰撞显示运行时画不出来→MD5 判据、`NavigationAgent3D` 无变换、代理路径短暂为空要服务端兜底、`.pck` 内文本不可读导致断言退化、站稳判据必须连续帧、并发写手覆盖 `project.godot`）。 |
 | 2026-10-15 | **T014 完成**。新增 §2.10 生存状态与统一时间入口命令（106 条断言 + 包内复验）；§8 补 2 条实测坑（测暂停不能用"等世界时间前进"的循环、`class_name` 新脚本先 `--import`）。 |
+| 2026-10-15 | **T015 完成**。新增 §2.11 消耗、警告与基础伤害命令（93 条断言 + 包内复验 + 两条测试侧坑：`spend_stamina` 是**扣减**不是赋值；期望位移要扣**加速段**）。 |

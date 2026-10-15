@@ -22,6 +22,9 @@ signal changed(state: SurvivalState)
 ## 生命归零时发出**恰好一次**（本世结束由上层处理：T030 结算流程）
 signal died(reason: StringName)
 
+## 饥渴警告状态变化：`kind` = `&"hunger"` / `&"thirst"`，`active` = 是否进入警告区（T015）
+signal warning_changed(kind: StringName, active: bool)
+
 ## 结算间隔（秒）。低频更新的意义是省 CPU，不是省时间精度
 const UPDATE_INTERVAL := 0.2
 
@@ -36,6 +39,9 @@ var _accum := 0.0
 ## 距上次"消耗体力"过了多久（秒）。初始为 INF：没消耗过就不该有"消耗后延迟"
 var _time_since_spend: float = INF
 var _dead := false
+## 上一次结算时的警告状态（用于只在**跨越阈值**时发事件，T015）
+var _low_hunger := false
+var _low_thirst := false
 
 
 func _init(p_config: SpeciesConfig, p_state: SurvivalState = null) -> void:
@@ -164,7 +170,77 @@ func validate_config() -> PackedStringArray:
 func _apply_interval(dt: float) -> void:
 	state.hunger = maxf(0.0, state.hunger - config.hunger_loss_per_sec * dt)
 	state.thirst = maxf(0.0, state.thirst - config.thirst_loss_per_sec * dt)
+	_update_warnings()
+	_apply_crisis_damage(dt)
 	if _time_since_spend >= config.regen_delay:
 		state.stamina = minf(config.max_stamina, state.stamina + config.stamina_regen_per_sec * dt)
 	_time_since_spend += dt
 	changed.emit(state)
+
+
+# ---------------------------------------------------------------------------
+# 警告与危机（T015；数值来自 `Docs/Parameters.md` 第 65 行）
+# ---------------------------------------------------------------------------
+
+## 饥饿是否在警告区（`Hunger ≤ low_stat_threshold`）
+func is_low_hunger() -> bool:
+	return config != null and state != null and state.hunger <= config.low_stat_threshold
+
+
+## 水分是否在警告区（`Thirst ≤ low_stat_threshold`）
+func is_low_thirst() -> bool:
+	return config != null and state != null and state.thirst <= config.low_stat_threshold
+
+
+## 饥饿是否已归零（归零后按 `starvation_damage_per_sec` 持续扣血）
+func is_starving() -> bool:
+	return state != null and state.hunger <= 0.0
+
+
+## 水分是否已归零
+func is_dehydrated() -> bool:
+	return state != null and state.thirst <= 0.0
+
+
+## 体力是否够**开始**冲刺（`Parameters.md`：「Sprint 只有 Stamina≥5 可开始」）
+func has_min_stamina() -> bool:
+	return config != null and state != null and state.stamina >= config.sprint_min_stamina
+
+
+## 体力是否还**允许继续**冲刺（耗尽 = 0 → 自动转行走，不会停下）
+func has_any_stamina() -> bool:
+	return state != null and state.stamina > 0.0
+
+
+## 警告状态变化事件：只在**跨越阈值**时各发一次（`kind` = `&"hunger"` / `&"thirst"`）
+func _update_warnings() -> void:
+	var low_hunger_now: bool = is_low_hunger()
+	var low_thirst_now: bool = is_low_thirst()
+	if low_hunger_now != _low_hunger:
+		_low_hunger = low_hunger_now
+		warning_changed.emit(&"hunger", low_hunger_now)
+	if low_thirst_now != _low_thirst:
+		_low_thirst = low_thirst_now
+		warning_changed.emit(&"thirst", low_thirst_now)
+
+
+## 饥渴归零后的持续伤害：任一归零各扣 1/s，两项均零则 2/s（自然叠加）。
+## 走 `apply_damage()` 通道 → 写 `last_damage_reason`、生命归零只发一次 `died`（不在别处另开一条改血路径）。
+func _apply_crisis_damage(dt: float) -> void:
+	var starving: bool = is_starving()
+	var dehydrated: bool = is_dehydrated()
+	if not starving and not dehydrated:
+		return
+	var rate: float = (
+		(config.starvation_damage_per_sec if starving else 0.0)
+		+ (config.dehydration_damage_per_sec if dehydrated else 0.0)
+	)
+	var damage: float = rate * dt
+	if damage <= 0.0:
+		return
+	var reason: StringName = &"exhaustion"
+	if starving and not dehydrated:
+		reason = &"starvation"
+	elif dehydrated and not starving:
+		reason = &"dehydration"
+	apply_damage(damage, reason)
