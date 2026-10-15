@@ -512,7 +512,7 @@ func mov_line() -> String:
 	var reason := "none"
 	if player.climb != null and not player.climb.last_probe.is_empty():
 		reason = str(player.climb.last_probe.get("reason", player.climb.last_probe.keys()))
-	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f|food=%s|water=%s" % [
+	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f|food=%s|water=%s|ai_state=%s|ai_reason=%s|ai_target=%s" % [
 		_frame, d["species_id"], d["position"].x, d["position"].y, d["position"].z,
 		d["velocity"].x, d["velocity"].y, d["velocity"].z, d["wish_speed"],
 		"crouch" if d["is_crouching"] else "stand", str(d["on_floor"]),
@@ -521,6 +521,7 @@ func mov_line() -> String:
 		float(d.get("thirst", -1.0)), float(d.get("stamina", -1.0)),
 		_interaction_id(d), _interaction_state(d), _interaction_progress(d),
 		_resource_units(&"food"), _resource_units(&"water"),
+		_ai_state(d), _ai_reason(d), _ai_target(d),
 	]
 
 
@@ -591,6 +592,40 @@ func _world_time_now() -> float:
 	if wd != null and is_instance_valid(wd):
 		return float(wd.get("world_time"))
 	return 0.0
+
+
+# ---------------------------------------------------------------------------
+# AI（T019）：**状态和原因可查看**
+# ---------------------------------------------------------------------------
+
+## HUD 的 AI 行：状态 / 原因 / 目标 / 失败诊断（没有 AI 组件时显示 `<none>`）
+func ai_line() -> String:
+	if player == null or player.ai == null:
+		return "ai: <none>"
+	var r: Dictionary = player.ai.ai_report()
+	return "ai: state=%s reason=%s target=%s elapsed=%.1fs path_failures=%d replans=%d nav_layer=%d(%s) dest=%s" % [
+		str(r.get("state", "?")), str(r.get("reason", "?")),
+		str(r.get("target", "")) if not str(r.get("target", "")).is_empty() else "<none>",
+		float(r.get("elapsed", 0.0)), int(r.get("path_failures", 0)), int(r.get("replans", 0)),
+		int(r.get("nav_layer", 0)), str(r.get("nav_layer_source", "?")),
+		str(r.get("has_destination", false))
+	]
+
+
+func _ai_state(d: Dictionary) -> String:
+	var a: Dictionary = d.get("ai", {})
+	return str(a.get("state", "-")) if not a.is_empty() else "-"
+
+
+func _ai_reason(d: Dictionary) -> String:
+	var a: Dictionary = d.get("ai", {})
+	return str(a.get("reason", "-")) if not a.is_empty() else "-"
+
+
+func _ai_target(d: Dictionary) -> String:
+	var a: Dictionary = d.get("ai", {})
+	var t := str(a.get("target", ""))
+	return t if not t.is_empty() else "-"
 
 
 # ---------------------------------------------------------------------------
@@ -673,6 +708,7 @@ func hud_text() -> String:
 			int(ist["commits"]), int(ist["cancels"])
 		])
 	lines.append(resource_line())
+	lines.append(ai_line())
 	lines.append("keys: F1=cat  F2=mouse  F3=collision  F4=path  F5=hud  (WASD/Space/Shift/Ctrl 同正式操作)")
 	return "\n".join(lines)
 

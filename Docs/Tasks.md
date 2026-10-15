@@ -44,7 +44,8 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T016 | **done（2026-10-15）** | `Docs/Evidence/T016.md`；`Docs/Tasks/T016.md`；`scripts/core/interactable.gd` + `scripts/characters/interaction.gd`；`tests/run_t016_interaction.gd` | 交互检测与动作接口：鸭子类型三方法（`has_method()`，**不用类型转换**）、`interactable` 层 `intersect_shape`（**不动身体 mask**）、距离与遮挡（猫 1.00 / 鼠 0.45，可 `range_override`；遮挡只认 `world_static`）、排序确定性（priority → 距离 → ID）且**只暴露一个目标**、`duration` 走世界时间（暂停冻结）、**同事务 ID 幂等**；**118/118** ×3 + 包内 118/118；全量回归全绿；包 470,000 B |
 | T017 | **done（2026-10-15）** | `Docs/Evidence/T017.md`；`Docs/Tasks/T017.md`；`scripts/world/resource_point.gd` + `scenes/world/resource_point.tscn`；`tests/run_t017_food_water.gd` | 食物、饮水与可取消交互：食物 1.5 s / Unit → Hunger 35、水 2 s → Thirst 40（**无限**）；**按物种判定食物类型**（猫肉 / 鼠种子，否则 `food_type`）；成功一次结算（扣 Unit + **夹紧**恢复）、取消与**受伤中断无收益**、耗尽 `empty`；**提交前复检**（禁用 / 超范围都拦且不扣不发）；固定食物容量 3、每 180 s 恢复 1 Unit（**跨多周期一次结算**）、300 s 失效机制；**128/128** ×3 + 包内 128/128；全量回归 15 套件全绿；包 499,624 B |
 | T018 | **done（2026-10-15）** | `Docs/Evidence/T018.md`；`Docs/Tasks/T018.md`；`scripts/ui/hud.gd` + `scenes/ui/hud.tscn`；`tests/run_t018_hud.gd`；`tool_capture_render.gd -- t018`；`Art/Probes/t018_hud_*.png` | 最小 HUD：状态（四项指标 `x / 上限`）、低值警告（`饥饿` / `缺水` / `饥饿 + 缺水`，≤25 触发）、交互提示（**进食/饮水** + 目标 ID + 进度百分比，无目标隐藏）；**信号驱动**（`_process` 只读交互进度）；**只观察不改状态**（同帧快照一致、`commit_count()=0`）；**调试数值不混入**（12 条禁词逐条断言）；**73/73** ×3 + 包内 73/73；全量回归 16 套件全绿；包 523,148 B；**视觉 3 图已判读**（HUD 左下角可见、警告橙黄色、动作提示正确） |
-| T019～T063 | pending | 无 | **T019（老鼠 NPC 觅食与警戒）**：有限状态机，觅食与警戒可切换；状态和原因可查看（前置 T012、T017） |
+| T019 | **done（2026-10-15）** | `Docs/Evidence/T019.md`；`Docs/Tasks/T019.md`；`scripts/ai/animal_ai.gd` + `scripts/ai/mouse_ai.gd`；`species_config.gd`（`ai_script`）+ `mouse.tres`；`animal_body.gd`（`ai_enabled` + `_sync_ai`）；`tests/run_t019_mouse_ai.gd` | 鼠 NPC 觅食与警戒：`EXPLORE ↔ FORAGE ↔ ALERT ↔ WAIT`；走去最近可用食物点（实测 **5.22 m / 4.75 s**、到达 0.389 m ≤ 0.45）→ 走**同一套**交互进食（units 3→2、Hunger +35）；警戒 **0.3 s** 上限（期间停手停脚、取消交互且**无收益**、可重复注入但不无限延长）；MoveTo 失败 **1 s / 最多 3 次 / 进 WAIT 后不永久阻塞**（实测 4 次失败、3 次重选、`no_progress`）；状态与原因可查看（`ai_report()` 16 字段 + HUD `ai:` + `MOV|ai_state=`）；**72/72** ×3 + 包内 72/72；全量回归 17 套件全绿；包 552,052 B |
+| T020～T063 | pending | 无 | **T020（老鼠视觉、听觉与逃跑）**：遮挡有效，噪声只有发生位置；到可达鼠洞躲藏，无路径时有超时回退（前置 T019） |
 
 ### T001 判定明细（Godot 版）
 
@@ -74,12 +75,12 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 E01 的视觉部分**已补验通过**；**E02 本次通过**（`Docs/Evidence/T005.md`）；**E03 已通过**（T006 骨骼往返 65/65）。
 
 ## 选择顺序
-T001 / T002 / T003 / T005 / T006 / T007 / T008 / T009 / T010 / T011 / T012 / T013 / T014 / T015 / T016 / T017 / **T018 均已完成**；台阶、导航、调试入口、生存时间入口、交互接口、食物/饮水与正式 HUD 已落地。
+T001 / T002 / T003 / T005 / T006 / T007 / T008 / T009 / T010 / T011 / T012 / T013 / T014 / T015 / T016 / T017 / T018 / **T019 均已完成**；台阶、导航、调试入口、生存时间入口、交互接口、食物/饮水、正式 HUD 与**鼠 NPC 状态机**已落地。
 （口径变化：T011/T012 是"游戏代码零改动、差异全在配置/关卡/导航数据"；**T013 起开始真的改游戏代码** —— `step_climb` 抬升修复、调试入口、`SurvivalState`/`SurvivalController`、`AnimalBody` 接入、`Interactable`/`InteractionDetector`/`ResourcePoint` 与动作事务。）
-**P0 阶段门完成**；**P1 进行中**（T008/T009/T010/T011/T012/T013/T014/T015/T016/T017/**T018** 完成 → 下一步 **T019 老鼠 NPC 觅食与警戒**）。
+**P0 阶段门完成**；**P1 进行中**（T008～T019 连续完成 → 下一步 **T020 老鼠视觉、听觉与逃跑**）。
 
 下一步可执行（按建议优先级）：
-1. **T019（老鼠 NPC 觅食与警戒）**（4～8h，前置 T012、T017）：有限状态机，觅食与警戒可切换；**状态和原因可查看**。
+1. **T020（老鼠视觉、听觉与逃跑）**（4～8h，前置 T019）：遮挡有效、噪声只有发生位置；到可达鼠洞躲藏，**无路径时有超时回退**。
    顺带带上待定：**猫跨 0.50 屏障是否加 `NavigationLink3D`**（T013 §9）、**跳跃是否消耗体力**（T015 §9）、
    **交互是否要朝向/视锥限制**（T016/T017 §9）、**食物/水恢复值是否按物种分列**（T017 §9）、**"调参页"是否要做成可交互面板**（T018 §8）。
    **交互用"按住开始/松开取消"是否最终设计、距离是否要含竖直差**（T016 §7）。

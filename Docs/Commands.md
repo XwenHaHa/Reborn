@@ -393,6 +393,40 @@ $out = 'E:\Reborn\Builds\P0-Win64'
 2. **HUD 进度必须用真实世界时间**：合成 `tick()` 会让 HUD 显示 `0%`（身体每物理帧 `tick()` 把时间拉回，T016 同一个坑）。
 3. **"状态不变"断言要在同一帧内比**：跨帧会因饥渴按时间下降而失败（实测 `hunger 99.98`）。
 4. **窗口模式捕获用后台执行 + 轮询**：`--quit-after` 是帧数，写太大等于没上限（一次前台跑 300 s 超时）；图落 `user://` 要复制。
+## 2.15 T019 老鼠 NPC 觅食与警戒（VERIFIED — 2026-10-15）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+& $g --headless --path $p --import                                                     # 0
+& $g --headless --path $p --check-only --script 'res://tests/run_t019_mouse_ai.gd'     # 0
+
+# 1) 断言 72 条（连续三次一致；含真实物理帧移动，单次约 1 分钟）
+& $g --headless --path $p --script 'res://tests/run_t019_mouse_ai.gd' --quit-after 180000
+#    -> SUMMARY|checks=72|failures=0  RESULT|PASS   EXIT=0
+
+# 2) 包内复验
+& $g --headless --main-pack "$out\RebornSelfTest.pck" `
+    --script 'res://tests/run_t019_mouse_ai.gd' --quit-after 180000
+#    -> SUMMARY|checks=72|failures=0   EXIT=0
+```
+
+- **AI 只是组件**：`AnimalAI extends Node` 挂在身体下，只写 `move_intent`；**身体仍负责位移与生存**。
+- **默认关闭**：`AnimalBody.ai_enabled` 默认 false，由生成 NPC 的一方显式打开（否则夹具/玩家身体会被 AI 抢走移动意图）。
+- **脚本来自配置**：`SpeciesConfig.ai_script`（鼠 = `mouse_ai.gd`，猫留空），**不写物种名判断**。
+- **时间用世界时间**：Alert 0.3 s / 失败窗 1 s / `WAIT` 1 s 都取 `world_time_now()` 的差，暂停不推进。
+- **失败处理**：1 s 内位移 < 0.05 m → 重选（≤3 次）→ 进 `WAIT` 1 s → 回 `EXPLORE`（**不永久阻塞**），诊断进 `ai_report()`。
+- **不每帧请求路径**：同一目标不重复设 `target_position`（实测 1 s 内 `destination_sets` 保持 1）。
+
+### 本任务踩到的坑（**会污染别的测试**）
+
+1. **AI 默认开着会让所有既有测试回退**：给 `mouse.tres` 加脚本后，凡生成鼠身体的测试（T010/T011/T012/T013b/T015/T017/T018）
+   都被 AI 抢走 `move_intent` → 一次回归 **57 条失败**。修法：`ai_enabled` 默认 false + `_sync_ai()` 显式开关。
+2. **`NavigationAgent3D.navigation_layers` 是位掩码**：设成 `99` 仍**包含位 1**（鼠层）→ 依然可达，测不出"失败"；要用与目标层**没有交集**的值。
+3. **"没有路径"时必须清空 `move_intent`**：否则残留上一帧方向继续走，看起来像"不可达也能走通"（会掩盖整个 `WAIT` 路径）。
+4. **测试的"直到"条件不能一开始就为真**：`state == forage` 在进入移动时就成立 → 立即命中；要用只在真正到达时成立的条件（如 `state_reason() == "arrived"`）。
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -693,3 +727,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-15 | **T016 完成**。新增 §2.12 交互检测与动作接口命令（118 条断言 + 包内复验 + 五条实测坑：`Area3D` 自带 native `priority`；`add_child` 后设 `global_position` 会让物理体在原点存在一帧、把身体推开 0.1877 m；每帧 `detect()` 让事件计数不能硬断言；合成 `tick()` 与真实帧混用会让进度倒退；进度基准要可读）。 |
 | 2026-10-15 | **T017 完成**。新增 §2.13 食物、饮水与可取消交互命令（128 条断言 + 包内复验 + 四条实测坑：lambda 按值捕获导致计数永远是 0；`kind` setter 重置同类型默认值；`_ready` 用真实时间排期与假时间测试冲突；继承要显式 `super()`）。 |
 | 2026-10-15 | **T018 完成**。新增 §2.14 最小 HUD 与调参页命令（73 条断言 + `-- t018` 三张截图 + 包内复验 + 四条实测坑：`mouse_filter` 默认 STOP；带类型参数遇已释放目标报错；HUD 进度必须用真实世界时间；状态不变断言要在同帧比）。 |
+| 2026-10-15 | **T019 完成**。新增 §2.15 鼠 NPC 觅食与警戒命令（72 条断言 + 包内复验 + 四条实测坑：AI 默认开启会让 7 个既有套件回退 57 条；`navigation_layers` 是位掩码；无路径要清 `move_intent`；测试的"直到"条件不能一开始就为真）。 |

@@ -85,6 +85,15 @@ var _pitch: float = 0.0
 var survival: SurvivalController = null
 ## 交互检测与动作接口（T016）。由 `apply_config()` 建立
 var interaction: InteractionDetector = null
+## 行为状态机（T019）。只有 `SpeciesConfig.ai_script` 非空**且** `ai_enabled` 打开时才建（鼠有脚本；猫留到 T023）
+var ai: AnimalAI = null
+## 是否让 AI 驱动这只身体。**默认关闭**：玩家身体不用，测试夹具也不会被 AI 抢走 `move_intent`；
+## 生成 NPC 的一方（将来的种群生成器 / 夹具）显式打开。
+@export var ai_enabled: bool = false:
+	set(value):
+		ai_enabled = value
+		if is_node_ready():
+			_sync_ai()
 ## 冲刺档实际是否生效（受"开始/继续"双门控；T015）
 var _sprint_active := false
 ## 最近一次落地前的**最大下落速度**（米/秒，正数）。落地后保留，供诊断与断言（T015）
@@ -136,6 +145,9 @@ func _physics_process(delta: float) -> void:
 	_read_input()
 	_apply_stance()
 
+	# AI（T019）：只有显式打开 `ai_enabled` 的 NPC 身体才由状态机写 `move_intent`
+	if ai != null and ai_enabled:
+		ai.tick(world_time_now())
 	var direction := Vector3.ZERO
 	if move_intent != Vector2.ZERO:
 		direction = (transform.basis * Vector3(move_intent.x, 0.0, move_intent.y)).normalized()
@@ -352,6 +364,33 @@ func apply_config() -> void:
 		interaction.name = "Interaction"
 		add_child(interaction)
 	interaction.setup(self, species_config)
+	# 行为状态机（T019）：脚本来自配置；**默认关闭**，由生成者显式打开 `ai_enabled`
+	# （否则测试夹具/玩家身体会被 AI 抢走移动意图 —— 实测会让 T010/T011/T012/T017 大面积回退）
+	_sync_ai()
+
+
+## 按配置与 `ai_enabled` 同步 AI 组件（T019）。关掉时会释放既有 AI，避免它继续写 `move_intent`。
+func _sync_ai() -> void:
+	var want: Script = species_config.ai_script if species_config != null else null
+	if want == null or not ai_enabled:
+		if ai != null and is_instance_valid(ai):
+			ai.queue_free()
+		ai = null
+		return
+	if ai != null and is_instance_valid(ai) and ai.get_script() == want:
+		ai.setup(self)
+		return
+	if ai != null and is_instance_valid(ai):
+		ai.queue_free()
+	ai = null
+	var instance: Object = want.new()
+	if not (instance is AnimalAI):
+		push_warning("SpeciesConfig.ai_script 不是 AnimalAI 子类：%s" % want)
+		return
+	ai = instance as AnimalAI
+	ai.name = "AI"
+	add_child(ai)
+	ai.setup(self)
 
 
 ## 能力查询：全部读配置，调用方不需要知道是哪个物种
@@ -412,6 +451,9 @@ func debug_state() -> Dictionary:
 		"interaction": interaction.stats() if interaction != null else {},
 		"interaction_target_id": interaction.current_target_id() if interaction != null else "",
 		"interacting": interaction.is_interacting() if interaction != null else false,
+		"ai": ai.ai_report() if ai != null else {},
+		"ai_state": ai.state_id() if ai != null else &"",
+		"ai_reason": ai.state_reason() if ai != null else &"",
 		"player_controlled": player_controlled,
 	}
 

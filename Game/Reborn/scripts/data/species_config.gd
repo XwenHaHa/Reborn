@@ -82,6 +82,13 @@ enum FoodType { MEAT, SEED }
 @export var can_use_mouse_tunnel: bool = false
 
 
+## 行为（T019）：指向驱动这个物种的 AI 脚本（`AnimalAI` 子类）。
+## 用**脚本引用**而不是"物种名判断"来选择状态机 —— 差异全在 `resources/species/*.tres` 里。
+## 留空表示"暂时没有 AI"（猫的状态机属 T023）。
+@export_group("Behavior")
+@export var ai_script: Script = null
+
+
 ## Godot 的 `CapsuleShape3D.height` 是含两端半球的总高
 func capsule_height() -> float:
 	return capsule_half_height * 2.0
