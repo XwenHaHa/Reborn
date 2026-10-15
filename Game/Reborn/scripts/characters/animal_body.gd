@@ -61,6 +61,10 @@ var move_intent: Vector2 = Vector2.ZERO
 var want_sprint: bool = false
 var want_crouch: bool = false
 var want_jump: bool = false
+## 交互键是否按住（T016；松开 = 取消进行中的交互）
+var want_interact: bool = false
+## 上一物理帧的交互键状态（用来取"按下沿/松开沿"）
+var _interact_was_down: bool = false
 
 ## 是否处于蹲姿
 var is_crouching: bool = false
@@ -79,6 +83,8 @@ var climb: StepClimb = null
 var _pitch: float = 0.0
 ## 生存状态推进器（T014）。由 `apply_config()` 建立
 var survival: SurvivalController = null
+## 交互检测与动作接口（T016）。由 `apply_config()` 建立
+var interaction: InteractionDetector = null
 ## 冲刺档实际是否生效（受"开始/继续"双门控；T015）
 var _sprint_active := false
 ## 最近一次落地前的**最大下落速度**（米/秒，正数）。落地后保留，供诊断与断言（T015）
@@ -157,6 +163,11 @@ func _physics_process(delta: float) -> void:
 		# 跌落结算（T015）：每物理帧跟踪腾空速度，落地那帧扣血
 		_track_fall()
 
+	# 交互（T016）：每物理帧刷新**唯一**目标，并按世界时间推进交互时长（暂停时喂进来的时间不前进）
+	if interaction != null:
+		_update_interact_input()
+		interaction.tick(world_time_now())
+		interaction.detect()
 	# 位移交给台阶组件（能上台阶就抬上去，否则普通 move_and_slide）
 	var motion := Vector3(velocity.x * delta, 0.0, velocity.z * delta)
 	if climb != null:
@@ -187,6 +198,31 @@ func _read_input() -> void:
 	want_crouch = Input.is_action_pressed("crouch")
 	# 与灰盒一致：不做跳跃缓冲（空中按键落地不自动跳）
 	want_jump = Input.is_action_just_pressed("jump")
+	want_interact = Input.is_action_pressed("interact")
+
+
+
+## 交互按键（T016）：按住 `interact` 开始、松开取消；`duration == 0` 的目标按下即完成。
+## 与正式操作同一条代码路径（测试可直接调 `interaction.press_interact()` / `release_interact()`）。
+func _update_interact_input() -> void:
+	if interaction == null:
+		return
+	if not player_controlled:
+		_interact_was_down = want_interact
+		return
+	if want_interact and not _interact_was_down:
+		interaction.press_interact()
+	elif not want_interact and _interact_was_down:
+		interaction.release_interact()
+	_interact_was_down = want_interact
+
+
+## 交互判定原点（"眼睛"）：相机全局位置；没有相机时退回"胶囊中心 + 半高"
+func eye_position() -> Vector3:
+	if camera != null:
+		return camera.global_position
+	var half := species_config.capsule_half_height if species_config != null else 0.0
+	return global_position + Vector3(0.0, half, 0.0)
 
 
 ## 蹲/站切换：只有"想蹲"或"想站且头顶够"才真的切换
@@ -302,6 +338,12 @@ func apply_config() -> void:
 	survival = SurvivalController.new(
 		species_config, survival.state if survival != null else null
 	)
+	# 交互检测与动作接口（T016）：组件只建一次，热改配置时只换配置引用（不重建，避免丢掉事务表）
+	if interaction == null:
+		interaction = InteractionDetector.new()
+		interaction.name = "Interaction"
+		add_child(interaction)
+	interaction.setup(self, species_config)
 
 
 ## 能力查询：全部读配置，调用方不需要知道是哪个物种
@@ -359,6 +401,9 @@ func debug_state() -> Dictionary:
 		"low_thirst": survival.is_low_thirst() if survival != null else false,
 		"starving": survival.is_starving() if survival != null else false,
 		"dehydrated": survival.is_dehydrated() if survival != null else false,
+		"interaction": interaction.stats() if interaction != null else {},
+		"interaction_target_id": interaction.current_target_id() if interaction != null else "",
+		"interacting": interaction.is_interacting() if interaction != null else false,
 		"player_controlled": player_controlled,
 	}
 

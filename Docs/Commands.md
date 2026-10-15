@@ -271,9 +271,50 @@ $out = 'E:\Reborn\Builds\P0-Win64'
 - **双门控**：`Stamina ≥ sprint_min_stamina(5)` 才能**开始**冲刺；已经开始后跑到 **0** 才转行走（**保留基础移动**）。
 - **警告 / 危机**：`≤ low_stat_threshold(25)` 只是警告（不扣血）；任一归零后各扣 1/s、两项均零 2/s；`Health` 不自动恢复。
 - **跌落**：只算**落地前垂直速度**；`≤ fall_safe_vertical_speed(7 m/s)` 无伤，超过 `(v−7) × fall_damage_scale(10)`，上限 `max_health`。
+
 - **测试侧两条坑**（写测试时踩到）：① `spend_stamina(x)` 是**扣减**不是赋值 —— 想把体力设成某值要用
   `spend_stamina(当前 − 目标)`，或直接赋值但要知道"消耗后延迟"从**上次 spend** 起算（直接赋值不重置延迟 → 测试期间体力会自动回复）；
   ② 期望位移要扣**加速段**：`walk_speed×t − 0.5·walk_speed²/max_acceleration`（实测 0.963 vs 期望 0.930）。
+## 2.12 T016 交互检测与动作接口（VERIFIED — 2026-10-15）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+& $g --headless --path $p --import          # 新增 class_name 后**必须**先 import，否则测试报 Identifier ... not declared
+& $g --headless --path $p --check-only --script 'res://tests/run_t016_interaction.gd'   # 0
+
+# 1) 断言 118 条（连续三次一致）
+& $g --headless --path $p --script 'res://tests/run_t016_interaction.gd' --quit-after 90000
+#    -> SUMMARY|checks=118|failures=0  RESULT|PASS   EXIT=0
+
+# 2) 包内复验
+& $g --headless --main-pack "$out\RebornSelfTest.pck" `
+    --script 'res://tests/run_t016_interaction.gd' --quit-after 90000
+#    -> SUMMARY|checks=118|failures=0   EXIT=0
+```
+
+- **目标接口是鸭子类型**：只 `has_method("query_/commit_/cancel_interaction")`，**不做类型转换**；`Interactable` 只是默认实现。
+- **只查 `interactable` 层**：`intersect_shape`（球半径 = `interaction_range + probe_extra_range(0.5)`）+ `collide_with_areas = true` + **显式 mask**；
+  **不要改动物的 `collision_mask`**（那是移动用的，T009/T010 断言锁定为只有 `world_static`）。
+- **遮挡只认 `world_static`**：一次 `intersect_ray`（`collide_with_areas = false`）；草叶视觉遮挡、`safe_spot` 层都不算物理遮挡。
+- **排序确定性**：`interaction_priority` 降序 → 距离升序 → ID 字典序；对外**只暴露一个** `current_target()`。
+- **时长走世界时间**：`detector.tick(world_time)` 由身体每物理帧喂；暂停（`time_advancing = false`）时喂进来的值不前进 → 进度自然冻结。
+- **事务幂等**：同一 `transaction_id` 第二次 `commit` **直接返回既有结果、不再调用目标**（`commit_call_count()` 保持 1）。
+
+### 本任务踩到的坑（**会污染别的测试**）
+
+1. **`Area3D` 自带 native `priority`（float）** → `@export var priority: int` 直接报 `Member "priority" redefined`。用 `interaction_priority` 这类带前缀的名字。
+2. **`add_child()` 之后再设 `global_position`，物体会在原点存在一帧**：新节点与地面/身体重叠 → 引擎把**身体** depenetrate 推开。
+   实测：加一个 2 m 外、根本碰不到的 `StaticBody3D`，身体仍从 `(0, 0.240127, 0)` 被推到 `(0, 0.238788, 0.187743)`（**0.1877 m**），
+   于是"0.90 m 的目标"变成 1.09 m —— 断言看到 `range` 而不是 `occluded`。
+   **修法：先设 `position` 再 `add_child()`。** 所有"平地 + 生成物"的夹具都要照做。
+3. **组件每物理帧 `detect()` 时，`target_changed` 事件数不能硬断言"恰好 1 次"**（目标分两次加入就有两次切换）。
+   改成"最后一次事件 = 当前目标" + "同目标重复检测事件数不变"。
+4. **不要混用合成 `tick()` 与真实物理帧**：`press_interact()` 后用假时间推进、再让真实帧喂时间，`_last_world_time` 会被拉回 → 进度**倒退**。
+   要证明"暂停不推进"，用真实时间推进一段（记进度）→ 关 `time_advancing` → 再推一段 → 比对。
+5. **进度基准要可读**：暴露 `interaction_start_time()`；否则断言只能用"身体当前时间"近似（差一帧就差 0.03 进度）。
 
 ## 3. Blender（VERIFIED）
 
@@ -572,3 +613,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-15 | **T013 完成**。新增 §2.9 调试入口与移动回归命令（159+73 条断言 + `-- t013` 六张截图 + 包内复验）；§8 补 6 条实测坑（引擎碰撞显示运行时画不出来→MD5 判据、`NavigationAgent3D` 无变换、代理路径短暂为空要服务端兜底、`.pck` 内文本不可读导致断言退化、站稳判据必须连续帧、并发写手覆盖 `project.godot`）。 |
 | 2026-10-15 | **T014 完成**。新增 §2.10 生存状态与统一时间入口命令（106 条断言 + 包内复验）；§8 补 2 条实测坑（测暂停不能用"等世界时间前进"的循环、`class_name` 新脚本先 `--import`）。 |
 | 2026-10-15 | **T015 完成**。新增 §2.11 消耗、警告与基础伤害命令（93 条断言 + 包内复验 + 两条测试侧坑：`spend_stamina` 是**扣减**不是赋值；期望位移要扣**加速段**）。 |
+| 2026-10-15 | **T016 完成**。新增 §2.12 交互检测与动作接口命令（118 条断言 + 包内复验 + 五条实测坑：`Area3D` 自带 native `priority`；`add_child` 后设 `global_position` 会让物理体在原点存在一帧、把身体推开 0.1877 m；每帧 `detect()` 让事件计数不能硬断言；合成 `tick()` 与真实帧混用会让进度倒退；进度基准要可读）。 |

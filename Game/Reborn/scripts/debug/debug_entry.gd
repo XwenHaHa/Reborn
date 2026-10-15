@@ -512,14 +512,33 @@ func mov_line() -> String:
 	var reason := "none"
 	if player.climb != null and not player.climb.last_probe.is_empty():
 		reason = str(player.climb.last_probe.get("reason", player.climb.last_probe.keys()))
-	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f" % [
+	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f" % [
 		_frame, d["species_id"], d["position"].x, d["position"].y, d["position"].z,
 		d["velocity"].x, d["velocity"].y, d["velocity"].z, d["wish_speed"],
 		"crouch" if d["is_crouching"] else "stand", str(d["on_floor"]),
 		"free" if d["headroom_free"] else "blocked", reason, last_path_points, last_path_length,
 		float(d.get("health", -1.0)), float(d.get("hunger", -1.0)),
 		float(d.get("thirst", -1.0)), float(d.get("stamina", -1.0)),
+		_interaction_id(d), _interaction_state(d), _interaction_progress(d),
 	]
+
+
+## 当前交互目标 ID（无目标为 `-`）。**只显示一个**目标（T016：不列出全部候选）
+func _interaction_id(d: Dictionary) -> String:
+	var id := String(d.get("interaction_target_id", ""))
+	return id if not id.is_empty() else "-"
+
+
+## 交互动作状态（`idle` / `interacting`）
+func _interaction_state(d: Dictionary) -> String:
+	var st: Dictionary = d.get("interaction", {})
+	return String(st.get("state", "idle"))
+
+
+## 交互进度 0..1（`duration == 0` 立即式不会出现中间值）
+func _interaction_progress(d: Dictionary) -> float:
+	var st: Dictionary = d.get("interaction", {})
+	return float(st.get("progress", 0.0))
 
 
 # ---------------------------------------------------------------------------
@@ -592,6 +611,15 @@ func hud_text() -> String:
 		p["walk_speed"], p["sprint_speed"], p["crouch_speed"], p["jump_velocity"],
 		p["max_step_height"], p["max_acceleration"], p["camera_offset_z"], p["fov"], str(p["can_jump"])
 	])
+	if player.interaction != null:
+		# 交互（T016）：**只显示一个**目标；拒绝理由与计数来自 `InteractionDetector`
+		var ist: Dictionary = player.interaction.stats()
+		var itarget := player.interaction.current_target_id()
+		lines.append("interact: target=%s allowed=%s state=%s progress=%.2f reason=%s skipped=%d commits=%d cancels=%d" % [
+			itarget if not itarget.is_empty() else "<none>", str(ist["allowed"]), str(ist["state"]),
+			float(ist["progress"]), str(ist["deny_reason"]), int(ist["skipped"]),
+			int(ist["commits"]), int(ist["cancels"])
+		])
 	lines.append("keys: F1=cat  F2=mouse  F3=collision  F4=path  F5=hud  (WASD/Space/Shift/Ctrl 同正式操作)")
 	return "\n".join(lines)
 
