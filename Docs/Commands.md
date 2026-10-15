@@ -316,6 +316,43 @@ $out = 'E:\Reborn\Builds\P0-Win64'
    要证明"暂停不推进"，用真实时间推进一段（记进度）→ 关 `time_advancing` → 再推一段 → 比对。
 5. **进度基准要可读**：暴露 `interaction_start_time()`；否则断言只能用"身体当前时间"近似（差一帧就差 0.03 进度）。
 
+## 2.13 T017 食物、饮水与可取消交互（VERIFIED — 2026-10-15）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+& $g --headless --path $p --import          # 新增 class_name / 场景后必须 import
+& $g --headless --path $p --check-only --script 'res://tests/run_t017_food_water.gd'   # 0
+
+# 1) 断言 128 条（连续三次一致）
+& $g --headless --path $p --script 'res://tests/run_t017_food_water.gd' --quit-after 90000
+#    -> SUMMARY|checks=128|failures=0  RESULT|PASS   EXIT=0
+
+# 2) 包内复验
+& $g --headless --main-pack "$out\RebornSelfTest.pck" `
+    --script 'res://tests/run_t017_food_water.gd' --quit-after 90000
+#    -> SUMMARY|checks=128|failures=0   EXIT=0
+```
+
+- **数值归资源点**（`ResourcePoint`）：食物 1.5 s / 1 Unit → Hunger 35、容量 3、每 180 s 恢复 1；
+  水 2 s → Thirst 40 且 `infinite`；由 `kind` 的 setter 套默认值 —— **覆盖数值必须写在 `kind` 之后**。
+- **按物种判定食物**：用 `SpeciesConfig.can_eat(food_type)`（猫 MEAT / 鼠 SEED），不允许 → `deny_reason = food_type`。
+- **收益原子化**：`commit_interaction()` 里"扣 1 Unit → `restore_*`（内部夹紧）"连续完成；失败分支提前返回，不扣不发。
+- **取消 / 受伤中断无收益**：`cancel_interaction()` 什么都不改；`AnimalBody` 监听 `survival.changed`，health 下降就 `release_interact(&"hurt")`。
+- **提交前复检**：`InteractionDetector._recheck_target()` 在调目标前重判 enabled / query / 距离 / 视线，失败则**不调用目标**。
+- **恢复用绝对世界时间**：`advance_to()` 里 `while` 结算**所有**经过的周期；满容量 `next_refill_at = 0`；消耗后不排期（下一次 `advance_to()` 统一排期）。
+- **`ResourceRecord` 形状**：`to_record()` 十个字段与 `TechnicalDesign.md` §3 一致，供 T037 存档。
+
+### 本任务踩到的坑
+
+1. **GDScript 的 lambda 按值捕获局部变量**：`var n := 0` + `signal.connect(func(...): n += 1)` —— 信号发了但外面读到的 `n` **永远是 0**。
+   计数必须放数组（`var c := [0]` → `c[0] += 1`）或字典。
+2. **`kind` 的 setter 会重置同类型默认值**：场景/测试里覆盖 `units` / `capacity` / `interaction_duration` 必须写在 `kind` 之后。
+3. **`_ready()` 用真实世界时间排期，会和用假时间的测试打架**：`advance_to(2000)` 一次补掉十几个周期。
+   加 `@export var auto_advance: bool`（运行期 true、假时间测试 false）+ 测试把 `next_refill_at` 归 0 后显式推进。
+4. **继承 `Interactable` 要显式 `super()`**（`_init` / `_ready` / `deny_reason_for` / `cancel_interaction` 都覆盖了）。
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -614,3 +651,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-15 | **T014 完成**。新增 §2.10 生存状态与统一时间入口命令（106 条断言 + 包内复验）；§8 补 2 条实测坑（测暂停不能用"等世界时间前进"的循环、`class_name` 新脚本先 `--import`）。 |
 | 2026-10-15 | **T015 完成**。新增 §2.11 消耗、警告与基础伤害命令（93 条断言 + 包内复验 + 两条测试侧坑：`spend_stamina` 是**扣减**不是赋值；期望位移要扣**加速段**）。 |
 | 2026-10-15 | **T016 完成**。新增 §2.12 交互检测与动作接口命令（118 条断言 + 包内复验 + 五条实测坑：`Area3D` 自带 native `priority`；`add_child` 后设 `global_position` 会让物理体在原点存在一帧、把身体推开 0.1877 m；每帧 `detect()` 让事件计数不能硬断言；合成 `tick()` 与真实帧混用会让进度倒退；进度基准要可读）。 |
+| 2026-10-15 | **T017 完成**。新增 §2.13 食物、饮水与可取消交互命令（128 条断言 + 包内复验 + 四条实测坑：lambda 按值捕获导致计数永远是 0；`kind` setter 重置同类型默认值；`_ready` 用真实时间排期与假时间测试冲突；继承要显式 `super()`）。 |

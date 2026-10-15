@@ -91,6 +91,8 @@ var _sprint_active := false
 var last_fall_speed := 0.0
 var _fall_speed := 0.0
 var _was_on_floor := true
+## 最近一次看到的生命值（用于判断"这次 `changed` 是否掉血"→ 受伤中断交互；T017）
+var _last_health: float = INF
 ## 无 Autoload 环境下的兜底时钟（**有 `WorldDirector` 时完全不用它**，两套时间源不会混用）
 var _fallback_world_time := 0.0
 var _world_director: Node = null
@@ -338,6 +340,12 @@ func apply_config() -> void:
 	survival = SurvivalController.new(
 		species_config, survival.state if survival != null else null
 	)
+	# 受伤/死亡会中断进行中的交互（`Parameters.md` 第 75 行：受伤中断交互、被打断无收益；T017）
+	if not survival.changed.is_connected(_on_survival_changed):
+		survival.changed.connect(_on_survival_changed)
+	if not survival.died.is_connected(_on_survival_died):
+		survival.died.connect(_on_survival_died)
+	_last_health = survival.state.health
 	# 交互检测与动作接口（T016）：组件只建一次，热改配置时只换配置引用（不重建，避免丢掉事务表）
 	if interaction == null:
 		interaction = InteractionDetector.new()
@@ -477,3 +485,20 @@ func _apply_fall_damage() -> void:
 	)
 	if damage > 0.0:
 		survival.apply_damage(damage, &"fall")
+
+
+# ---------------------------------------------------------------------------
+# 生存事件 → 交互中断（T017）
+# ---------------------------------------------------------------------------
+
+## 掉血就中断进行中的交互（`Parameters.md` 第 75 行）。恢复（加值）不会中断。
+func _on_survival_changed(state: SurvivalState) -> void:
+	if interaction != null and interaction.is_interacting() and state.health < _last_health:
+		interaction.release_interact(&"hurt")
+	_last_health = state.health
+
+
+## 死亡同样中断（交互不能跨死亡继续）
+func _on_survival_died(_reason: StringName) -> void:
+	if interaction != null and interaction.is_interacting():
+		interaction.release_interact(&"died")

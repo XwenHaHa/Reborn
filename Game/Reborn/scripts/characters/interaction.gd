@@ -235,6 +235,19 @@ func commit_transaction(transaction_id: String, target: Node = null) -> Dictiona
 	var t := target if target != null else _target
 	if t == null:
 		return {"success": false, "reason": &"no_target"}
+	# **提交前复检**（`TechnicalDesign.md` §4 第 184 行：距离、视线和允许物种在查询**及提交时**都检查）。
+	# 目标被禁用 / 资源耗尽 / 食物类型不允许 / 移出范围 / 被挡住 → 失败且**不调用目标**（因此不扣资源、不发收益）
+	var recheck := _recheck_target(t)
+	if recheck != &"":
+		var failed := {
+			"success": false,
+			"reason": recheck,
+			"transaction_id": transaction_id,
+			"interaction_id": _target_id_of(t),
+		}
+		_transactions[transaction_id] = failed
+		interaction_committed.emit(transaction_id, failed["interaction_id"], false, recheck)
+		return failed
 	var raw: Dictionary = t.call(METHOD_COMMIT, _body, transaction_id)
 	var res := {
 		"success": bool(raw.get("success", false)),
@@ -363,6 +376,28 @@ func _query(node: Node) -> Dictionary:
 	if node == null or not node.has_method(METHOD_QUERY):
 		return {"allowed": false, "action_id": &"", "duration": 0.0, "deny_reason": &"not_interactable"}
 	return node.call(METHOD_QUERY, _body)
+
+
+## 提交前复检：返回拒绝理由（`&""` = 仍然有效）。
+## 和检测阶段用同一套判定（距离 / 视线 / enabled / 目标自己的 `query_interaction`），
+## 差别是**不排序、只看这一个目标**——用于"查询及提交时都检查"。
+func _recheck_target(t: Node) -> StringName:
+	if t == null or not is_instance_valid(t) or not t.is_inside_tree():
+		return &"gone"
+	if not _implements_protocol(t):
+		return &"not_interactable"
+	if not _is_enabled(t):
+		return &"disabled"
+	var q: Dictionary = t.call(METHOD_QUERY, _body)
+	if not bool(q.get("allowed", false)):
+		return _reason_of(q)
+	var eye := _eye_position()
+	var point := _point_of(t)
+	if eye.distance_to(point) > _range_for(t):
+		return &"range"
+	if not _has_line_of_sight(eye, point):
+		return &"occluded"
+	return &""
 
 
 ## 视线：从眼睛到交互点的一次 `ray_cast`，**只认 `world_static`**（草叶视觉遮挡不算物理遮挡）

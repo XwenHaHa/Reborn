@@ -1,0 +1,35 @@
+[gd_scene load_steps=3 format=3]
+
+; 固定食物点 / 饮水点（T017）。真源：Docs/Parameters.md 第 75/77 行。
+; 食物默认：一次交互 1.5 s、1 Unit 恢复 Hunger 35、容量 3、每 180 s 恢复 1 Unit。
+; 饮水点：把 kind 改成 &"water"（会自动套用 2 s / 40 / 无限），**改 kind 会重置该类型的默认数值**，
+; 所以要在 tscn 里覆盖数值时，把覆盖项写在 kind **后面**。
+; 碰撞：固定在 interactable 层（layer 3 = 值 4）；占位网格由 resource_point.gd 按 kind 建（正式美术属 P6）。
+
+[ext_resource type="Script" path="res://scripts/world/resource_point.gd" id="1_rp"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_rp"]
+size = Vector3(0.3, 0.12, 0.3)
+
+[node name="ResourcePoint" type="Area3D"]
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+script = ExtResource("1_rp")
+kind = &"food"
+food_type = 0
+units = 3
+capacity = 3
+refill_interval = 180.0
+next_refill_at = 0.0
+expire_at = 0.0
+nutrition = 35.0
+infinite = false
+region_id = &"Courtyard"
+auto_advance = true
+marker_size = Vector3(0.3, 0.12, 0.3)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_rp")
+
+[node name="Mesh" type="MeshInstance3D" parent="."]

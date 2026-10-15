@@ -512,7 +512,7 @@ func mov_line() -> String:
 	var reason := "none"
 	if player.climb != null and not player.climb.last_probe.is_empty():
 		reason = str(player.climb.last_probe.get("reason", player.climb.last_probe.keys()))
-	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f" % [
+	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f|food=%s|water=%s" % [
 		_frame, d["species_id"], d["position"].x, d["position"].y, d["position"].z,
 		d["velocity"].x, d["velocity"].y, d["velocity"].z, d["wish_speed"],
 		"crouch" if d["is_crouching"] else "stand", str(d["on_floor"]),
@@ -520,6 +520,7 @@ func mov_line() -> String:
 		float(d.get("health", -1.0)), float(d.get("hunger", -1.0)),
 		float(d.get("thirst", -1.0)), float(d.get("stamina", -1.0)),
 		_interaction_id(d), _interaction_state(d), _interaction_progress(d),
+		_resource_units(&"food"), _resource_units(&"water"),
 	]
 
 
@@ -539,6 +540,57 @@ func _interaction_state(d: Dictionary) -> String:
 func _interaction_progress(d: Dictionary) -> float:
 	var st: Dictionary = d.get("interaction", {})
 	return float(st.get("progress", 0.0))
+
+
+# ---------------------------------------------------------------------------
+# 资源点（T017）：HUD 只显示**一个**资源点，`MOV|` 给食物/水的余量
+# ---------------------------------------------------------------------------
+
+## HUD 资源行：余量与下一次恢复倒计时（水点显示无限）
+func resource_line() -> String:
+	var rp := _resource_for_display()
+	if rp == null:
+		return "resource: <none>"
+	if rp.infinite:
+		return "resource: id=%s kind=%s units=inf refill_in=- infinite=true" % [rp.interaction_id, rp.kind]
+	var refill := "-"
+	if rp.next_refill_at > 0.0:
+		refill = "%.1fs" % maxf(0.0, rp.next_refill_at - _world_time_now())
+	return "resource: id=%s kind=%s units=%d/%d refill_in=%s infinite=false" % [
+		rp.interaction_id, rp.kind, rp.units, rp.capacity, refill
+	]
+
+
+## 要显示的资源点：优先"当前交互目标"（T016 只显示一个目标）；否则取组里 ID 最小的那个
+func _resource_for_display() -> ResourcePoint:
+	if player != null and player.interaction != null:
+		var t := player.interaction.current_target()
+		if t is ResourcePoint:
+			return t as ResourcePoint
+	var best: ResourcePoint = null
+	for n in get_tree().get_nodes_in_group(&"resource_points"):
+		if n is ResourcePoint:
+			var rp := n as ResourcePoint
+			if best == null or rp.interaction_id < best.interaction_id:
+				best = rp
+	return best
+
+
+## `MOV|` 的余量字段：食物 `x/y`、水 `inf`，没有任何资源点时 `-`
+func _resource_units(kind: StringName) -> String:
+	for n in get_tree().get_nodes_in_group(&"resource_points"):
+		if n is ResourcePoint and (n as ResourcePoint).kind == kind:
+			var rp := n as ResourcePoint
+			return "inf" if rp.infinite else "%d/%d" % [rp.units, rp.capacity]
+	return "-"
+
+
+## 当前世界时间（秒）；拿不到 `WorldDirector` 时返回 0（只用于显示倒计时）
+func _world_time_now() -> float:
+	var wd := get_node_or_null("/root/WorldDirector")
+	if wd != null and is_instance_valid(wd):
+		return float(wd.get("world_time"))
+	return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -620,6 +672,7 @@ func hud_text() -> String:
 			float(ist["progress"]), str(ist["deny_reason"]), int(ist["skipped"]),
 			int(ist["commits"]), int(ist["cancels"])
 		])
+	lines.append(resource_line())
 	lines.append("keys: F1=cat  F2=mouse  F3=collision  F4=path  F5=hud  (WASD/Space/Shift/Ctrl 同正式操作)")
 	return "\n".join(lines)
 
