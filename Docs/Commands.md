@@ -189,6 +189,36 @@ $p = 'E:\Reborn\Game\Reborn'
 - **禁止**用瞬移或直接设位置"让寻路看起来成功"（`Docs/TechnicalDesign.md` §5）：断言必须包含真实 `AnimalBody` 逐帧行走。
 - 视觉：`-- t012` 已实现，但运行时导航调试绘制**看不到**（见 §8）→ 记 NOT-RUN，别拿重复图当证据。
 
+
+## 2.9 T013 调试入口与移动回归（VERIFIED — 2026-10-15）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+
+# 1) 断言：调试入口 159 条 + 移动回归 73 条
+& $g --headless --path $p --script 'res://tests/run_t013_debug_entry.gd' --quit-after 60000
+#    -> SUMMARY|checks=159|failures=0  RESULT|PASS   EXIT=0
+& $g --headless --path $p --script 'res://tests/run_t013_movement_regression.gd' --quit-after 60000
+#    -> SUMMARY|checks=73|failures=0   RESULT|PASS   EXIT=0
+
+# 2) 截图 6 张（**不能加 --headless**）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 60000 -- t013
+#    -> user://t013_{collision_on,collision_off,collision_player,path_cat,path_mouse,debug_hud}.png
+#       成功判据：结尾有 CAP|done 且每张 save_result=0 (OK)（见 §8 静默退出坑）
+
+# 3) 包内复验（用最终包；包内文本读取会退化，见 §8）
+& $g --headless --main-pack 'E:\Reborn\Builds\P0-Win64\RebornSelfTest.pck' `
+    --script 'res://tests/run_t013_debug_entry.gd' --quit-after 60000
+#    -> SUMMARY|checks=159|failures=0   EXIT=0
+```
+
+- **调试按键**：`F1` 切猫 / `F2` 切鼠 / `F3` 碰撞线框 / `F4` 导航路径 / `F5` 调试 HUD
+  （`project.godot` 里 5 个 `debug_*` 动作；断言用引擎常量 `KEY_F1..KEY_F5` 核对，并检查不与 WASD/空格/Shift/Ctrl 冲突）。
+- **调试入口是独立场景**：`scenes/debug/debug_entry.tscn`；`l_courtyard.tscn` / `main.tscn` 里**不允许**出现调试节点
+  （断言守着：0 个调试节点、0 个 `CanvasLayer`）。正式 HUD 属 T018。
+- **改完 `project.godot` 立刻核对**：`git diff -- Game/Reborn/project.godot` + 跑 `run_t007_input.gd`（22/22 才算好）。
+  本任务踩过：该文件被外部写成非引擎格式，`InputMap` 全空 → 五个套件大面积失败（详见 `Docs/Evidence/T013.md` §9）。
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -447,6 +477,24 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 - **导航调试绘制在运行时看不到**：`NavigationServer3D.set_debug_enabled(true)` 调用成功，但捕获出的鼠/猫两张图 **MD5 逐字节相同**
   → 不要拿"名字不同"当视觉证据；T012 的判定改用**结构判据**（洞里有没有导航面）+ 路径矩阵 + 真实胶囊行走。
 
+- **引擎的"显示碰撞形状"在命令行运行下画不出来**（T013）：`Viewport.DEBUG_DRAW_*` **没有碰撞形状项**
+  （只有 DISABLED/UNSHADED/LIGHTING/OVERDRAW/WIREFRAME）、`PhysicsServer3D` **没有任何 debug 方法**；
+  唯一相关开关是 `SceneTree.debug_collisions_hint`，但打开它之后**同机位两张截图逐字节相同**（MD5 `64DC75C7…`）。
+  要在本环境看到碰撞形状只能**自己画线框**（并如实标注"不是引擎调试视图"）；编辑器"调试运行"下是否有画面本环境无法验证。
+- **`NavigationAgent3D` 是 `Node`，不是 `Node3D`**（T013）：它没有自己的变换，位置取自**父节点**；直接给它
+  `global_position` 赋值会报 `Invalid assignment of property or key 'global_position' on NavigationAgent3D`。
+  要控制起点就挂一个定位用的 `Node3D` 锚点，把代理挂在锚点下。
+- **代理路径可能短暂为空，而同一时刻服务端查询有完整路径**（T013）：切完物种或只跑 `process` 帧时实测 `raw_path=0`。
+  调试可视化要兜底：路径点数 < 2 时退回 `NavigationServer3D.map_get_path()`（同图同层、起点=玩家位置），否则线会一闪一闪。
+- **`.pck` 里的场景不是可读文本**（T013）：包内 `FileAccess.open("res://x.tscn")` 读到 **0 字节**，
+  所以"读文件文本做断言"在包内**退化成恒真**。主判据要用**运行期结构**（实例化后数节点、查 `get_script().resource_path`），
+  文本判据只作补充并把 `len=` 打出来。
+- **"站稳"判据必须要求连续若干帧**（T013）：只判一帧会被"出生瞬间刚好落地、下一帧又被顶回空中"骗过去 ——
+  T013 实测因此拿到过"上了台阶 y 反而下降 0.2 m"的假数据。写成"连续 10 帧在地面且速度≈0"，站不稳就**报错并打印轨迹**。
+- **并发写手会持续改同一个文件**（T013）：本任务遇到 `project.godot` 被外部写成非引擎格式（`debug_switch_cat=4194332 # F1`）→
+  InputMap 全空、T007/T009/T010/T011/T012 大面积失败；连续 3 次 `EDIT_TAG_MISMATCH` 后宿主会**停止该路径编辑**。
+  正确做法：先 `git status/diff` + 读文件看**当前真实内容**，别硬重试；改完配置类文件立刻跑一条对应断言（`run_t007_input.gd` 22/22）。
+
 ---
 
 ## 9. 变更记录
@@ -459,3 +507,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-13 | **T010 完成**。§2.6 改名并补 `-- t010` 捕获与包内两条命令（含"捕获的 `--quit-after` 要给足"）；§8 补 2 条实测坑（取景/视线几何决定可判读性；不许为了过测试改产品参数）。 |
 | 2026-10-13 | **T011 完成**。新增 §2.7 生态灰盒关卡命令（生成器 + 210 条断言 + `-- t011` 捕获 7 视角 + 包内复验）；§8 补 3 条实测坑（`add_to_group` 默认非持久 → 分组不会被序列化；非 headless 捕获可能半途静默退出、必须看 `CAP|done`；大坐标浮点容差用 `GEO_EPS = 1e-4`）。 |
 | 2026-10-13 | **T012 完成**。新增 §2.8 导航数据与导航可行性命令（烘焙工具 + 79 条断言 + 包内复验）；§8 补 3 条实测坑（烘焙几何源只认区域子节点/分组模式、烘焙格与地图格必须一致且过小的 cell 会吃掉窄缝、运行期换 navmesh 后同进程查询不可靠要分进程）。 |
+| 2026-10-15 | **T013 完成**。新增 §2.9 调试入口与移动回归命令（159+73 条断言 + `-- t013` 六张截图 + 包内复验）；§8 补 6 条实测坑（引擎碰撞显示运行时画不出来→MD5 判据、`NavigationAgent3D` 无变换、代理路径短暂为空要服务端兜底、`.pck` 内文本不可读导致断言退化、站稳判据必须连续帧、并发写手覆盖 `project.godot`）。 |

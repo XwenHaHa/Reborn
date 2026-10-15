@@ -130,20 +130,24 @@ func try_step_up(motion: Vector3) -> bool:
 	if total_gain <= 0.0 or total_gain > max_step_height + tolerance:
 		return false
 
-	body.global_position = Vector3(forward.origin.x, landed_y, forward.origin.z)
+	# **只抬 y**：水平位置不在这一帧改动，交给本帧的 `move_and_slide()` 推进（T013 修，见 step_or_slide 说明）
+	body.global_position = Vector3(body.global_position.x, landed_y, body.global_position.z)
 	return true
 
 
-## 便利封装：能上台阶就抬上去（本帧不再水平推进），否则按原速度 `move_and_slide()`。
+## 便利封装：能上台阶就**只抬 y**，本帧的水平推进**照常交给 `move_and_slide()`**；不能上就按原速度滑。
 ## 返回是否发生了抬升。`delta` 为物理帧长（用于把位移换算成速度，保持原有速度语义）。
+##
+## 为什么抬升后仍要 `move_and_slide()`（T013 修，遗留项 ①）：
+##   旧实现抬升成功后**把身体瞬移到 `radius_safe + 本帧位移` 处并把速度清零**，
+##   实测表现为"上台阶时水平前移 0.2 m"（`Docs/Evidence/T009.md` §5.3）。
+##   改成"只抬 y + 正常前推"后，抬升帧的水平位移 = 该帧正常位移（量化判据见 `Docs/Evidence/T013.md`）。
 func step_or_slide(motion: Vector3, delta: float) -> bool:
-	if try_step_up(motion):
-		body.velocity = Vector3.ZERO
-		return true
+	var stepped := try_step_up(motion)
 	if delta > 0.0:
 		body.velocity = Vector3(motion.x / delta, body.velocity.y, motion.z / delta)
 	body.move_and_slide()
-	return false
+	return stepped
 
 
 ## 由下落探测结果算出"身体会被放在的高度"（米）。找不到可站立面返回 -INF。

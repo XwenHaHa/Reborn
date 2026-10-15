@@ -102,6 +102,10 @@ func _initialize() -> void:
 	if OS.get_cmdline_user_args().has("t012"):
 		await _capture_t012_frames(lab)
 
+	# T013：调试入口三态（碰撞线框开/关、猫/鼠路径、HUD）。只在显式传 `-- t013` 时执行。
+	if OS.get_cmdline_user_args().has("t013"):
+		await _capture_t013_frames(lab)
+
 	print("CAP|done")
 	quit(0)
 
@@ -569,3 +573,113 @@ func _pixel_stats(img: Image) -> void:
 		lum_min, lum_max, lum_sum / float(n), lum_max - lum_min
 	])
 	print("CAP|stats|clear_color_like_ratio=%.4f" % (float(clear_like) / float(n)))
+
+
+## T013：调试入口三态截图（碰撞 / 路径 / HUD）。只在显式传 `-- t013` 时执行。
+##
+## 为什么碰撞要拍**同机位开/关两张**：T013 实测引擎开关 `SceneTree.debug_collisions_hint`
+## 打开后画面**逐字节不变**（画不出东西），所以"能看见碰撞"这件事必须用**自绘线框**的像素差来证明，
+## 而不是只看开关的布尔值。引擎开关依旧会打开（编辑器调试运行下才有效果，本环境无法验证）。
+const T013_ENTRY := "res://scenes/debug/debug_entry.tscn"
+const T013_LANE_CAM := Vector3(26.5, 1.7, 26.5)
+const T013_LANE_LOOK := Vector3(26.5, 0.3, 17.0)
+const T013_HIGH_CAM := Vector3(26.5, 13.0, 31.0)
+const T013_HIGH_LOOK := Vector3(26.5, 0.0, 18.0)
+const T013_HUD_CAM := Vector3(-6.0, 4.0, 38.0)
+const T013_HUD_LOOK := Vector3(-2.0, 0.4, 20.0)
+
+
+func _capture_t013_frames(lab: Node) -> void:
+	print("CAP|t013|start")
+	# 先移走默认的试验世界：它和 80×80 的灰盒关卡在同一坐标会互相遮挡
+	lab.queue_free()
+	await process_frame
+	await process_frame
+	var packed: PackedScene = load(T013_ENTRY)
+	if packed == null:
+		print("CAP|t013|ERROR|debug entry load failed")
+		return
+	var entry: Node3D = packed.instantiate() as Node3D
+	root.add_child(entry)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	for i in SETTLE_FRAMES:
+		await process_frame
+	print("CAP|t013|entry|species=%s|hud=%s" % [
+		str(entry.get("current_species")), str(entry.call("hud_enabled"))
+	])
+
+	var cam := Camera3D.new()
+	cam.name = "T013Camera"
+	cam.near = 0.05
+	cam.far = 400.0
+	entry.add_child(cam)
+
+	# ① 碰撞线框：同机位开 / 关
+	cam.fov = 70.0
+	cam.global_position = T013_LANE_CAM
+	cam.look_at(T013_LANE_LOOK, Vector3.UP)
+	cam.current = true
+	entry.call("toggle_hud")            # 关 HUD：文字会逐帧变，污染像素差
+	entry.call("toggle_collision_debug")
+	print("CAP|t013|collision_on|selfdraw_shapes=%d|engine_hint=%s" % [
+		int(entry.call("drawn_collision_shapes")), str(entry.call("collision_debug_enabled"))
+	])
+	await _capture_view("t013_collision_on", cam)
+	entry.call("toggle_collision_debug")
+	print("CAP|t013|collision_off|selfdraw_shapes=%d|engine_hint=%s" % [
+		int(entry.call("drawn_collision_shapes")), str(entry.call("collision_debug_enabled"))
+	])
+	await _capture_view("t013_collision_off", cam)
+
+	# ①b 玩家胶囊线框近景：验证"上下两个圆 + 竖线"也真的画得出来（上两张只看得见长方体棱边）
+	entry.call("toggle_collision_debug")
+	cam.fov = 60.0
+	cam.global_position = Vector3(-4.0, 1.2, 26.5)
+	cam.look_at(Vector3(-4.0, 0.34, 24.0), Vector3.UP)
+	cam.current = true
+	print("CAP|t013|collision_player|selfdraw_shapes=%d" % int(entry.call("drawn_collision_shapes")))
+	await _capture_view("t013_collision_player", cam)
+	entry.call("toggle_collision_debug")
+
+	# ② 导航路径：猫（绕行、不进洞）与鼠（直穿洞口）
+	cam.fov = 50.0
+	cam.global_position = T013_HIGH_CAM
+	cam.look_at(T013_HIGH_LOOK, Vector3.UP)
+	cam.current = true
+	for species_path in ["res://resources/species/cat.tres", "res://resources/species/mouse.tres"]:
+		var cfg: SpeciesConfig = load(species_path) as SpeciesConfig
+		if cfg == null:
+			print("CAP|t013|ERROR|config load failed: %s" % species_path)
+			continue
+		entry.call("switch_species", cfg.species_id)
+		cam.current = true                  # 切物种会重建身体并把**玩家相机**设为 current，必须抢回来
+		entry.call("toggle_path_display")
+		for i in 60:
+			await process_frame
+		for i in 30:
+			await physics_frame
+		var pr: Dictionary = entry.call("probe_report", true)
+		var ma: NavigationAgent3D = entry.get("main_agent")
+		print("CAP|t013|path_agent|species=%s|agent_valid=%s|layer=%d|target=%s|raw_path=%d|reachable=%s|map_valid=%s" % [
+			String(cfg.species_id), str(ma != null and is_instance_valid(ma)),
+			ma.navigation_layers if ma != null else -1,
+			str(ma.target_position) if ma != null else "<none>",
+			ma.get_current_navigation_path().size() if ma != null else -1,
+			str(ma.is_target_reachable()) if ma != null else "n/a",
+			str(ma.get_navigation_map().is_valid()) if ma != null else "n/a"
+		])
+		print("CAP|t013|path|species=%s|points=%d|len=%.2f|probe_own_layer=%d|probe_own_len=%.2f|probe_own_crosses_hole=%s" % [
+			String(cfg.species_id), int(entry.call("path_point_count")), float(entry.call("path_length")),
+			int(pr.get("own_layer", 0)), float(pr.get("own_len", 0.0)), str(pr.get("own_crosses_hole"))
+		])
+		await _capture_view("t013_path_%s" % String(cfg.species_id).to_lower(), cam)
+		entry.call("toggle_path_display")
+
+	# ③ HUD（打开）
+	cam.fov = 60.0
+	cam.global_position = T013_HUD_CAM
+	cam.look_at(T013_HUD_LOOK, Vector3.UP)
+	cam.current = true
+	var hud_on: bool = entry.call("toggle_hud")
+	print("CAP|t013|hud|enabled=%s" % str(hud_on))
+	await _capture_view("t013_debug_hud", cam)
