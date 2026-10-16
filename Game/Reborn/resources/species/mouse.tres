@@ -23,6 +23,12 @@ fov = 90.0
 vision_range = 6.5
 vision_half_angle_deg = 75.0
 hearing_range = 10.0
+; 噪声（T020）：响度来自 Parameters.md 第 73 行（潜伏/行走/奔跑 = 0.2/0.5/1.0）；
+; 脚步节奏 0.5 s 是 T020 新增值（Parameters 只给了响度），其他档位按速度反比缩放。
+noise_loudness_crouch = 0.2
+noise_loudness_walk = 0.5
+noise_loudness_sprint = 1.0
+footstep_interval_base = 0.5
 ; 生存容量（T014）：Parameters.md 第 15 行「初始 Health/Hunger/Thirst/Stamina 100/100/100/100」
 max_health = 100.0
 max_hunger = 100.0

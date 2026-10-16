@@ -25,6 +25,11 @@ const STATE_NAMES: Array[StringName] = [
 	&"approach", &"chase", &"search", &"attack", &"wait",
 ]
 
+## 躲藏点 / 安全点组（真实关卡里由鼠洞等处标记；布点扩充属 T031/T035）
+const HIDE_GROUP := &"hide_spots"
+## 草丛遮挡体量组（T011 关卡数据：Area3D + `metadata/visibility_factor`）
+const COVER_GROUP := &"cover_volumes"
+
 ## 警戒最长时长（秒）——`Parameters.md` 第 71 行「Alert 最长 0.3 s」
 @export var alert_max_time: float = 0.3
 ## 判定"没有推进"的时间窗（秒）——同上一行「MoveTo 失败 1 s 内回退」
@@ -37,6 +42,12 @@ const STATE_NAMES: Array[StringName] = [
 @export var min_progress: float = 0.05
 ## 显式指定导航层（0 = 从地图 `NavigationRegion3D.metadata/species` 反查）
 @export var nav_layer_override: int = 0
+
+# --- 躲藏与逃跑（T020）---
+## 判定"点在导航层上可达"的容差（米）——**T020 新增值**（见 `Docs/Tasks/T020.md` §9）
+@export var reach_tolerance: float = 0.5
+## 到达躲藏点的默认半径（米）；单个躲藏点可用 `metadata/radius` 覆盖
+@export var hide_arrive_radius: float = 0.30
 
 ## 被驱动的身体（`setup()` 里赋值）
 var body: AnimalBody = null
@@ -69,6 +80,18 @@ var _nav_layer := 1
 var _nav_layer_source := "fallback"
 ## 当前目标 ID（子类维护，供 HUD/诊断）
 var _target_id := ""
+
+# --- 逃跑与躲藏（T020）---
+## 当前落点类型：躲避藏点 / 避遮挡 / 无（诊断）
+var _hide_kind: StringName = &"none"
+## 当前落点 ID（躲藏点名字；遮挡为 "cover"）
+var _hide_id := ""
+## 最近一次躲藏点搜索检查过的候选数
+var _hide_candidates_tested := 0
+## 累计"候选不可达"次数
+var _hide_unreachable := 0
+## 累计"超时退出逃跑"次数
+var _flee_timeouts := 0
 
 
 # ---------------------------------------------------------------------------
@@ -217,14 +240,26 @@ func nav_layer() -> int:
 	return _nav_layer
 
 
-## 从地图里 `NavigationRegion3D.metadata/species` 反查层号（**不硬编码物种名**）
+## 读取节点的物种标记：优先 `species_id`（导航区域用的键），兼容 `species`（出生点 / 补给点 / 躲藏点用的键）。
+## **不能写成 `get_meta(name, null)`**：Godot 在默认值为 null 时会直接报错（T020 捕获时实测，见 `Docs/Evidence/T020.md`）。
+func node_species_id(node: Object) -> StringName:
+	if node == null:
+		return &""
+	if node.has_meta("species_id"):
+		return StringName(node.get_meta("species_id"))
+	if node.has_meta("species"):
+		return StringName(node.get_meta("species"))
+	return &""
+
+
+## 从地图里 `NavigationRegion3D.metadata/species_id`（旧键 `species`）反查层号（**不硬编码物种名**）
 func _resolve_nav_layer() -> int:
 	var want := StringName("")
 	if body != null and is_instance_valid(body) and body.species_config != null:
 		want = body.species_config.species_id
 	for region in _navigation_regions():
-		var species = region.get_meta("species", null)
-		if species != null and StringName(species) == want:
+		var species := node_species_id(region)
+		if species != &"" and species == want:
 			_nav_layer_source = "metadata"
 			return maxi(1, region.navigation_layers)
 	_nav_layer_source = "fallback"
@@ -367,6 +402,14 @@ func ai_report() -> Dictionary:
 		"alerting": _has_alert,
 		"alert_position": _alert_position,
 		"has_destination": _has_destination,
+		"perception": (body.perception.report() if body != null and body.perception != null else {}),
+		"seen": (body.perception.is_threat_visible() if body != null and body.perception != null else false),
+		"heard": (body.perception.heard_count() if body != null and body.perception != null else 0),
+		"noise_age": (body.perception.noise_age() if body != null and body.perception != null else -1.0),
+		"hide_target": _hide_id,
+		"hide_candidates_tested": _hide_candidates_tested,
+		"hide_unreachable": _hide_unreachable,
+		"flee_timeouts": _flee_timeouts,
 	}
 
 
@@ -384,3 +427,141 @@ func _find_or_make_agent() -> NavigationAgent3D:
 	a.name = "NavigationAgent3D"
 	body.add_child(a)
 	return a
+
+
+# ---------------------------------------------------------------------------
+# 可达性 / 躲藏点 / 遮挡（T020：逃跑目标选择）
+# ---------------------------------------------------------------------------
+
+## 这个点在**本物种的导航层**上可达吗（D8）？
+##
+## 判据：① `map_get_closest_point()` 落在目标附近（≤ `reach_tolerance`）；
+## ② `map_get_path()` 非空且终点也在 `reach_tolerance` 内。
+##
+## 取不到有效导航地图、或地图还没同步（`map_get_iteration_id() == 0`）时**不判定为不可达** ——
+## 把"地图未就绪"误判成"封路"会让 NPC 平白放弃（见 `Docs/Tasks/T020.md` §4 D8）。
+func reachable(point: Vector3) -> bool:
+	if agent == null or body == null:
+		return false
+	var map := agent.get_navigation_map()
+	if not map.is_valid():
+		return true
+	if NavigationServer3D.map_get_iteration_id(map) == 0:
+		return true
+	var closest := NavigationServer3D.map_get_closest_point(map, point)
+	if closest.distance_to(point) > reach_tolerance:
+		return false
+	var path := NavigationServer3D.map_get_path(map, body.global_position, point, true, nav_layer())
+	if path.is_empty():
+		return false
+	return path[path.size() - 1].distance_to(point) <= reach_tolerance
+
+
+## 最近的**可达**躲藏点（`hide_spots` 组；真实关卡里 = 鼠洞）。没有可达的返回 null。
+## `exclude` 用来跳过"上次已经失败过"的点（逃跑途中重选时用）。
+func find_hide_spot(exclude: Array = []) -> Node3D:
+	_hide_candidates_tested = 0
+	if body == null or not is_instance_valid(body) or get_tree() == null:
+		return null
+	var best: Node3D = null
+	var best_distance := INF
+	for n in get_tree().get_nodes_in_group(HIDE_GROUP):
+		var spot := n as Node3D
+		if spot == null:
+			continue
+		if exclude.has(String(spot.name)):
+			continue
+		var species := node_species_id(spot)
+		if species != &"" and species != _species_id():
+			continue
+		_hide_candidates_tested += 1
+		var point := hide_spot_point(spot)
+		var d := body.global_position.distance_to(point)
+		if d >= best_distance:
+			continue
+		if not reachable(point):
+			_hide_unreachable += 1
+			continue
+		best = spot
+		best_distance = d
+	return best
+
+
+## 躲藏点的落脚点（默认取节点全局位置；`metadata/point_offset` 可微调）
+func hide_spot_point(spot: Node3D) -> Vector3:
+	var offset: Vector3 = spot.get_meta("point_offset", Vector3.ZERO)
+	return spot.global_position + offset
+
+
+## 躲藏点的到达半径（米）：`metadata/radius` 可覆盖默认值
+func hide_spot_radius(spot: Node3D) -> float:
+	return maxf(0.05, float(spot.get_meta("radius", hide_arrive_radius)))
+
+
+## 最近的**可达**遮挡落点（`cover_volumes` 中心投到地面）。没有则返回 NAN 向量（用 `is_nan(v.x)` 判断）。
+##
+## 策划 v1.1 第 198 行：没有可达鼠洞时"尝试附近遮挡和替代路径"。
+func find_cover_point() -> Vector3:
+	if body == null or not is_instance_valid(body) or get_tree() == null:
+		return Vector3(NAN, NAN, NAN)
+	var best := Vector3(NAN, NAN, NAN)
+	var best_distance := INF
+	for n in get_tree().get_nodes_in_group(COVER_GROUP):
+		var area := n as Node3D
+		if area == null:
+			continue
+		var point := _ground_point_under(area.global_position)
+		if not point.is_finite():
+			continue
+		var d := body.global_position.distance_to(point)
+		if d >= best_distance:
+			continue
+		if not reachable(point):
+			continue
+		best = point
+		best_distance = d
+	return best
+
+
+## 从某点向下打到 `world_static` 的地面点（草丛体量中心在半空，要落到地面才是可走位置）
+func _ground_point_under(point: Vector3) -> Vector3:
+	if body == null or not is_instance_valid(body):
+		return Vector3(NAN, NAN, NAN)
+	var space := body.get_world_3d().direct_space_state
+	if space == null:
+		return Vector3(NAN, NAN, NAN)
+	var params := PhysicsRayQueryParameters3D.create(
+		point + Vector3.UP * 10.0, point - Vector3.UP * 10.0
+	)
+	params.collision_mask = 1
+	params.collide_with_areas = false
+	var hit := space.intersect_ray(params)
+	if hit.is_empty():
+		return Vector3(NAN, NAN, NAN)
+	return hit["position"]
+
+
+## 最近一次躲藏点搜索里**检查过**的候选数（诊断；封路时应 ≥ 1）
+func hide_candidates_tested() -> int:
+	return _hide_candidates_tested
+
+
+## 累计"候选点不可达"次数（诊断）
+func hide_unreachable_count() -> int:
+	return _hide_unreachable
+
+
+## 累计"没有可达落点、超时退出逃跑"次数（诊断；**不永久阻塞**的证据）
+func flee_timeouts() -> int:
+	return _flee_timeouts
+
+
+## 当前躲藏点 ID（诊断；没有就是空串）
+func hide_target_id() -> String:
+	return _hide_id
+
+
+func _species_id() -> StringName:
+	if body != null and is_instance_valid(body) and body.species_config != null:
+		return StringName(body.species_config.species_id)
+	return &""

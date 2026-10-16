@@ -45,6 +45,16 @@ enum FoodType { MEAT, SEED }
 ## 听觉范围（米，对应"标准跑步声"Loudness=1.0）
 @export var hearing_range: float = 0.0
 
+@export_group("Noise")
+## 脚步噪声响度（`Docs/Parameters.md` 第 73 行：潜伏 / 行走 / 奔跑 = 0.2 / 0.5 / 1.0）。
+## 消费方：`AnimalBody.noise_loudness()`；听觉距离 = `hearing_range × loudness`。
+@export var noise_loudness_crouch: float = 0.2
+@export var noise_loudness_walk: float = 0.5
+@export var noise_loudness_sprint: float = 1.0
+## 标准行走时**每步**的间隔（秒）。`Parameters.md` 第 73 行只给了响度、没给节奏 →
+## **T020 新增值**（见 `Docs/Tasks/T020.md` §9），其他档位按速度反比缩放。
+@export var footstep_interval_base: float = 0.5
+
 @export_group("Survival")
 ## 生存容量上限（T014）。来自 `Docs/Parameters.md` 第 15 行「初始 Health/Hunger/Thirst/Stamina = 100/100/100/100」；
 ## 食物/饮水"成功后全值夹紧"用的也是这四个上限。
@@ -167,4 +177,14 @@ func validate_config() -> PackedStringArray:
 		problems.append("fall_damage_scale 必须 > 0（否则跌落永远不造成伤害）")
 	if low_stat_threshold > max_hunger or low_stat_threshold > max_thirst:
 		problems.append("low_stat_threshold 不应高于饥渴容量（否则一出生就报警）")
+	# 噪声（T020）：响度必须在 (0,1]，且"越快越响"（潜伏 ≤ 行走 ≤ 奔跑，Parameters.md 第 73 行）
+	for pair in [["noise_loudness_crouch", noise_loudness_crouch],
+			["noise_loudness_walk", noise_loudness_walk],
+			["noise_loudness_sprint", noise_loudness_sprint]]:
+		if float(pair[1]) <= 0.0 or float(pair[1]) > 1.0 or not is_finite(float(pair[1])):
+			problems.append("%s 必须在 (0,1]（脚步噪声响度）" % pair[0])
+	if noise_loudness_walk < noise_loudness_crouch or noise_loudness_sprint < noise_loudness_walk:
+		problems.append("噪声响度应满足 潜伏 ≤ 行走 ≤ 奔跑（越快的档位越响）")
+	if footstep_interval_base <= 0.0 or not is_finite(footstep_interval_base):
+		problems.append("footstep_interval_base 必须 > 0（否则脚步事件无处产生）")
 	return problems

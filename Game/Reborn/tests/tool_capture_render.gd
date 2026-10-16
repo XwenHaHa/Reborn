@@ -109,6 +109,9 @@ func _initialize() -> void:
 	# T018：正式 HUD（状态 / 低值警告 / 交互提示）的屏幕可见性。只在显式传 `-- t018` 时执行。
 	if OS.get_cmdline_user_args().has("t018"):
 		await _capture_t018_frames(lab)
+	# T020：鼠的感知与逃跑（警戒 / 逃跑 / 洞里躲藏）。只在显式传 `-- t020` 时执行。
+	if OS.get_cmdline_user_args().has("t020"):
+		await _capture_t020_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -420,9 +423,10 @@ func _capture_t011_frames(lab: Node) -> void:
 
 
 ## 只拍一张（没有身体主体）：T011 关卡视角用
-func _capture_view(tag: String, cam: Camera3D) -> void:
+func _capture_view(tag: String, cam: Camera3D, settle := SETTLE_FRAMES) -> void:
 	var prefix: String = String(tag).split("_")[0]
-	for i in SETTLE_FRAMES:
+	for i in settle:
+		await process_frame
 		await process_frame
 	await RenderingServer.frame_post_draw
 	await RenderingServer.frame_post_draw
@@ -765,3 +769,132 @@ func _capture_t018_frames(lab: Node) -> void:
 	print("CAP|t018|interact|text=%s|visible=%s" % [hud.interaction_text(), str(hud.interaction_visible())])
 	await _capture_view("t018_hud_interact", cam)
 	print("CAP|t018|done")
+
+
+# ---------------------------------------------------------------------------
+# T020：鼠的感知与逃跑（警戒 → 逃跑 → 钻进鼠洞躲藏）
+# ---------------------------------------------------------------------------
+
+const T020_LEVEL := "res://scenes/maps/l_courtyard.tscn"
+const T020_BODY := "res://scenes/characters/animal_body.tscn"
+const T020_MOUSE := "res://resources/species/mouse.tres"
+const T020_CAT := "res://resources/species/cat.tres"
+## 取景（T010 教训：相机要**正对通道**，否则洞口侧壁会把主体完全遮住）
+const T020_ALERT_CAM := Vector3(29.5, 1.5, 25.5)
+const T020_ALERT_LOOK := Vector3(27.3, 0.30, 22.8)
+const T020_LANE_CAM := Vector3(26.5, 0.85, 24.0)
+const T020_LANE_LOOK := Vector3(26.5, 0.28, 19.0)
+const T020_HOLE_CAM := Vector3(26.5, 0.62, 23.5)
+const T020_HOLE_LOOK := Vector3(26.5, 0.32, 18.5)
+
+
+## T020：真实关卡上的三帧（警戒 / 逃跑途中 / 洞里躲藏）。
+##
+## **不是只截图**：每帧同时打印 AI 状态、原因、躲藏点与感知数值，图像与状态文本在同一条日志里。
+## 警戒只有 0.3 s（`Parameters.md` 第 71 行），所以这一帧靠**重复注入威胁**把 ALERT 保持住
+## （日志里标 `held_by=repeat_alert`，**不假装是自然时序**）；逃跑与躲藏两帧是自然时序。
+func _capture_t020_frames(lab: Node) -> void:
+	print("CAP|t020|start")
+	var packed: PackedScene = load(T020_LEVEL)
+	if packed == null:
+		print("CAP|t020|ERROR|level load failed")
+		return
+	var level: Node3D = packed.instantiate() as Node3D
+	root.add_child(level)
+
+	var mouse_cfg := load(T020_MOUSE) as SpeciesConfig
+	var cat_cfg := load(T020_CAT) as SpeciesConfig
+	var body_packed := load(T020_BODY) as PackedScene
+	if mouse_cfg == null or cat_cfg == null or body_packed == null:
+		print("CAP|t020|ERROR|config/body missing")
+		return
+
+	# 鼠 NPC：屏障北侧、朝洞里（前向 −Z）
+	var mouse := body_packed.instantiate() as AnimalBody
+	mouse.species_config = mouse_cfg
+	mouse.player_controlled = false
+	mouse.position = Vector3(26.5, 0.35, 24.5)
+	level.add_child(mouse)
+	mouse.ai_enabled = true
+	await physics_frame
+
+	# 威胁：猫在**正前偏右 2.9 m**（看得见，但不在"立即逃"的 1.8 m 内 → 先警戒 0.3 s）
+	var cat := body_packed.instantiate() as AnimalBody
+	cat.species_config = cat_cfg
+	cat.player_controlled = false
+	cat.position = Vector3(28.3, 0.35, 22.2)
+	level.add_child(cat)
+	await physics_frame
+
+	var cam := Camera3D.new()
+	cam.name = "T020Camera"
+	cam.near = 0.05
+	cam.far = 400.0
+	cam.fov = 70.0
+	level.add_child(cam)
+
+	for i in 6:
+		await physics_frame
+	var spots := get_nodes_in_group("hide_spots")
+	print("CAP|t020|fixture|hide_spots=%d|mouse=%s|cat=%s" % [spots.size(), mouse.global_position, cat.global_position])
+
+	# 1) 警戒（保持住再拍：只等 4 帧；场景此前已渲染多帧，不需要 90 帧 settle）
+	cam.global_position = T020_ALERT_CAM
+	cam.look_at(T020_ALERT_LOOK, Vector3.UP)
+	cam.current = true
+	for i in 20:
+		if mouse.ai != null:
+			mouse.ai.alert_for(cat.global_position, &"saw_threat")
+		await process_frame
+	await _t020_print_state("alert|held_by=repeat_alert", mouse, cat)
+	await _capture_view("t020_alert", cam, 4)
+
+	# 2) 逃跑途中（自然时序：警戒到期 + 仍看得见 → FLEE）
+	cam.global_position = T020_LANE_CAM
+	cam.look_at(T020_LANE_LOOK, Vector3.UP)
+	cam.current = true
+	var waited := 0
+	while waited < 180 and _t020_state(mouse) != &"flee":
+		await physics_frame
+		waited += 1
+	# 刚进 FLEE 时鼠还在起点、正好在相机身后（拍了也看不到"逃"）→ 等它朝洞里真的走出一段再拍
+	var flee_from_z := mouse.global_position.z
+	var advanced := 0
+	while advanced < 240 and _t020_state(mouse) == &"flee" and (flee_from_z - mouse.global_position.z) < 2.0:
+		await physics_frame
+		advanced += 1
+	await _t020_print_state("flee", mouse, cat)
+	await _capture_view("t020_flee", cam, 20)
+
+	# 3) 钻进鼠洞躲藏（自然时序：等待 ≤ 15 s）
+	cam.global_position = T020_HOLE_CAM
+	cam.look_at(T020_HOLE_LOOK, Vector3.UP)
+	cam.current = true
+	var waited2 := 0
+	while waited2 < 900 and _t020_state(mouse) != &"hidden":
+		await physics_frame
+		waited2 += 1
+	await _t020_print_state("hidden", mouse, cat)
+	await _capture_view("t020_hidden", cam)
+	print("CAP|t020|done|flee_wait_frames=%d|flee_advance_frames=%d|hidden_wait_frames=%d" % [waited, advanced, waited2])
+
+
+func _t020_state(body: AnimalBody) -> StringName:
+	if body.ai == null:
+		return &"<none>"
+	return body.ai.state_id()
+
+
+## 打印状态、原因与感知数值（与图像同时进日志；AI/感知缺失时如实打印 `<none>`）
+func _t020_print_state(tag: String, mouse: AnimalBody, cat: AnimalBody) -> void:
+	var ai := mouse.ai
+	var rep: Dictionary = mouse.perception.report() if mouse.perception != null else {}
+	print("CAP|t020|%s|ai_state=%s|ai_reason=%s|hide=%s|flee_kind=%s|mouse_pos=%s|cat_pos=%s|seen=%s|heard=%d|noise_age=%.1f" % [
+		tag,
+		str(ai.state_id()) if ai != null else "<none>",
+		str(ai.state_reason()) if ai != null else "<none>",
+		ai.hide_target_id() if ai != null else "-",
+		str(ai.call("flee_kind")) if ai != null and ai.has_method("flee_kind") else "-",
+		mouse.global_position, cat.global_position,
+		str(rep.get("seen", false)), int(rep.get("heard_count", 0)), float(rep.get("last_noise_age", -1.0))
+	])

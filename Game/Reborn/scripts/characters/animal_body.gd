@@ -26,6 +26,10 @@ signal configured(species_id: StringName)
 ## 蹲/站状态真的改变时发出（被头顶挡住时不发）
 signal stance_changed(crouching: bool)
 
+## 行动噪声事件（T020）：每次**脚步事件**发一次（**不是每帧**），字段同 `TechnicalDesign.md` §4 的信号表。
+## 玩家与 NPC 都会发：玩家的脚步会被 NPC 的 `Perception` 听到（`Parameters.md` 第 73 行）。
+signal action_noise(source_id: String, position: Vector3, loudness: float, world_time: float)
+
 const LAYER_WORLD_STATIC := 1
 const LAYER_ANIMAL := 2
 
@@ -38,6 +42,14 @@ const HEADROOM_SHRINK := 0.005
 const HEADROOM_MARGIN := 0.005
 ## 俯仰上限（弧度）
 const MAX_PITCH := 1.4
+
+## 脚步间隔的钳制范围（秒）：避免极端速度把节奏推到不合理值
+const FOOTSTEP_INTERVAL_MIN := 0.1
+const FOOTSTEP_INTERVAL_MAX := 1.5
+## 参与脚步/噪声判定的最小水平速度（米/秒）
+const FOOTSTEP_MIN_SPEED := 0.05
+## 身体所属组（T020）：不同物种的成员互为潜在威胁（按物种 ID 比，不写物种名）
+const GROUP_ANIMAL_BODIES := &"animal_bodies"
 
 ## 物种配置（由生成者赋值；T009/T010 用它区分两种玩家）
 @export var species_config: SpeciesConfig:
@@ -85,6 +97,9 @@ var _pitch: float = 0.0
 var survival: SurvivalController = null
 ## 交互检测与动作接口（T016）。由 `apply_config()` 建立
 var interaction: InteractionDetector = null
+
+## 感知组件（T020）：视觉 + 听觉。由 `apply_config()` 建立；**只观察**，不改位移与状态
+var perception: Perception = null
 ## 行为状态机（T019）。只有 `SpeciesConfig.ai_script` 非空**且** `ai_enabled` 打开时才建（鼠有脚本；猫留到 T023）
 var ai: AnimalAI = null
 ## 是否让 AI 驱动这只身体。**默认关闭**：玩家身体不用，测试夹具也不会被 AI 抢走 `move_intent`；
@@ -107,6 +122,13 @@ var _fallback_world_time := 0.0
 var _world_director: Node = null
 var _world_director_checked := false
 
+## 本次运行产生的**脚步事件**数（诊断/断言："非每帧"的证据）
+var footstep_count := 0
+## 最近一次脚步的响度（诊断）
+var last_footstep_loudness := 0.0
+## 迈步进度累计（用**世界时间差**累计 → 暂停不前进）
+var _footstep_accum := 0.0
+
 
 func _ready() -> void:
 	if player_controlled:
@@ -117,6 +139,9 @@ func _ready() -> void:
 		push_warning("AnimalBody 未赋 species_config：身体保持场景默认值")
 	if make_camera_current and camera != null:
 		camera.current = true
+
+	# 感知组（T020 D2）：**运行时**加入，不写进场景文件（非持久分组）
+	add_to_group(GROUP_ANIMAL_BODIES)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -148,6 +173,9 @@ func _physics_process(delta: float) -> void:
 	# AI（T019）：只有显式打开 `ai_enabled` 的 NPC 身体才由状态机写 `move_intent`
 	if ai != null and ai_enabled:
 		ai.tick(world_time_now())
+	# 感知（T020）：每物理帧刷新"是否看见威胁"（只观察：不写 move_intent、不改状态机）
+	if perception != null:
+		perception.tick(world_time_now())
 	var direction := Vector3.ZERO
 	if move_intent != Vector2.ZERO:
 		direction = (transform.basis * Vector3(move_intent.x, 0.0, move_intent.y)).normalized()
@@ -176,6 +204,9 @@ func _physics_process(delta: float) -> void:
 			survival.spend_stamina(species_config.sprint_stamina_per_sec * dt_sim)
 		# 跌落结算（T015）：每物理帧跟踪腾空速度，落地那帧扣血
 		_track_fall()
+		# 脚步噪声（T020）：按世界时间累计，只在贴地移动时产生事件（**不是每帧**）
+		if dt_sim > 0.0:
+			_update_footsteps(dt_sim)
 
 	# 交互（T016）：每物理帧刷新**唯一**目标，并按世界时间推进交互时长（暂停时喂进来的时间不前进）
 	if interaction != null:
@@ -364,6 +395,12 @@ func apply_config() -> void:
 		interaction.name = "Interaction"
 		add_child(interaction)
 	interaction.setup(self, species_config)
+	# 感知组件（T020）：与交互组件同一模式，只建一次；热改配置时只换配置引用
+	if perception == null:
+		perception = Perception.new()
+		perception.name = "Perception"
+		add_child(perception)
+	perception.setup(self, species_config)
 	# 行为状态机（T019）：脚本来自配置；**默认关闭**，由生成者显式打开 `ai_enabled`
 	# （否则测试夹具/玩家身体会被 AI 抢走移动意图 —— 实测会让 T010/T011/T012/T017 大面积回退）
 	_sync_ai()
@@ -454,6 +491,13 @@ func debug_state() -> Dictionary:
 		"ai": ai.ai_report() if ai != null else {},
 		"ai_state": ai.state_id() if ai != null else &"",
 		"ai_reason": ai.state_reason() if ai != null else &"",
+		"perception": perception.report() if perception != null else {},
+		"seen": perception.is_threat_visible() if perception != null else false,
+		"heard": perception.heard_count() if perception != null else 0,
+		"noise_age": perception.noise_age() if perception != null else -1.0,
+		"noise_position": perception.last_noise_position() if perception != null else Vector3.ZERO,
+		"footsteps": footstep_count,
+		"loudness": noise_loudness(),
 		"player_controlled": player_controlled,
 	}
 
@@ -464,13 +508,21 @@ func debug_state() -> Dictionary:
 ## （例如某些裸 `SceneTree` 测试）才退回"本节点按物理帧累计"的兜底时钟。
 ## **两套时间源不会同时使用**：只要能拿到单例就只用单例。
 func world_time_now() -> float:
+	var wd := _world_director_node()
+	if wd != null:
+		return float(wd.get("world_time"))
+	_fallback_world_time += 1.0 / float(Engine.physics_ticks_per_second)
+	return _fallback_world_time
+
+
+## `WorldDirector` 单例（没有就返回 null）。只查一次，之后用缓存。
+func _world_director_node() -> Node:
 	if not _world_director_checked:
 		_world_director = get_node_or_null("/root/WorldDirector")
 		_world_director_checked = true
 	if _world_director != null and is_instance_valid(_world_director):
-		return float(_world_director.get("world_time"))
-	_fallback_world_time += 1.0 / float(Engine.physics_ticks_per_second)
-	return _fallback_world_time
+		return _world_director
+	return null
 
 
 ## 生存状态的一份**独立副本**（HUD/存档/断言用；改副本不影响身体）
@@ -544,3 +596,72 @@ func _on_survival_changed(state: SurvivalState) -> void:
 func _on_survival_died(_reason: StringName) -> void:
 	if interaction != null and interaction.is_interacting():
 		interaction.release_interact(&"died")
+
+
+# ---------------------------------------------------------------------------
+# 感知与噪声（T020）
+# ---------------------------------------------------------------------------
+
+## 当前档位的**脚步间隔**（秒）：以标准行走的 `footstep_interval_base` 为基准，越快越密（按速度反比缩放）。
+##
+## `Docs/Parameters.md` 第 73 行只给了响度、**没给节奏** → "行走 0.5 s 一步"是 T020 新增值（见 `Docs/Tasks/T020.md` §9）。
+func footstep_interval() -> float:
+	if species_config == null:
+		return FOOTSTEP_INTERVAL_MAX
+	var speed := horizontal_speed()
+	if speed <= FOOTSTEP_MIN_SPEED:
+		return species_config.footstep_interval_base
+	var walk := maxf(species_config.walk_speed, FOOTSTEP_MIN_SPEED)
+	return clampf(
+		species_config.footstep_interval_base * walk / speed, FOOTSTEP_INTERVAL_MIN, FOOTSTEP_INTERVAL_MAX
+	)
+
+
+## 当前档位的脚步声**响度**（`Parameters.md` 第 73 行：潜伏 / 行走 / 奔跑 = 0.2 / 0.5 / 1.0）
+func noise_loudness() -> float:
+	if species_config == null:
+		return 0.0
+	if is_crouching:
+		return species_config.noise_loudness_crouch
+	if is_sprinting():
+		return species_config.noise_loudness_sprint
+	return species_config.noise_loudness_walk
+
+
+## 稳定来源 ID（噪声事件里用来把"自己的声音"排除掉，见 `Perception.receive_noise()`）
+func source_id() -> String:
+	var sid := String(species_config.species_id) if species_config != null else "<none>"
+	return "%s#%d" % [sid, get_instance_id()]
+
+
+## 当前水平速度（米/秒）
+func horizontal_speed() -> float:
+	return Vector2(velocity.x, velocity.z).length()
+
+
+## 脚步事件（T020）：用**世界时间差**累计，只在**贴地 + 真的在动**时产生事件 —— **不是每帧**
+## （`Parameters.md` 第 73 行「每次脚步事件生成声与噪声，非每帧生成」）。
+func _update_footsteps(dt_sim: float) -> void:
+	if species_config == null:
+		return
+	if not is_on_floor() or horizontal_speed() < FOOTSTEP_MIN_SPEED:
+		return
+	_footstep_accum += dt_sim
+	var interval := footstep_interval()
+	if _footstep_accum < interval:
+		return
+	_footstep_accum = maxf(0.0, _footstep_accum - interval)
+	_emit_footstep()
+
+
+## 发出一次脚步噪声：本地信号 + 世界总线（`WorldDirector.emit_noise()`），让别的身体能听见
+func _emit_footstep() -> void:
+	var loudness := noise_loudness()
+	last_footstep_loudness = loudness
+	footstep_count += 1
+	var sid := source_id()
+	var now := world_time_now()
+	action_noise.emit(sid, global_position, loudness, now)
+	var wd := _world_director_node()
+	if wd != null and wd.has_method("emit_noise"):
+		wd.call("emit_noise", sid, global_position, loudness)

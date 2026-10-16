@@ -512,7 +512,7 @@ func mov_line() -> String:
 	var reason := "none"
 	if player.climb != null and not player.climb.last_probe.is_empty():
 		reason = str(player.climb.last_probe.get("reason", player.climb.last_probe.keys()))
-	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f|food=%s|water=%s|ai_state=%s|ai_reason=%s|ai_target=%s" % [
+	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f|food=%s|water=%s|ai_state=%s|ai_reason=%s|ai_target=%s|seen=%s|heard=%d|noise_age=%.1f|steps=%d|hide=%s" % [
 		_frame, d["species_id"], d["position"].x, d["position"].y, d["position"].z,
 		d["velocity"].x, d["velocity"].y, d["velocity"].z, d["wish_speed"],
 		"crouch" if d["is_crouching"] else "stand", str(d["on_floor"]),
@@ -522,6 +522,8 @@ func mov_line() -> String:
 		_interaction_id(d), _interaction_state(d), _interaction_progress(d),
 		_resource_units(&"food"), _resource_units(&"water"),
 		_ai_state(d), _ai_reason(d), _ai_target(d),
+		str(d.get("seen", false)), int(d.get("heard", 0)), float(d.get("noise_age", -1.0)),
+		int(d.get("footsteps", 0)), _hide_target(d),
 	]
 
 
@@ -610,6 +612,37 @@ func ai_line() -> String:
 		int(r.get("nav_layer", 0)), str(r.get("nav_layer_source", "?")),
 		str(r.get("has_destination", false))
 	]
+
+
+## HUD 的感知行（T020）：看得见谁 / 听到几次噪声（**只有发生位置**）/ 草丛系数 / 躲藏点 / 脚步数
+func sense_line() -> String:
+	if player == null or player.perception == null:
+		return "sense: <none>"
+	var r: Dictionary = player.perception.report()
+	var noise := "-"
+	if bool(r.get("has_heard", false)):
+		var p: Vector3 = r.get("last_noise_position", Vector3.ZERO)
+		noise = "(%.2f, %.2f, %.2f) age=%.1fs loud=%.2f" % [
+			p.x, p.y, p.z, float(r.get("last_noise_age", -1.0)), float(r.get("last_noise_loudness", 0.0))
+		]
+	var hide := "-"
+	if player.ai != null:
+		var hid := player.ai.hide_target_id()
+		var kind := str(player.ai.call("flee_kind")) if player.ai.has_method("flee_kind") else "-"
+		hide = "%s/%s" % [hid if not hid.is_empty() else "-", kind]
+	var threat := str(r.get("threat_id", ""))
+	return "sense: seen=%s(%s) heard=%d noise=%s cover=%.2f in_cover=%s hide=%s steps=%d" % [
+		str(r.get("seen", false)), threat if not threat.is_empty() else "-",
+		int(r.get("heard_count", 0)), noise, float(r.get("cover_factor_here", 1.0)),
+		str(r.get("in_cover", false)), hide, player.footstep_count
+	]
+
+
+## `MOV|` 的躲藏目标字段（没有 AI / 没有躲藏点时 `-`）
+func _hide_target(d: Dictionary) -> String:
+	var a: Dictionary = d.get("ai", {})
+	var h := str(a.get("hide_target", ""))
+	return h if not h.is_empty() else "-"
 
 
 func _ai_state(d: Dictionary) -> String:
@@ -709,6 +742,7 @@ func hud_text() -> String:
 		])
 	lines.append(resource_line())
 	lines.append(ai_line())
+	lines.append(sense_line())
 	lines.append("keys: F1=cat  F2=mouse  F3=collision  F4=path  F5=hud  (WASD/Space/Shift/Ctrl 同正式操作)")
 	return "\n".join(lines)
 

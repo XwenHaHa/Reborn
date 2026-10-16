@@ -18,6 +18,15 @@ var time_advancing: bool = true
 ## 本帧的 sim delta，供各系统读取，避免每处自己算。
 var sim_delta: float = 0.0
 
+## 行动噪声总线（T020；`Docs/TechnicalDesign.md` §4 信号表 `action_noise`）：
+## 每次**脚步事件**发一次（**不是每帧**），带来源 ID、发生位置、响度与世界时间。
+## 感知方（`scripts/systems/perception.gd`）只从这里取"声音**发生**位置 + 时间"，
+## **不建立对声源的持续跟踪**（§6：听见声音只得到声音位置）。
+signal noise_emitted(source_id: String, position: Vector3, loudness: float, world_time: float)
+
+## 本次运行广播过的噪声事件数（诊断/断言用）
+var noise_event_count: int = 0
+
 
 func _process(delta: float) -> void:
 	if not time_advancing:
@@ -49,3 +58,12 @@ func get_world_time() -> float:
 ## 要判断"时间是不是真的在走"，看 `world_time` 有没有变（见 `Docs/Tasks/T014.md` 决策 D1）。
 func is_time_advancing() -> bool:
 	return time_advancing
+
+
+## 广播一次行动噪声（T020）。`loudness ≤ 0` 直接丢弃；计数只统计真正广播出去的事件。
+## 调用方：`AnimalBody._emit_footstep()`（每次脚步事件一次，**不是每帧**）。
+func emit_noise(source_id: String, position: Vector3, loudness: float) -> void:
+	if loudness <= 0.0:
+		return
+	noise_event_count += 1
+	noise_emitted.emit(source_id, position, loudness, world_time)

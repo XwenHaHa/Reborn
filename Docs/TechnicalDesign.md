@@ -236,6 +236,23 @@ signal life_ended(record: LifeRecord)
 `NavigationAgent3D` 用 `target_reached` / `navigation_finished` 信号；
 路径请求失败**最多重选 3 次**后进入短暂等待并记录诊断，**不永久阻塞**（`Parameters.md` 要求）。
 
+### 6.1 感知模块落地（T020 实现口径）
+
+- **`Perception`（`scripts/systems/perception.gd`）是挂在 `AnimalBody` 下的组件，只观察**：
+  输入是「自己的身体 + 世界」与 `WorldDirector.noise_emitted(origin, loudness, source_id)`；
+  输出是 `can_see_point()` / `cover_factor_at()` / `danger_time()` / `report()` 等只读查询。
+  **它不写 `move_intent`、不写生存数值**；NPC 的决定仍由 `AnimalAI.alert_for(position, reason)` 注入。
+- **噪声是快照而不是实体**：只保存 `last_noise_position` + `last_noise_time`；
+  **不跟随声源移动、不暴露声源的真实持续坐标**（与上面「隐藏后不得读取真实坐标」是同一条纪律）。
+- **威胁 = 异物种的存活身体**（比较 `species_id`），**不写物种名分支**。
+- **可达性判据**（`AnimalAI.reachable()`）：`map_get_closest_point()` ≤ `reach_tolerance`
+  **且** `map_get_path()` 非空、末端 ≤ 容差；导航图尚未同步时按可达处理。
+- **`AnimalBody` 新增**：`action_noise` 信号（脚步）、`footstep_count`、`footstep_interval()`、
+  `noise_loudness()`、`source_id()`、`world_time_now()`；脚步**只在落地且速度 > 0.05 m/s** 时按世界时间差计数。
+- **`WorldDirector` 新增**：`signal noise_emitted(origin, loudness, source_id)`、`noise_event_count`、`emit_noise()`。
+- **状态枚举**：`AnimalAI.State.FLEE = 3`、`HIDDEN = 4`（沿用 T019 的 `AnimalAI.State`，不另起一套）。
+- 数值与阈值见 `Docs/Parameters.md`「感知与逃跑（T020 落地口径）」；命令、实测值与视觉留证见 `Docs/Evidence/T020.md`。
+
 ## 7. 生命周期与事务
 
 `ALIVE → SETTLING`：先设状态与 `DEAD` 动作，取消交互/扑击，解绑旧输入；**创建档案一次**，提交世界变化，排队保存。

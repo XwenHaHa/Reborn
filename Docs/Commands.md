@@ -427,6 +427,54 @@ $out = 'E:\Reborn\Builds\P0-Win64'
 2. **`NavigationAgent3D.navigation_layers` 是位掩码**：设成 `99` 仍**包含位 1**（鼠层）→ 依然可达，测不出"失败"；要用与目标层**没有交集**的值。
 3. **"没有路径"时必须清空 `move_intent`**：否则残留上一帧方向继续走，看起来像"不可达也能走通"（会掩盖整个 `WAIT` 路径）。
 4. **测试的"直到"条件不能一开始就为真**：`state == forage` 在进入移动时就成立 → 立即命中；要用只在真正到达时成立的条件（如 `state_reason() == "arrived"`）。
+
+## 2.16 T020 老鼠视觉、听觉与逃跑（VERIFIED — 2026-10-16）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+& $g --headless --path $p --import                                                       # 0（新增 class_name Perception 后必跑）
+& $g --headless --path $p --check-only --script 'res://scripts/systems/perception.gd'    # 0
+& $g --headless --path $p --check-only --script 'res://scripts/ai/mouse_ai.gd'           # 0
+
+# 1) 断言 164 条（连续三次一致；含真实物理帧移动，单次约 1 分钟）
+& $g --headless --path $p --script 'res://tests/run_t020_perception.gd' --quit-after 180000
+#    -> SUMMARY|checks=164|failures=0  RESULT|PASS   EXIT=0
+
+# 2) 关卡重生成（改躲藏点后：先生成器，**再重烤导航**——顺序不能反）
+& $g --headless --path $p --script 'res://tests/tool_make_courtyard.gd' --quit-after 20000
+& $g --headless --path $p --script 'res://tests/tool_make_courtyard_nav.gd' --quit-after 20000
+
+# 3) 视觉三帧（**不能加 --headless**）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 30000 -- t020
+#    -> CAP|done  + 三张 1280×720 PNG（警戒 / 逃跑途中 / 洞里躲藏）
+
+# 4) 打包 + 包内复验
+& $g --headless --path $p --export-debug "Windows Desktop SelfTest" "$out\RebornSelfTest.exe"
+& $g --headless --main-pack "$out\RebornSelfTest.pck" `
+    --script 'res://tests/run_t020_perception.gd' --quit-after 180000
+#    -> SUMMARY|checks=164|failures=0   EXIT=0
+```
+
+- **感知只是组件**：`Perception extends Node` 挂在 `AnimalBody` 下、**只观察**；做决定走已有的 `alert_for(position, reason)`，
+  **不写** `move_intent`、**不写**生存值（有断言守着）。
+- **威胁判据来自数据**：不同 `species_id` 且存活的身体，**不写物种名分支**。
+- **噪声是事件**：`WorldDirector.emit_noise(origin, loudness, source_id)`，**只带发生位置 + 时间**；
+  发射方是 `AnimalBody` 的脚步（`action_noise` 信号），间隔由**速度反比**算出（不是每帧）。
+- **可达判据是双条件**：`map_get_closest_point()` ≤ `reach_tolerance` **且** `map_get_path()` 非空、末端也在容差内；
+  导航图未同步时按"可达"处理（避免首帧误判）。
+
+### 本任务踩到的坑（**会污染别的测试**）
+
+1. **`get_meta(name, null)` 的 null 默认值等同报错**：T019 的 `_resolve_nav_layer()` 读的键是 `species`，
+   而关卡导航区域写的是 **`species_id`** → 每次建 AI 都 ERROR，并静默退回**层 1**（**猫因此用上鼠的导航面**）。
+   连 T019 自己的用例都没发现——它的夹具**恰好** `set_meta("species", ...)`，读了同一个错键却得到正确结果。读 meta 一律先 `has_meta()`。
+2. **生成器会清掉导航区域**：`tool_make_courtyard.gd` 跑完必须再跑 `tool_make_courtyard_nav.gd`，否则 AI 全部找不到导航面。
+3. **捕获取景要用"推进量"当条件**：相机在鼠**南侧**、鼠朝北跑 → 鼠落在相机背后，图里看不到"逃"。
+   改成"等鼠沿通道真的走出去 ≥2 m 再拍"。
+4. **0.3 s 的 Alert 抓不到静帧**：静帧来不及凝视 → 捕获时**重复注入威胁**把 `ALERT` 保持住，日志里标 `held_by=repeat_alert`，**不假装是自然时序**。
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -728,3 +776,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-15 | **T017 完成**。新增 §2.13 食物、饮水与可取消交互命令（128 条断言 + 包内复验 + 四条实测坑：lambda 按值捕获导致计数永远是 0；`kind` setter 重置同类型默认值；`_ready` 用真实时间排期与假时间测试冲突；继承要显式 `super()`）。 |
 | 2026-10-15 | **T018 完成**。新增 §2.14 最小 HUD 与调参页命令（73 条断言 + `-- t018` 三张截图 + 包内复验 + 四条实测坑：`mouse_filter` 默认 STOP；带类型参数遇已释放目标报错；HUD 进度必须用真实世界时间；状态不变断言要在同帧比）。 |
 | 2026-10-15 | **T019 完成**。新增 §2.15 鼠 NPC 觅食与警戒命令（72 条断言 + 包内复验 + 四条实测坑：AI 默认开启会让 7 个既有套件回退 57 条；`navigation_layers` 是位掩码；无路径要清 `move_intent`；测试的"直到"条件不能一开始就为真）。 |
+| 2026-10-16 | **T020 完成**。新增 §2.16 老鼠视觉、听觉与逃跑命令（164 条断言 + `-- t020` 三帧 + 关卡重生成→重烤导航的顺序 + 包内复验 + 四条实测坑：`get_meta` 的 null 默认值**等同报错**、读错 meta 键会让**猫用上鼠的导航面**；生成器会清掉导航区域、必须重烤；捕获取景要按"推进量"当条件；0.3 s 的 Alert 抓不到静帧，要如实标注 `held_by`）。 |

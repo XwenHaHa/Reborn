@@ -92,3 +92,32 @@
   结算用的是**累计到的实际时间**，所以 30/60/144 Hz 结果一致（T014 实测 60 s 的消耗 spread = 0）。
 - **时间源**：所有按时间的消耗取 `WorldDirector.world_time` 的差；暂停 / 结算 / 选择 / 加载时世界时间不推进 →
   数值不消耗（T014 实测：树暂停与显式门闩两条路径都成立）。
+
+## 感知与逃跑（T020 落地口径）
+
+- **阈值真源**：第 71 行（Alert 最长 0.3 s / 目标在 180 内立即逃 / Hidden 后无危险持续 4 s）与第 73 行
+  （Loudness 0.2/0.5/1.0、**每次脚步事件**生成声与噪声、草丛 VisibilityFactor=0.4、近距 80 内仍按无遮挡检测）。
+  落成字段后（**单位已换算为米**）：`alert_max_time = 0.3`、`immediate_flee_range = 1.80`（180 cm ÷100）、
+  `hidden_hold_time = 4.0`、`near_detect_range = 0.80`（80 cm ÷100）。
+- **听觉距离**：`HearingRange × Loudness`，**不另加系数**。鼠 = 10.0 m ×（跑 1.0 / 走 0.5 / 蹲 0.2）= **10 / 5 / 2 m**。
+  墙与草丛**都不衰减声音**；自己发出的噪声按 `source_id` 忽略（不做自听）。
+- **噪声只有发生位置**：`WorldDirector.noise_emitted(origin, loudness, source_id)` 每条只带**发生位置 + 时间戳**；
+  感知侧存 `last_noise_position` / `last_noise_time` 快照，**不跟随声源移动**，也不为声源寻路。
+- **草丛与遮挡**：草丛 `cover_volumes` 的 `visibility_factor`（0.4）乘到**视觉发现距离**上，多片草丛重叠取**最小**；
+  视线遮挡只认 `world_static`。**近距 ≤ `near_detect_range`（0.80 m）豁免草丛分档与遮挡，但仍受视锥半角限制**
+  （即「背后看不见」依然成立）。
+- **视野**：鼠 `vision_range = 6.5 m`、`vision_half_angle_deg = 75`（第 22 行 650 / 75° 换算而来），**不做物种名分支**。
+- **脚步**：走路时每 `footstep_interval_base` 出一个脚步事件；该间隔按**速度反比**缩放并夹在 0.1–1.5 s
+  （实测间隔：跑 0.200 / 走 0.500 / 蹲 1.000 s；静止、离地、暂停都不出声）。
+- **T020 新增 4 个实现默认值（`Parameters.md` 原文没有，需负责人并入正式起测值）**：
+
+| 参数 | 值 | 含义与实测 |
+|---|---:|---|
+| `footstep_interval_base` | 0.5 s | 行走脚步间隔基准；按速度反比缩放（夹 0.1–1.5 s）。121 帧只出 4 次 → **每条事件一次，不是每帧** |
+| `flee_timeout` | 3.0 s | `FLEE` 期间连掩体都没有时的上限，超时回 `EXPLORE`（实测 2.90 s 退出，**不位移、不假装躲藏**） |
+| `reach_tolerance` | 0.5 m | 判「可达」的容差：`map_get_closest_point()` 与 `map_get_path()` 末端都要 ≤ 该值 |
+| `hide_arrive_radius` | 0.30 m | 进洞判定半径；可被躲藏点自带的 `radius`（T011 鼠洞 0.24 × 0.30 m）覆盖 |
+
+- **状态编号**：`AnimalAI.State.FLEE = 3`、`HIDDEN = 4`（沿用 T019 的枚举，不另起一套）。
+- **逃跑优先级**：可达 `hide_spots` → 可达 `cover_volumes` → 都没有则不设目的点（交给 `flee_timeout`），
+  **永不永久阻塞**；位置只由导航路径推进（**不瞬移**）。

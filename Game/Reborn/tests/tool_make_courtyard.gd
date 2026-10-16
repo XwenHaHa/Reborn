@@ -117,6 +117,7 @@ func _initialize() -> void:
 	_add_roots_structures(root_node)
 	_add_creek_structures(root_node)
 	_add_routes(root_node)
+	_add_hide_spots(root_node)
 	_add_light_and_env(root_node)
 
 	var out := PackedScene.new()
@@ -349,6 +350,20 @@ func _add_routes(parent: Node3D) -> void:
 	_mk_marker(parent, "RouteSafeWaypoint2", Vector3(-16.0, GROUND_TOP, -22.0), "route_markers", {"route": "long_covered"})
 	_mk_marker(parent, "RouteSafeEnd", Vector3(2.0, GROUND_TOP, -22.0), "route_markers", {"route": "long_covered"})
 
+
+
+## 躲藏点（T020）：把**真实鼠洞**标成鼠的躲藏点。
+##
+## 为什么放在洞里而不是洞口外：策划 v1.1 第 212 行「鼠洞是猫不可进入的空间安全边界」；
+## T012 已实测**洞里只有鼠层的导航面** → 鼠钻得进去、猫的导航不可达。
+## 每区域的安全点数量与布点扩充属 T031/T035（本任务只放这一个）。
+func _add_hide_spots(parent: Node3D) -> void:
+	var hide_z: float = (BARRIER_Z_MIN + BARRIER_Z_MAX) * 0.5
+	var spot := _mk_marker(parent, "HideSpot_RootHole", Vector3(HOLE_CENTER_X, GROUND_TOP, hide_z),
+		"hide_spots", {"species": "Mouse", "kind": "mouse_hole", "radius": 0.30})
+	print("TOOL|HideSpots|count=1|id=%s|pos=(%.2f, %.2f, %.2f)" % [
+		spot.name, spot.position.x, spot.position.y, spot.position.z
+	])
 
 func _add_light_and_env(parent: Node3D) -> void:
 	var light := DirectionalLight3D.new()
@@ -603,6 +618,20 @@ func _verify() -> void:
 	_check("corridor_spawn_cat_water", _segment_clear(scene, CAT_SPAWN, SUPPLIES[4]["pos"]))
 	_check("corridor_spawn_mouse_water", _segment_clear(scene, MOUSE_SPAWN, SUPPLIES[4]["pos"]))
 
+	# 躲藏点（T020）：树根洞里恰好 1 个**鼠**躲藏点（猫层在洞里没有导航面，见 T012）
+	var hole_spot := scene.get_node_or_null("HideSpot_RootHole") as Marker3D
+	if _check("hide_spot_root_hole_exists", hole_spot != null):
+		_check("hide_spot_root_hole_group", hole_spot.is_in_group("hide_spots"))
+		_check("hide_spot_root_hole_species", StringName(hole_spot.get_meta("species", &"")) == &"Mouse")
+		var hide_z: float = (BARRIER_Z_MIN + BARRIER_Z_MAX) * 0.5
+		_check("hide_spot_root_hole_pos",
+			hole_spot.position.distance_to(Vector3(HOLE_CENTER_X, GROUND_TOP, hide_z)) < GEO_EPS)
+		_check("hide_spot_root_hole_in_hole_span", absf(hole_spot.position.x - HOLE_CENTER_X) <= HOLE_W * 0.5)
+		_check("hide_spot_root_hole_radius_0.30", absf(float(hole_spot.get_meta("radius", 0.0)) - 0.30) < GEO_EPS)
+		print("VERIFY|HideSpot|id=%s|pos=(%.2f, %.2f, %.2f)|radius=%.2f" % [
+			hole_spot.name, hole_spot.position.x, hole_spot.position.y, hole_spot.position.z,
+			float(hole_spot.get_meta("radius", 0.0))
+		])
 	scene.free()
 
 
