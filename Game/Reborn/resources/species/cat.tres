@@ -50,3 +50,10 @@ allowed_food_types = Array[int]([0])
 can_jump = true
 can_pounce = true
 can_use_mouse_tunnel = false
+; 扑击与捕获（T021）：Parameters.md 第 67 行（最大水平距离 140 cm / 持续 0.25 s / 体力 25 / 恢复 0.6 s）
+; 捕获食物失效 300 s 来自第 77 行；营养值 35.0 沿用 ResourcePoint 默认值。
+pounce_max_distance = 1.4
+pounce_duration = 0.25
+pounce_stamina_cost = 25.0
+pounce_recovery = 0.6
+capture_food_expire = 300.0

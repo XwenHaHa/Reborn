@@ -121,3 +121,35 @@
 - **状态编号**：`AnimalAI.State.FLEE = 3`、`HIDDEN = 4`（沿用 T019 的枚举，不另起一套）。
 - **逃跑优先级**：可达 `hide_spots` → 可达 `cover_volumes` → 都没有则不设目的点（交给 `flee_timeout`），
   **永不永久阻塞**；位置只由导航路径推进（**不瞬移**）。
+
+## 扑击与捕获（T021 落地口径）
+
+- **阈值真源**：第 67 行（猫扑击最大水平距离 140 cm、持续 0.25 s、体力 25、恢复 0.6 s、仅地面 Idle 启动、
+  期间锁定朝向、禁止其他扑击/跳跃/交互、连续扫掠停止于障碍、实际位移不得超过预算、不得直接传送穿过阻挡）
+  与第 77 行（捕获食物容量 1、未进食 300 s 失效）。落成字段后（**单位已换算为米**）：
+  `pounce_max_distance = 1.40`（140 cm ÷100）、`pounce_duration = 0.25`、`pounce_stamina_cost = 25.0`、
+  `pounce_recovery = 0.6`、`capture_food_expire = 300.0`。
+- **只在 `can_pounce = true` 的物种上生效**：猫 `cat.tres` 赋上述值；鼠 `mouse.tres` 保持全 0，`can_pounce = false`。
+  `SpeciesConfig` 自校验：可扑击物种五项必须 > 0；不可扑击物种五项必须为 0（**不写物种名分支**）。
+- **代价一次付清、成功失败同价**：启动瞬间扣 25 点体力（体力 < 25 则**拒绝启动**，不扣不赔）；
+  被障碍挡下、命中猎物、走满距离结束三种结局都不退还、也不额外扣减。
+- **位移受预算约束、不传送**：用 `move_and_collide()` 逐物理帧推进（**不是** `move_and_slide()`，也不是直接写位置），
+  水平速度 = `pounce_max_distance / pounce_duration` ≈ **5.6 m/s**，累计水平位移 **≤ 1.40 m**。
+- **障碍优先于障碍后的猎物**：`move_and_collide()` 每帧只返回**第一个**碰撞 → 更近的墙先于墙后的猎物响应；
+  碰撞体是 `world_static` → `blocked_by = "world"`；是动物但不满足猎物判据 → `"animal"`；两种都不结算捕获。
+- **猎物判据**：不同 `species_id`、非自身、未 `captured`、存活（`survival == null` 视为未死，否则 `not survival.is_dead()`）
+  ——纯状态/配置判定，**不写物种名分支**。`SurvivalState` **没有** `alive` 字段，一律用 `is_dead()`。
+- **捕获结算幂等**：`WorldDirector.report_capture(captor_id, target_id, ...)` 按 `captured_target_ids` 去重，
+  重复调用返回 `false` 且计数不变；目标侧 `mark_captured()` 亦幂等。结算**不走**伤害/死亡通道。
+- **捕获食物（"可食对象"≠回满指标）**：命中点生成 1 个 `ResourcePoint`：`kind = food`、`food_type = MEAT`、
+  `capacity = 1`、`units = 1`、`refill_interval = 0`（不随时间恢复）、`expire_at = 命中世界时间 + 300`；
+  生成**不**直接改变捕食者任何生存值，进食仍须走 T017 的交互流程。
+- **恢复 0.6 s**：扑击结束后 `RECOVERING`，按世界时间计时；期间不能再次扑击/跳跃/交互、站位固定，恢复结束回 `IDLE`。
+- **T021 新增 1 个实现默认值（`Parameters.md` 原文没有，需负责人并入正式起测值）**：
+
+| 参数 | 值 | 含义与实测 |
+|---|---:|---|
+| 捕获食物营养值 | 35.0 | 沿用 `ResourcePoint` 既有食物默认 `nutrition`；原文未为捕获食物单列营养值 |
+
+- **动作状态枚举**：`ActionState { IDLE, INTERACTING, POUNCING, RECOVERING, DEAD }`（`TechnicalDesign` §1 已定义，
+  由 `AnimalBody.action_state()` 只读汇总，优先级 `DEAD > POUNCING > RECOVERING > INTERACTING > IDLE`）。

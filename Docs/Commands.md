@@ -478,6 +478,31 @@ $out = 'E:\Reborn\Builds\P0-Win64'
 5. **`--quit-after` 给太小会"静默截断"且仍然 `EXIT=0`**：`--quit-after 4000` 跑 T020 只出 139 条断言（真值 164），
    进程被强制退出，退出码仍是 0。**判定通过必须同时核对 `SUMMARY|checks=<预期条数>|failures=0`**，
    不能只看退出码（本任务复核时踩过一次）。
+## 2.17 T021 猫扑击与捕获结算（VERIFIED — 2026-10-17 实测）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+
+& $g --headless --path $p --import                                                    # 0（新增 class_name CaptureSettlement 后必跑）
+& $g --headless --path $p --check-only --script 'res://scripts/systems/capture.gd'     # 0
+
+# 1) 断言套件（必须核对 SUMMARY|checks=279|failures=0，不能只看退出码）
+& $g --headless --path $p --script 'res://tests/run_t021_capture.gd' --quit-after 180000   # exit=0，279/0
+
+# 2) 视觉：三帧（扑击中途 / 撞墙被挡 / 命中并生成捕获食物）。**不能加 --headless**（无头是 dummy 渲染器）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 60000 -- t021
+#   出图：C:\Users\<用户>\AppData\Roaming\Godot\app_userdata\Reborn\t021_pounce.png / t021_blocked.png / t021_capture.png
+#   日志核对：CAP|t021|isolate|... player_layer=0 → CAP|t021|fixture|cat_can_pounce=true → 三帧 save_result=0 (OK) → CAP|done
+```
+
+- **取景前必须隔离 lab**（T021 实测踩到）：基底场景 `l_movement_lab.tscn` 自带一个 `Player`
+  （就是 `animal_body.tscn` 的猫，位于 `(0, 1.5, 0)`），它会**落在自建探针场里面**，视觉模型会把它读成
+  "第二个米白色胶囊"。`_capture_t021_frames()` 现在先调 `_t021_isolate_lab()`：隐藏 lab 可视物 +
+  `Player.collision_layer/mask = 0` + 停它的物理，隔离后再取景。
+- **视觉判读统一走项目工具**：`node "E:/claude-vision-skill/vision.js" "<png>" "<中文几何问题>"`（**不用 Read 读图**）。
+  无美术阶段（身体是胶囊占位）提问改成"几何位置关系"（几个胶囊 / 墙在胶囊哪一侧 / 间隔），不要问"像不像猫"。
+
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针

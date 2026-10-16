@@ -113,6 +113,10 @@ func _initialize() -> void:
 	if OS.get_cmdline_user_args().has("t020"):
 		await _capture_t020_frames(lab)
 
+	# T021：猫扑击与捕获结算（扑击中途 / 撞墙被挡 / 命中并生成捕获食物）。只在显式传 `-- t021` 时执行。
+	if OS.get_cmdline_user_args().has("t021"):
+		await _capture_t021_frames(lab)
+
 	print("CAP|done")
 	quit(0)
 
@@ -898,3 +902,231 @@ func _t020_print_state(tag: String, mouse: AnimalBody, cat: AnimalBody) -> void:
 		mouse.global_position, cat.global_position,
 		str(rep.get("seen", false)), int(rep.get("heard_count", 0)), float(rep.get("last_noise_age", -1.0))
 	])
+
+
+# ---------------------------------------------------------------------------
+# T021：猫扑击与捕获结算（扑击中途 / 撞墙被挡 / 命中并生成捕获食物）
+# ---------------------------------------------------------------------------
+
+const T021_BODY := "res://scenes/characters/animal_body.tscn"
+const T021_CAT := "res://resources/species/cat.tres"
+const T021_MOUSE := "res://resources/species/mouse.tres"
+## 自建探针场：几何全部已知（不依赖关卡布局，避免 T010/T020 那种"主体被侧壁遮住"）
+const T021_FLOOR_SIZE := Vector3(8.0, 0.20, 8.0)
+const T021_WALL_SIZE := Vector3(2.4, 1.00, 0.20)
+const T021_CAT_POS := Vector3(0.0, 0.35, 2.00)     # 猫在 z=2.0，**前向 −Z**
+const T021_WALL_Z := 1.00                          # 墙距猫 1.00 m（扑击预算 1.40 m 之内）
+const T021_MOUSE_NEAR_Z := 0.80                    # 猎物距猫 1.20 m
+const T021_MOUSE_FAR_Z := -1.00                    # 猎物距猫 3.00 m（墙后）
+const T021_CAM := Vector3(2.20, 1.20, 3.40)
+const T021_LOOK := Vector3(0.0, 0.25, 1.10)
+
+
+## 三帧：① 扑击中途（无墙无猎物，走满预算）② 撞墙被挡（墙 1.0 m、猎物 3.0 m 在墙后）
+## ③ 命中并生成捕获食物。每帧同时打印动作状态与计数，图与状态在同一条日志里。
+func _capture_t021_frames(lab: Node) -> void:
+	print("CAP|t021|start")
+	_t021_isolate_lab(lab)
+	var body_packed := load(T021_BODY) as PackedScene
+	var cat_cfg := load(T021_CAT) as SpeciesConfig
+	var mouse_cfg := load(T021_MOUSE) as SpeciesConfig
+	if body_packed == null or cat_cfg == null or mouse_cfg == null:
+		print("CAP|t021|ERROR|config/body missing")
+		return
+
+	# 1) 扑击中途（0.25 s 的动作拍中间帧：settle 用小值，否则动作已结束）
+	var a: Dictionary = _t021_arena(body_packed, cat_cfg, mouse_cfg, false, INF)
+	await _t021_settle(a)
+	var started: bool = (a["cat"] as AnimalBody).start_pounce()
+	for i in 5:
+		await physics_frame
+	var mid_act := str((a["cat"] as AnimalBody).debug_state().get("action_state", "?"))
+	var mid_travel: float = (a["cat"] as AnimalBody).last_pounce_travel
+	print("CAP|t021|pounce|started=%s|act=%s|travel=%.2f" % [str(started), mid_act, mid_travel])
+	await _capture_view("t021_pounce", a["cam"], 2)
+	_t021_free(a)
+
+	# 2) 撞墙被挡（障碍优先于墙后的猎物：位移停在墙前、猎物不被捕获）
+	var b: Dictionary = _t021_arena(body_packed, cat_cfg, mouse_cfg, true, T021_MOUSE_FAR_Z)
+	await _t021_settle(b)
+	var cat_b: AnimalBody = b["cat"]
+	var mouse_b: AnimalBody = b["mouse"]
+	cat_b.start_pounce()
+	var wait_b := 0
+	while wait_b < 90 and cat_b.is_pouncing():
+		await physics_frame
+		wait_b += 1
+	for i in 4:
+		await physics_frame
+	print("CAP|t021|blocked|frames=%d|act=%s|pounce=%d|captures=%d|blocked=%s|travel=%.2f|cat_z=%.2f|wall_z=%.2f|mouse_captured=%s|world_captures=%d" % [
+		wait_b, str(cat_b.debug_state().get("action_state", "?")), cat_b.pounce_count, cat_b.captures,
+		cat_b.last_pounce_blocked_reason, cat_b.last_pounce_travel,
+		cat_b.global_position.z, T021_WALL_Z, str(mouse_b.captured), _t021_world_captures()])
+	await _capture_view("t021_blocked", b["cam"], 3)
+	_t021_free(b)
+
+	# 3) 命中并生成捕获食物（猎物 1.20 m 在正前方、同一射线上）
+	var c: Dictionary = _t021_arena(body_packed, cat_cfg, mouse_cfg, false, T021_MOUSE_NEAR_Z)
+	await _t021_settle(c)
+	var cat_c: AnimalBody = c["cat"]
+	var mouse_c: AnimalBody = c["mouse"]
+	cat_c.start_pounce()
+	var wait_c := 0
+	while wait_c < 90 and cat_c.captures == 0:
+		await physics_frame
+		wait_c += 1
+	for i in 6:
+		await physics_frame
+	var food: Node = _t021_find_food(c["arena"])
+	print("CAP|t021|capture|frames=%d|act=%s|pounce=%d|captures=%d|blocked=%s|travel=%.2f|mouse_captured=%s|mouse_by=%s|world_captures=%d|food_count=%d|food=%s|food_units=%d|food_expire_in=%.1f" % [
+		wait_c, str(cat_c.debug_state().get("action_state", "?")), cat_c.pounce_count, cat_c.captures,
+		cat_c.last_pounce_blocked_reason, cat_c.last_pounce_travel,
+		str(mouse_c.captured), mouse_c.captured_by, _t021_world_captures(), _t021_world_food_count(),
+		str(food.global_position) if food != null else "-",
+		int(food.units) if food != null else -1,
+		float(food.expire_at) - _t021_world_time() if food != null else -1.0])
+	await _capture_view("t021_capture", c["cam"], 3)
+	_t021_free(c)
+	print("CAP|t021|done")
+
+
+## 自建探针场（地板 + 可选墙 + 猫 + 可选猎物 + 环境光/平行光 + 相机）。返回 arena/cat/mouse/cam。
+func _t021_arena(body_packed: PackedScene, cat_cfg: SpeciesConfig, mouse_cfg: SpeciesConfig,
+		with_wall: bool, mouse_z: float) -> Dictionary:
+	var arena := Node3D.new()
+	arena.name = "T021Arena"
+	root.add_child(arena)
+
+	var env := WorldEnvironment.new()
+	var e := Environment.new()
+	e.background_mode = Environment.BG_COLOR
+	e.background_color = Color(0.10, 0.11, 0.13)
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	e.ambient_light_color = Color(0.75, 0.78, 0.85)
+	e.ambient_light_energy = 0.9
+	env.environment = e
+	arena.add_child(env)
+
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(-0.9, 0.6, 0.0)
+	sun.light_energy = 1.1
+	arena.add_child(sun)
+
+	arena.add_child(_t021_static_box(Vector3(0.0, -0.10, 0.0), T021_FLOOR_SIZE, Color(0.42, 0.44, 0.40)))
+	if with_wall:
+		arena.add_child(_t021_static_box(Vector3(0.0, 0.50, T021_WALL_Z), T021_WALL_SIZE, Color(0.62, 0.55, 0.42)))
+
+	var cat := body_packed.instantiate() as AnimalBody
+	cat.species_config = cat_cfg
+	cat.player_controlled = false
+	cat.ai_enabled = false
+	cat.position = T021_CAT_POS
+	arena.add_child(cat)
+
+	var mouse: AnimalBody = null
+	if is_finite(mouse_z):
+		mouse = body_packed.instantiate() as AnimalBody
+		mouse.species_config = mouse_cfg
+		mouse.player_controlled = false
+		mouse.ai_enabled = false
+		mouse.position = Vector3(0.0, 0.35, mouse_z)
+		arena.add_child(mouse)
+
+	var cam := Camera3D.new()
+	cam.name = "T021Camera"
+	cam.near = 0.05
+	cam.far = 400.0
+	cam.fov = 55.0
+	arena.add_child(cam)
+	cam.global_position = T021_CAM
+	cam.look_at(T021_LOOK, Vector3.UP)
+	cam.current = true
+	return {"arena": arena, "cat": cat, "mouse": mouse, "cam": cam}
+
+
+## 落地稳定（等重力把身体放到地板上；同时确认 `can_pounce()` 已随物种配置生效）
+func _t021_settle(a: Dictionary) -> void:
+	for i in 24:
+		await physics_frame
+	var cat: AnimalBody = a["cat"]
+	print("CAP|t021|fixture|cat_can_pounce=%s|cat_on_floor=%s|cat_pos=%s|mouse=%s" % [
+		str(cat.can_pounce()), str(cat.is_on_floor()), cat.global_position,
+		str(a["mouse"].global_position) if a["mouse"] != null else "-"])
+
+
+func _t021_free(a: Dictionary) -> void:
+	var arena := a["arena"] as Node
+	if arena != null and is_instance_valid(arena):
+		arena.queue_free()
+
+
+## 隔离：探针场之外**不要**出现在画面里。lab 自带 `Player`（一个 `animal_body.tscn` 的猫）站在
+## 原点 1.5 m 高处，正好落在探针场里 → 会被误读成"第二个胶囊"；lab 的蓝/黄标尺同理污染取景。
+## 这里隐藏 lab 的可视物并把它的 Player 移出碰撞/物理，保证帧里只有探针场几何。
+func _t021_isolate_lab(lab: Node) -> void:
+	if lab == null:
+		return
+	if lab is Node3D:
+		(lab as Node3D).visible = false
+	var player := lab.get_node_or_null("Player") as CollisionObject3D
+	if player != null:
+		player.collision_layer = 0
+		player.collision_mask = 0
+		player.set_physics_process(false)
+	print("CAP|t021|isolate|lab=%s|lab_is_node3d=%s|lab_player=%s|player_layer=%d" % [
+		lab.name, str(lab is Node3D), str(player != null),
+		player.collision_layer if player != null else -1])
+
+
+## 探针场里的静态盒（碰撞层 1 = world_static，与 AnimalBody 的 LAYER_WORLD_STATIC 一致）
+func _t021_static_box(pos: Vector3, size: Vector3, color: Color) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	body.position = pos
+	var mesh := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mesh.mesh = box
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mesh.material_override = mat
+	body.add_child(mesh)
+	var shape := CollisionShape3D.new()
+	var cuboid := BoxShape3D.new()
+	cuboid.size = size
+	shape.shape = cuboid
+	body.add_child(shape)
+	return body
+
+
+func _t021_world_captures() -> int:
+	var wd := _t021_world_director()
+	return int(wd.get("capture_count")) if wd != null else -1
+
+
+func _t021_world_food_count() -> int:
+	var wd := _t021_world_director()
+	return int(wd.get("capture_food_count")) if wd != null else -1
+
+
+## `WorldDirector` 单例（本工具 `extends SceneTree`，所以走 `root` 查节点，**不用** autoload 全局名）
+func _t021_world_director() -> Node:
+	return root.get_node_or_null("WorldDirector")
+
+
+## 当前世界时间（秒）；拿不到单例时返回 -1
+func _t021_world_time() -> float:
+	var wd := _t021_world_director()
+	return float(wd.get("world_time")) if wd != null else -1.0
+
+
+## 捕获食物对象（在探针场里找 `ResourcePoint`，**不依赖组件节点名**；多个时取最后一个）
+func _t021_find_food(arena: Node) -> Node:
+	if arena == null:
+		return null
+	var found: Node = null
+	for child in arena.get_children():
+		if child is ResourcePoint:
+			found = child
+	return found

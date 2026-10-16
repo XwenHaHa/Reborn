@@ -11,6 +11,7 @@ extends CharacterBody3D
 ##   4) 潜伏（T009）：蹲姿把胶囊变矮、视线降低；**只在头顶空间允许时**才恢复站姿
 ##      （`Docs/TechnicalDesign.md` 的硬要求：不能靠改 `scale` 蒙过去，要真的查空间）
 ##   5) 第一人称相机：眼高 = 配置的竖直偏移，鼠标查表 → `apply_look()`（测试可直接调它）
+##   6) 扑击与捕获（T021）：`start_pounce()` 扫掠位移、命中结算走 `CaptureSettlement`；被捕获则退出活体表现
 ##
 ## 相机偏移的轴向（T009 决策 D1）：`camera_offset_z` 按 **本地 +Y（竖直）** 实现。
 ## 依据：`Docs/Parameters.md` 的表源自 UE 版（`CameraZ`/`JumpZVelocity`），UE 里 Z 是上方向；
@@ -130,6 +131,41 @@ var last_footstep_loudness := 0.0
 var _footstep_accum := 0.0
 
 
+## --- 扑击与捕获（T021）---
+## 本帧是否有扑击意图（玩家按键 / AI / 测试写入；消费一次）
+var want_pounce: bool = false
+## 捕获结算组件（T021）：只有 `can_pounce()` 为真时才在 `apply_config()` 里建立
+var capture: CaptureSettlement = null
+## 已捕获（本身体作为猎物）：不再行动、不再算威胁（T021 D5）
+var captured: bool = false
+## 捕获者的 `source_id`（诊断/断言）
+var captured_by: String = ""
+## 本次运行启动过的扑击次数
+var pounce_count: int = 0
+## 本次运行命中并结算成功的捕获次数
+var captures: int = 0
+## 最近一次扑击的**实际水平位移**（米，逐帧真实位移累计）
+var last_pounce_travel: float = 0.0
+## 最近一次扑击的结束原因：`""`（跑完预算/时长）/ `"world"` / `"animal"`
+var last_pounce_blocked_reason: StringName = &""
+## 交互受阻原因（`""` = 不阻塞；`"pouncing"` / `"recovering"`）
+var interaction_blocked_reason: StringName = &""
+
+var _pouncing: bool = false
+## 启动时锁定的扑击方向（水平单位向量）
+var _pounce_dir: Vector3 = Vector3.ZERO
+## 本帧预算内的目标速度（= `pounce_max_distance / pounce_duration`）
+var _pounce_speed: float = 0.0
+## 本次扑击已累计的水平位移（米）
+var _pounce_travel: float = 0.0
+## 本次扑击已累计的物理时长（秒）
+var _pounce_elapsed: float = 0.0
+## 本次扑击的世界时间终点（0 = 不在扑击）
+var _pounce_end_time: float = 0.0
+## 恢复期结束的世界时间（0 = 不在恢复期）
+var _recover_until: float = 0.0
+
+
 func _ready() -> void:
 	if player_controlled:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -158,7 +194,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## 偏航/俯仰（弧度）。鼠标事件经 `_unhandled_input` 调它；测试可直接调它，走同一段代码。
 func apply_look(yaw_delta: float, pitch_delta: float) -> void:
-	rotate_y(yaw_delta)
+	# 扑击期间锁定朝向（T021 D8）：忽略偏航，但俯仰仍生效（观察用）
+	if not is_pouncing():
+		rotate_y(yaw_delta)
 	_pitch = clampf(_pitch + pitch_delta, -MAX_PITCH, MAX_PITCH)
 	if camera != null:
 		camera.rotation.x = _pitch
@@ -170,14 +208,26 @@ func _physics_process(delta: float) -> void:
 	_read_input()
 	_apply_stance()
 
+	# 扑击启动（T021）：玩家按键或外部（AI / 测试）写 `want_pounce`；门控与扣体力都在 `start_pounce()` 里
+	if want_pounce:
+		want_pounce = false
+		start_pounce()
+
 	# AI（T019）：只有显式打开 `ai_enabled` 的 NPC 身体才由状态机写 `move_intent`
 	if ai != null and ai_enabled:
 		ai.tick(world_time_now())
 	# 感知（T020）：每物理帧刷新"是否看见威胁"（只观察：不写 move_intent、不改状态机）
 	if perception != null:
 		perception.tick(world_time_now())
+
+	# 扑击（T021 D3）：扑击期间**只**跑扑击位移 —— 不叠加输入、不交互、不推进姿态。
+	# 生存与脚步按世界时间差结算，扑击帧跳过会在下一帧自动补齐（`tick_to()` 用绝对时间）。
+	if is_pouncing():
+		_step_pounce(delta)
+		return
 	var direction := Vector3.ZERO
-	if move_intent != Vector2.ZERO:
+	# 恢复期站位固定（T021 D7）：`move_intent` 被吞，不产生水平位移；视角仍可动（`apply_look` 只管朝向）
+	if move_intent != Vector2.ZERO and not is_recovering():
 		direction = (transform.basis * Vector3(move_intent.x, 0.0, move_intent.y)).normalized()
 
 	# 重力与跳跃：`is_on_floor()` 由上一次 `move_and_slide()` 决定（与 T002 灰盒一致）
@@ -185,7 +235,10 @@ func _physics_process(delta: float) -> void:
 		velocity += get_gravity() * delta
 	else:
 		has_touched_floor = true
-		if want_jump and can_jump():
+		# 恢复期禁止跳跃（T021 D8）：`want_jump` 直接被吞掉（扑击帧在更早处 return，不会走到这里）
+		if want_jump and is_recovering():
+			want_jump = false
+		elif want_jump and can_jump():
 			velocity.y = species_config.jump_velocity
 			want_jump = false
 
@@ -244,6 +297,7 @@ func _read_input() -> void:
 	# 与灰盒一致：不做跳跃缓冲（空中按键落地不自动跳）
 	want_jump = Input.is_action_just_pressed("jump")
 	want_interact = Input.is_action_pressed("interact")
+	want_pounce = Input.is_action_just_pressed("pounce")
 
 
 
@@ -401,6 +455,17 @@ func apply_config() -> void:
 		perception.name = "Perception"
 		add_child(perception)
 	perception.setup(self, species_config)
+
+	# 捕获结算组件（T021）：只有**能扑击**的物种才建（鼠不建 → 不会误把自己当捕食者）
+	if can_pounce():
+		if capture == null:
+			capture = CaptureSettlement.new()
+			capture.name = "Capture"
+			add_child(capture)
+		capture.setup(self, species_config)
+	elif capture != null and is_instance_valid(capture):
+		capture.queue_free()
+		capture = null
 	# 行为状态机（T019）：脚本来自配置；**默认关闭**，由生成者显式打开 `ai_enabled`
 	# （否则测试夹具/玩家身体会被 AI 抢走移动意图 —— 实测会让 T010/T011/T012/T017 大面积回退）
 	_sync_ai()
@@ -499,6 +564,20 @@ func debug_state() -> Dictionary:
 		"footsteps": footstep_count,
 		"loudness": noise_loudness(),
 		"player_controlled": player_controlled,
+		"action_state": action_state_name(),
+		"action_state_id": int(action_state()),
+		"pouncing": _pouncing,
+		"recovering": is_recovering(),
+		"pounce_count": pounce_count,
+		"pounce_travel": last_pounce_travel,
+		"pounce_blocked": String(last_pounce_blocked_reason),
+		"pounce_can": can_pounce(),
+		"captures": captures,
+		"captured": captured,
+		"captured_by": captured_by,
+		"interaction_blocked": interaction_blocked_reason != &"",
+		"interaction_blocked_reason": String(interaction_blocked_reason),
+		"capture": capture.report() if capture != null else {},
 	}
 
 
@@ -596,6 +675,237 @@ func _on_survival_changed(state: SurvivalState) -> void:
 func _on_survival_died(_reason: StringName) -> void:
 	if interaction != null and interaction.is_interacting():
 		interaction.release_interact(&"died")
+
+
+
+# ---------------------------------------------------------------------------
+# 扑击与捕获（T021）
+# ---------------------------------------------------------------------------
+
+## 动作互斥状态（`Docs/TechnicalDesign.md` §1 的 `ActionState`）。
+## 只由 `action_state()` 按实时状态汇总，**不单独存一份**，避免出现两套真相。
+enum ACT { IDLE, INTERACTING, POUNCING, RECOVERING, DEAD }
+
+
+## 当前动作状态（T021 D1）。优先级：DEAD > POUNCING > RECOVERING > INTERACTING > IDLE
+func action_state() -> ACT:
+	if _is_dead_state():
+		return ACT.DEAD
+	if _pouncing:
+		return ACT.POUNCING
+	if is_recovering():
+		return ACT.RECOVERING
+	if interaction != null and interaction.is_interacting():
+		return ACT.INTERACTING
+	return ACT.IDLE
+
+
+## 动作状态名（`debug_state()` / `MOV|` 用字符串；工具不必认识枚举）
+func action_state_name() -> String:
+	match action_state():
+		ACT.POUNCING:
+			return "pouncing"
+		ACT.RECOVERING:
+			return "recovering"
+		ACT.INTERACTING:
+			return "interacting"
+		ACT.DEAD:
+			return "dead"
+		_:
+			return "idle"
+
+
+## 是否正在扑击（水平突进中）
+func is_pouncing() -> bool:
+	return _pouncing
+
+
+## 是否处于扑击后的恢复期。按**世界时间**判定；到点自动结束并解除交互封锁（T021 D7）。
+func is_recovering() -> bool:
+	if _recover_until <= 0.0:
+		return false
+	if world_time_now() < _recover_until:
+		return true
+	_recover_until = 0.0
+	if interaction_blocked_reason == &"recovering":
+		interaction_blocked_reason = &""
+	return false
+
+
+## 是否处于"不可行动"状态：已捕获，或生存状态已死亡。
+## 注意：`SurvivalState` **没有** `alive` 字段，死亡一律以 `is_dead()`（health ≤ 0）判定。
+func _is_dead_state() -> bool:
+	if captured:
+		return true
+	return survival != null and survival.is_dead()
+
+
+## 发起扑击（T021 D2 的全部门控）。
+##
+## 成功：**立即**扣 `pounce_stamina_cost`（`Docs/Parameters.md` 第 67 行 = 25）、`pounce_count += 1`、
+## 锁定朝向、预算与计时归零，返回 `true`。
+## 失败：返回 `false` 并写 `last_pounce_blocked_reason`
+## （`"species"` / `"dead"` / `"airborne"` / `"recovering"` / `"busy"` / `"stamina"`）。
+## 捕获结算**不在**这里做：命中由 `_step_pounce()` 的扫掠碰撞触发（T021 D5）。
+func start_pounce() -> bool:
+	if not can_pounce():
+		last_pounce_blocked_reason = &"species"
+		return false
+	if _is_dead_state():
+		last_pounce_blocked_reason = &"dead"
+		return false
+	if not is_on_floor():
+		last_pounce_blocked_reason = &"airborne"
+		return false
+	if is_recovering():
+		last_pounce_blocked_reason = &"recovering"
+		return false
+	if _pouncing or action_state() != ACT.IDLE:
+		# 交互中同样算"忙"（D2 表）：扑击不会为了抢动作而打断交互
+		last_pounce_blocked_reason = &"busy"
+		return false
+	var cost: float = species_config.pounce_stamina_cost
+	if survival == null or cost <= 0.0 or survival.state.stamina + 1e-6 < cost:
+		# 体力不足 → 拒绝启动，**不扣不赔**（`Parameters.md` 第 67 行）
+		last_pounce_blocked_reason = &"stamina"
+		return false
+
+	# 防御性收尾（D8）：D2 的门已保证此刻不在交互中，这里仍显式释放，避免留下"扑击期间的旧事务"
+	if interaction != null and interaction.is_interacting():
+		interaction.release_interact(&"pouncing")
+	want_pounce = false
+	want_jump = false
+	_pouncing = true
+	_pounce_travel = 0.0
+	_pounce_elapsed = 0.0
+	_pounce_dir = _lock_pounce_direction()
+	_pounce_speed = species_config.pounce_speed()
+	_pounce_end_time = world_time_now() + species_config.pounce_duration
+	# 扑击要能碰上动物：临时把掩码扩到动物层；结束或捕获时恢复（T009/T010 断言锁的是静止态掩码）
+	collision_mask = LAYER_WORLD_STATIC | LAYER_ANIMAL
+	interaction_blocked_reason = &"pouncing"
+	last_pounce_blocked_reason = &""
+	survival.spend_stamina(cost)
+	pounce_count += 1
+	return true
+
+
+## 外部入口（AI / 测试）：置一次扑击意图并**立即**尝试启动，返回启动结果。
+func request_pounce() -> bool:
+	want_pounce = true
+	var started := start_pounce()
+	want_pounce = false
+	return started
+
+
+## 锁定扑击方向：把当前朝向的前方投影到水平面并归一化（退化时兜底 `FORWARD`）
+func _lock_pounce_direction() -> Vector3:
+	var forward := -transform.basis.z
+	forward.y = 0.0
+	if forward.length_squared() < 1e-8:
+		return Vector3.FORWARD
+	return forward.normalized()
+
+
+## 扑击的一帧（T021 D3/D9）：水平扫掠 `move_and_collide()`，障碍优先，位移不超预算。
+##
+## 竖直分量**不**在本方法里叠加：身体本来就贴地（扑击不悬空、不腾空），
+## 而按 D3 原文叠加重力增量会让贴地静止的胶囊首帧就与地面产生碰撞，被误判成 `"world"` 挡下
+## （见 `Docs/Evidence/T021.md` 的实测记录）。
+func _step_pounce(delta: float) -> void:
+	if species_config == null:
+		_finish_pounce(&"world")
+		return
+	var remaining: float = species_config.pounce_max_distance - _pounce_travel
+	var step: float = minf(_pounce_speed * delta, remaining)
+	var before := global_position
+	var motion := Vector3(_pounce_dir.x * step, 0.0, _pounce_dir.z * step)
+	var collision := move_and_collide(motion)
+	# 位移用**真实发生了什么**记账（不拿"想走多少"冒充已走距离）
+	var moved := global_position - before
+	if moved.length_squared() > 1e-12:
+		_pounce_travel += Vector2(moved.x, moved.z).length()
+	_pounce_elapsed += delta
+	if collision != null:
+		_on_pounce_contact(collision)
+		return
+	# 预算耗尽 / 物理时长到点 / 世界时间到点 —— 任一即结束（D9：位移用 delta、时长用世界时间）
+	if step >= remaining - 1e-6:
+		_finish_pounce(&"")
+		return
+	if _pounce_elapsed >= species_config.pounce_duration:
+		_finish_pounce(&"")
+		return
+	if world_time_now() >= _pounce_end_time:
+		_finish_pounce(&"")
+
+
+## 扑击碰撞分类（T021 D3/D4）：**障碍优先**；撞到动物要过猎物判定，不满足则"撞到动物"结束且不结算。
+func _on_pounce_contact(collision: KinematicCollision3D) -> void:
+	var other := collision.get_collider()
+	if other is AnimalBody:
+		if capture != null and capture.is_valid_prey(other as Node):
+			_capture_prey(other as AnimalBody, collision.get_position())
+			return
+		# 是动物但不是有效猎物（同物种 / 已捕获 / 已死）→ 结束，不结算
+		_finish_pounce(&"animal")
+		return
+	_finish_pounce(&"world")
+
+
+## 命中有效猎物：交给 `CaptureSettlement` 结算（记账 + 标记猎物 + 生成捕获食物），随后结束扑击。
+## 组件级失败原因（`invalid` / `recorded` / `no_director`）统一映射为身体级 `"animal"`（撞到了但没结算）。
+func _capture_prey(prey: AnimalBody, hit_position: Vector3) -> void:
+	if capture != null and capture.try_capture(prey, hit_position):
+		captures += 1
+		_finish_pounce(&"")
+		return
+	_finish_pounce(&"animal")
+
+
+## 结束扑击并进入恢复期（T021 D3/D7）。`reason` 为空串表示"跑完预算/时长，没被挡"。
+## 无论成功、被挡还是跑完，体力代价都**不退还**（`Parameters.md` 第 67 行）。
+func _finish_pounce(reason: StringName) -> void:
+	if not _pouncing:
+		return
+	_pouncing = false
+	last_pounce_travel = _pounce_travel
+	last_pounce_blocked_reason = reason
+	velocity.x = 0.0
+	velocity.z = 0.0
+	_pounce_end_time = 0.0
+	# 掩码回到静止态口径（T009/T010 的断言锁的就是这个值）
+	collision_mask = LAYER_WORLD_STATIC
+	var recovery: float = species_config.pounce_recovery if species_config != null else 0.0
+	if recovery > 0.0:
+		_recover_until = world_time_now() + recovery
+		interaction_blocked_reason = &"recovering"
+	else:
+		_recover_until = 0.0
+		interaction_blocked_reason = &""
+
+
+## 被捕获（T021 D5）——由捕食者的 `CaptureSettlement` 调用。**幂等**：已捕获返回 `false`。
+##
+## 猎物不死、不掉血、不发伤害信号：它只是从"活体"变成"一份食物"（不走伤害/死亡通道）。
+## 节点保留在树上（测试与证据要能读到），但退出 `animal_bodies` 组、停物理、关碰撞、隐藏网格。
+func mark_captured(captor_id: String) -> bool:
+	if captured:
+		return false
+	captured = true
+	captured_by = captor_id
+	_pouncing = false
+	_recover_until = 0.0
+	remove_from_group(GROUP_ANIMAL_BODIES)
+	set_physics_process(false)
+	velocity = Vector3.ZERO
+	collision_layer = 0
+	collision_mask = 0
+	if interaction != null and interaction.is_interacting():
+		interaction.release_interact(&"captured")
+	if body_mesh != null:
+		body_mesh.visible = false
+	return true
 
 
 # ---------------------------------------------------------------------------

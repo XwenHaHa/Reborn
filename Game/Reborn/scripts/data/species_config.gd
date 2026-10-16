@@ -92,6 +92,21 @@ enum FoodType { MEAT, SEED }
 @export var can_use_mouse_tunnel: bool = false
 
 
+## 扑击与捕获（T021）：数值来自 `Parameters.md` 第 67 行（猫扑击）与第 77 行（捕获食物 300 s 失效）。
+## 单位已换算为**米 / 秒**。`can_pounce = false` 的物种五项必须全为 0 —— 差异只在 `*.tres` 里，代码不写物种名分支。
+@export_group("Pounce")
+## 一次扑击的最大水平位移（米）= 140 cm ÷100
+@export var pounce_max_distance: float = 0.0
+## 一次扑击的持续（秒）= 0.25
+@export var pounce_duration: float = 0.0
+## 每次扑击的体力代价（点）= 25；**成功 / 失败 / 被障碍挡下都照扣，不退还**
+@export var pounce_stamina_cost: float = 0.0
+## 扑击结束后的恢复时间（秒）= 0.6；期间不能再扑击 / 跳跃 / 交互
+@export var pounce_recovery: float = 0.0
+## 捕获生成的食物对象多久后失效（秒）= 300
+@export var capture_food_expire: float = 0.0
+
+
 ## 行为（T019）：指向驱动这个物种的 AI 脚本（`AnimalAI` 子类）。
 ## 用**脚本引用**而不是"物种名判断"来选择状态机 —— 差异全在 `resources/species/*.tres` 里。
 ## 留空表示"暂时没有 AI"（猫的状态机属 T023）。
@@ -121,6 +136,11 @@ func capsule_aspect() -> float:
 
 func can_eat(food_type: int) -> bool:
 	return allowed_food_types.has(food_type)
+
+
+## 扑击期间的水平速度（米/秒）= 位移预算 ÷ 时长（猫 = 1.40 ÷ 0.25 = 5.6 m/s）
+func pounce_speed() -> float:
+	return pounce_max_distance / pounce_duration if pounce_duration > 0.0 else 0.0
 
 
 ## 加载后校验。返回问题列表（空 = 通过）。
@@ -187,4 +207,16 @@ func validate_config() -> PackedStringArray:
 		problems.append("噪声响度应满足 潜伏 ≤ 行走 ≤ 奔跑（越快的档位越响）")
 	if footstep_interval_base <= 0.0 or not is_finite(footstep_interval_base):
 		problems.append("footstep_interval_base 必须 > 0（否则脚步事件无处产生）")
+	# 扑击与捕获（T021）：可扑击物种五项必须齐备；不可扑击物种不允许携带这些参数
+	var t021_pounce := [
+		["pounce_max_distance", pounce_max_distance], ["pounce_duration", pounce_duration],
+		["pounce_stamina_cost", pounce_stamina_cost], ["pounce_recovery", pounce_recovery],
+		["capture_food_expire", capture_food_expire],
+	]
+	for pair in t021_pounce:
+		var v := float(pair[1])
+		if can_pounce and (v <= 0.0 or not is_finite(v)):
+			problems.append("%s 必须 > 0（can_pounce 为 true）" % pair[0])
+		if not can_pounce and v != 0.0:
+			problems.append("%s 应为 0（can_pounce 为 false 的物种不该有扑击参数）" % pair[0])
 	return problems

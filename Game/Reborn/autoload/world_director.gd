@@ -45,6 +45,10 @@ func set_world_time(t: float) -> void:
 func reset_for_new_game() -> void:
 	world_time = 0.0
 	time_advancing = true
+	# 捕获账本（T021）也必须随新游戏清零，否则新一局会把旧的猎物判成"已记账"
+	capture_count = 0
+	capture_food_count = 0
+	captured_target_ids = {}
 
 
 ## 当前世界时间（秒）——**统一时间入口**。
@@ -67,3 +71,35 @@ func emit_noise(source_id: String, position: Vector3, loudness: float) -> void:
 		return
 	noise_event_count += 1
 	noise_emitted.emit(source_id, position, loudness, world_time)
+
+
+## 成功捕获广播（T021；`Docs/TechnicalDesign.md` §7 捕获流程）。每次**真实结算**只发一次。
+signal capture_reported(captor_id: String, target_id: String, position: Vector3, world_time: float)
+
+## 本次运行成功结算的捕获次数（诊断/断言用；被拒绝的重复上报不计入）
+var capture_count: int = 0
+
+## 本次运行生成的捕获食物对象数（诊断/断言用）
+var capture_food_count: int = 0
+
+## 已结算捕获的猎物 ID 账本（`String -> true`），用于幂等去重
+var captured_target_ids: Dictionary = {}
+
+
+## 上报一次捕获（T021）。**幂等**：同一个 `target_id` 只结算一次。
+## 返回 true = 本次真的结算了（记账 + 计数 + 发信号）；
+## 返回 false = 早就结算过（或 target_id 为空），**不改任何计数、不发信号**（TechnicalDesign §7"检查未记账"）。
+func report_capture(captor_id: String, target_id: String, position: Vector3,
+		world_time: float = -1.0) -> bool:
+	if target_id.is_empty() or captured_target_ids.has(target_id):
+		return false
+	var t: float = world_time if world_time >= 0.0 else get_world_time()
+	captured_target_ids[target_id] = true
+	capture_count += 1
+	capture_reported.emit(captor_id, target_id, position, t)
+	return true
+
+
+## 该目标是否已被结算过捕获（T021）
+func is_captured(target_id: String) -> bool:
+	return captured_target_ids.has(target_id)
