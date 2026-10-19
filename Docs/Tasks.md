@@ -47,7 +47,8 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T019 | **done（2026-10-15）** | `Docs/Evidence/T019.md`；`Docs/Tasks/T019.md`；`scripts/ai/animal_ai.gd` + `scripts/ai/mouse_ai.gd`；`species_config.gd`（`ai_script`）+ `mouse.tres`；`animal_body.gd`（`ai_enabled` + `_sync_ai`）；`tests/run_t019_mouse_ai.gd` | 鼠 NPC 觅食与警戒：`EXPLORE ↔ FORAGE ↔ ALERT ↔ WAIT`；走去最近可用食物点（实测 **5.22 m / 4.75 s**、到达 0.389 m ≤ 0.45）→ 走**同一套**交互进食（units 3→2、Hunger +35）；警戒 **0.3 s** 上限（期间停手停脚、取消交互且**无收益**、可重复注入但不无限延长）；MoveTo 失败 **1 s / 最多 3 次 / 进 WAIT 后不永久阻塞**（实测 4 次失败、3 次重选、`no_progress`）；状态与原因可查看（`ai_report()` 16 字段 + HUD `ai:` + `MOV|ai_state=`）；**72/72** ×3 + 包内 72/72；全量回归 17 套件全绿；包 552,052 B |
 | T020 | **done（2026-10-16）** | `Docs/Evidence/T020.md`；`Docs/Tasks/T020.md`；`scripts/systems/perception.gd`；`scripts/ai/animal_ai.gd` + `scripts/ai/mouse_ai.gd`；`scripts/characters/animal_body.gd`（感知组件 + 脚步噪声）；`species_config.gd`（`Noise` 组）+ `mouse.tres`/`cat.tres`；`world_director.gd`（`noise_emitted` 总线）；`scenes/maps/l_courtyard.tscn`（`HideSpot_RootHole`）；`debug_entry.gd`（`MOV|seen/heard/noise_age/steps/hide`）；`tests/run_t020_perception.gd`；`tool_capture_render.gd -- t020` | 老鼠视觉、听觉与逃跑：`Perception` 组件挂在 `AnimalBody`（**只观察**，做决定仍走既有 `alert_for()`）；视锥 75° / 6.5 m + `world_static` 遮挡 + 草丛 `visibility_factor` 0.4（重叠取最小），**近距 0.80 m 内豁免草丛与遮挡但仍受视锥限制**；听觉 = `HearingRange × Loudness`（跑 10 / 走 5 / 蹲 2 m），**不吃墙不吃草丛**；**噪声只有发生位置**（快照不跟随声源：声源走开 3.66 m 后快照仍不动）；脚步按速度反比 0.5/0.2/1.0 s、**每事件一次**（实测 121 帧 = 4 次）；`ALERT（0.3 s）→ FLEE → HIDDEN → EXPLORE`、180 cm 内立即逃、**可达鼠洞优先**（到达 0.267 m ≤ 0.30）、洞不可达转草丛掩体、都没有则 `flee_timeout` **3 s 回退**（实测 2.90 s，**不位移、不假装躲藏**）、HIDDEN 撑满 4 s 才外出；**164/164** ×3 + 包内 164/164；全量回归 **18 套件 1720 条全绿**；包 **605,740 B**；视觉 3 图已判读；**顺带修好 T019 遗留缺陷**（导航层反查读错 meta 键 → 猫曾误用鼠导航面） |
 | T021 | **done（2026-10-17）** | `Docs/Evidence/T021.md`；`Docs/Tasks/T021.md`；`scripts/systems/capture.gd`（新组件 `CaptureSettlement`）；`scripts/characters/animal_body.gd`（`enum ACT` + 扑击状态机 + `mark_captured`）；`species_config.gd`（`Pounce` 组 + `FoodType` + `can_eat()`）+ `cat.tres`/`mouse.tres`；`world_director.gd`（捕获账本 + `capture_reported` + 真实 `world_time`）；`debug_entry.gd`（`MOV\|act/pounce/captures/blocked`）；`tests/run_t021_capture.gd`；`tool_capture_render.gd -- t021` | 猫扑击与捕获结算：140 cm / 0.25 s / 扣 25 / 恢复 0.6 s 全部从 `species_config` 读（鼠 `can_pounce=false`，**无捕获组件**）；启动门 8 种受阻原因（`species/airborne/dead/busy/stamina/recovering/pouncing`），**被拒不扣体力不计数**；扫掠用 `move_and_collide` 逐帧推进（单帧实测 0.0933 ≤ 0.0943，**不传送**），空地恰好走满 **1.4000 m**；**障碍优先于障碍后的猎物**（墙距猫 50 cm → `blocked=world`、位移 0.340 m = 0.50 − 0.16 胶囊半径、猎物未被结算、**体力不退还**）；命中后先查存活与账本，捕获一次即生成挂世界根的 `MEAT` 食物（容量 1、**300 s** 失效、命中点 0.000 m、鼠因食性被拒）且**不移除节点**（网格隐藏、层 0、出组、停物理，指标不回满）；**幂等**（二次结算 `invalid`、账本/食物账本恒 1）；4 只捕食者同帧**只结算 1 次**、先到者得、后到者全被拒；恢复期**吞掉跳跃**、再扑被拒（恢复窗口实测 0.5862 s ∈ 0.6 ±0.08），恢复后可再扑（二次扑击后体力 53.6，按「启动前体力 − 25」差值断言）；**279/279** ×3 + 包内 279/279；全量回归 **19 套件 1999 条全绿**；包 **653,876 B**；视觉 3 帧（扑击/撞墙/命中）已判读，并**修好取景工具的跨关卡污染**（lab 自带 `Player` 被误读为第二个胶囊） |
-| T022～T063 | pending | 无 | 见 `轮生_Reborn_开发计划_v1.0.md` |
+| T022 | **done（2026-10-19）** | `Docs/Evidence/T022.md`；`Docs/Tasks/T022.md`；`tests/run_t022_loop.gd`；`scripts/debug/debug_entry.gd`（`restart_round()` + 死亡 HUD 提示 + 失效实例守卫）；`scripts/characters/interaction.gd`（`current_target()` 清失效目标）；`project.godot`（`debug_restart` = F6）；`tool_capture_render.gd -- t022`；`Art/Probes/t022_*.png` | 猫循环回归与打包：真实关卡 `l_courtyard.tscn` 上跑通 **探索 → 发现 → 扑击捕获 → 进食 → 饮水 → 再次探索**（位移 1.350 m、`captures=1`、捕获食物落点 0.072 m、Hunger Δ34.89、Thirst Δ39.88、再次扑击成功）；**连按与幂等**（10 帧只启动一次、扑击中 8 次全拒 `busy` 且不重复扣体力、交互连按 `consumed_count` 恒 1、重复上报 `invalid`）；**体力耗尽**（被拒不位移 0.00000 m、不进恢复态、冲刺回落 1.80 m/s、恢复后可再扑）；**寻路失败回退**（1.22 s 内记录失败 → `wait`/`path_failed` 2.83 s → 重选 3 次放弃且不再查询 → 恢复后路径点数 2、账本不变）；**临时死亡重开**（`died` 只一次、死后交互/扑击全拒、`restart_round()` 计数 1→2→3、`world_time` 归零、旧实例释放、无残留、新一局可再次捕获）；**168/168 ×3** + 包内 168/168；全量回归 **19 套件 1999 条全绿**；包 **Reborn.pck 220,116 B / RebornSelfTest.pck 694,696 B**；视觉 2 图已判读；**修掉重开后 HUD 读已释放目标导致的 6 条脚本错误**（补 E13 回归断言，并把 A14 判据改成"套件内看汇总 + 日志由外部扫描"） |
+| T023～T063 | pending | 无 | 见 `轮生_Reborn_开发计划_v1.0.md` |
 
 ### T001 判定明细（Godot 版）
 
@@ -77,16 +78,19 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 E01 的视觉部分**已补验通过**；**E02 本次通过**（`Docs/Evidence/T005.md`）；**E03 已通过**（T006 骨骼往返 65/65）。
 
 ## 选择顺序
-T001 / T002 / T003 / T005 / T006 / T007 / T008 / T009 / T010 / T011 / T012 / T013 / T014 / T015 / T016 / T017 / T018 / T019 / **T020 均已完成**；台阶、导航、调试入口、生存时间入口、交互接口、食物/饮水、正式 HUD、**鼠 NPC 状态机**与**感知（视觉 / 听觉 / 逃跑躲藏）**已落地。
-（口径变化：T011/T012 是"游戏代码零改动、差异全在配置/关卡/导航数据"；**T013 起开始真的改游戏代码** —— `step_climb` 抬升修复、调试入口、`SurvivalState`/`SurvivalController`、`AnimalBody` 接入、`Interactable`/`InteractionDetector`/`ResourcePoint` 与动作事务。）
-**P0 阶段门完成**；**P1 进行中**（T008～T020 连续完成 → 下一步 **T021 猫扑击与捕获结算**）。
+T001 / T002 / T003 / T005 / T006 / T007 / T008 ～ **T022 均已完成**；台阶、导航、调试入口、生存时间入口、交互接口、食物/饮水、正式 HUD、
+**鼠 NPC 状态机**、**感知（视觉 / 听觉 / 逃跑躲藏）**、**猫扑击与捕获结算**、**猫循环回归与打包**已落地。
+（口径变化：T011/T012 是"游戏代码零改动、差异全在配置/关卡/导航数据"；**T013 起开始真的改游戏代码** —— `step_climb` 抬升修复、调试入口、`SurvivalState`/`SurvivalController`、`AnimalBody` 接入、`Interactable`/`InteractionDetector`/`ResourcePoint` 与动作事务、`Perception`/`CaptureSettlement`、`AnimalBody.enum ACT` 扑击状态机、`DebugEntry.restart_round()`。）
+**P0 阶段门完成**；**P1 完成**（T008～T013）；**P2 完成**（T014～T022；阶段门 S/I/A01/A02 全 PASS）→ 下一步 **T023 猫 NPC 巡游与发现**（P3 起点）。
 
 下一步可执行（按建议优先级）：
-1. **T021（猫扑击与捕获结算）**（4～8h，前置 T015、T020）：扫掠阻止穿墙，成功/失败均有体力代价；捕获一次生成可食对象。
+1. **T023（猫 NPC 巡游与发现）**（4～8h，前置 T020）：巡游、警戒、接近；**复用感知规则**，视野与听觉参数**独立配置**。
    顺带带上待定：**猫跨 0.50 屏障是否加 `NavigationLink3D`**（T013 §9）、**跳跃是否消耗体力**（T015 §9）、
-   **交互是否要朝向/视锥限制**（T016/T017 §9）、**食物/水恢复值是否按物种分列**（T017 §9）、**"调参页"是否要做成可交互面板**（T018 §8）。
-   **交互用"按住开始/松开取消"是否最终设计、距离是否要含竖直差**（T016 §7）。
-   T020 §8 新待定：**感知新增 4 个实现默认值**（`footstep_interval_base` 0.5 s、`flee_timeout` 3.0 s、`reach_tolerance` 0.5 m、`hide_arrive_radius` 0.30 m）、**近距豁免是否受视锥限制**、**威胁判据是否加“正在扑击 / 已发现我”**、**草丛是否要改成物理体积**、**关卡鼠洞是否只留 1 个**。
+   **交互是否要朝向/视锥限制**（T016/T017 §9）、**食物/水恢复值是否按物种分列**（T017 §9）、
+   **"调参页"是否要做成可交互面板**（T018 §8）、**交互用"按住开始/松开取消"是否最终设计、距离是否要含竖直差**（T016 §7）。
+   T020 §8 待定：**感知新增 4 个实现默认值**（`footstep_interval_base` 0.5 s、`flee_timeout` 3.0 s、`reach_tolerance` 0.5 m、`hide_arrive_radius` 0.30 m）、
+   **近距豁免是否受视锥限制**、**威胁判据是否加"正在扑击 / 已发现我"**、**草丛是否要改成物理体积**、**关卡鼠洞是否只留 1 个**。
+   T021 §8 待定：**捕获食物营养 35.0**、**恢复期是否锁姿态**。　T022 §9 待定：**"重开"是否升级为正式 UI**（P4）、**F6 是否与正式快捷键冲突**、**发布节奏**。
 2. ~~T008 / T009 / T010 / T011 / T012~~ **已完成**；正式角色/骨骼资产仍属 **P6** 阶段门，不得提前。
 
 **做角色资产时必须遵守 T005/T006 实测的两条约定**：

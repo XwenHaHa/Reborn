@@ -101,7 +101,10 @@ func detect() -> Node:
 	return _target
 
 
+## 当前目标（**已释放的实例会先清掉再返回 null**，调用方不必再防"已释放"）
 func current_target() -> Node:
+	if _target != null and not is_instance_valid(_target):
+		_set_target(null)
 	return _target
 
 

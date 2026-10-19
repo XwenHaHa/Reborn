@@ -24,21 +24,25 @@ extends Node3D
 
 ## 物种切换完成（测试与外部观察用）
 signal species_switched(species_id: StringName)
+## 临时重开完成（T022）：参数 = 重开后的计数（新一局已就绪）
+signal round_restarted(index: int)
 
 const LEVEL_SCENE := preload("res://scenes/maps/l_courtyard.tscn")
 const BODY_SCENE := preload("res://scenes/characters/animal_body.tscn")
 const CAT_CONFIG := preload("res://resources/species/cat.tres")
 const MOUSE_CONFIG := preload("res://resources/species/mouse.tres")
 
-## 调试动作名（键码在 `project.godot`；测试用引擎常量 `KEY_F1..KEY_F5` 对照）
+## 调试动作名（键码在 `project.godot`；测试用引擎常量 `KEY_F1..KEY_F6` 对照）
 const ACTION_SWITCH_CAT := "debug_switch_cat"
 const ACTION_SWITCH_MOUSE := "debug_switch_mouse"
 const ACTION_TOGGLE_COLLISION := "debug_toggle_collision"
 const ACTION_TOGGLE_PATH := "debug_toggle_path"
 const ACTION_TOGGLE_HUD := "debug_toggle_hud"
+## T022 临时重开（死亡后一键重开；**正式轮回属 P4 / T030**，这里只是开发与回归入口）
+const ACTION_RESTART := "debug_restart"
 const DEBUG_ACTIONS: Array[StringName] = [
 	&"debug_switch_cat", &"debug_switch_mouse", &"debug_toggle_collision",
-	&"debug_toggle_path", &"debug_toggle_hud",
+	&"debug_toggle_path", &"debug_toggle_hud", &"debug_restart",
 ]
 
 ## 路径颜色：按配置在池里的下标（0 = 第一个配置，1 = 第二个），不按物种名分支
@@ -113,6 +117,8 @@ var last_path_points := 0
 var last_path_length := 0.0
 ## 最近一次自绘的碰撞形状数量（F3 关闭时为 0）
 var collision_shapes_drawn := 0
+## 重开次数（T022：HUD 与测试读；每次 `restart_round()` +1）
+var restart_count := 0
 
 var _main_mat: StandardMaterial3D = null
 var _probe_mat: StandardMaterial3D = null
@@ -157,6 +163,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		toggle_path_display()
 	elif event.is_action_pressed(ACTION_TOGGLE_HUD):
 		toggle_hud()
+	elif event.is_action_pressed(ACTION_RESTART):
+		restart_round(&"input")
 
 
 func _physics_process(delta: float) -> void:
@@ -186,6 +194,50 @@ func _build_level() -> void:
 	level.name = "Level"
 	add_child(level)
 
+
+# ---------------------------------------------------------------------------
+# 临时重开（T022）
+# ---------------------------------------------------------------------------
+
+## 一键重开（**开发/验证用，不是正式轮回**：轮回与存档属 T030/T031）。
+##
+## 顺序固定（`Docs/Tasks/T022.md` §3.1）：
+##   ① 释放旧玩家与旧代理 → ② 释放旧关卡实例（其子树里的旧身体/资源点/捕获食物一并消失）
+##   → ③ `WorldDirector.reset_for_new_game()`（世界时间归零、捕获账本清空）
+##   → ④ 重建关卡实例 → ⑤ 重新生成当前物种的玩家 → ⑥ 计数 + 发信号
+##
+## **踩坑（实现期实测）**：`queue_free()` 到帧末才真正释放，所以旧节点先**改名**再排队释放；
+## 否则同帧新建的 `Level` / `Player` 会因引擎同名规则被自动改名，HUD 与测试按固定名找不到节点。
+## 返回重开后的计数（与 `restart_count` 一致）。
+func restart_round(reason: StringName = &"manual") -> int:
+	var species: StringName = current_species
+	if species == &"":
+		species = start_species
+	if species == &"":
+		var pool := _config_pool()
+		species = pool[0].species_id if not pool.is_empty() else &""
+	if player != null and is_instance_valid(player):
+		player.name = "Player_retired"
+	_release_player()
+	if level != null and is_instance_valid(level):
+		level.name = "Level_retired"
+		level.queue_free()
+	level = null
+	var wd := get_node_or_null("/root/WorldDirector")
+	if wd != null and is_instance_valid(wd) and wd.has_method("reset_for_new_game"):
+		wd.call("reset_for_new_game")
+	_build_level()
+	_probe_cache_frame = -1
+	if species != &"":
+		switch_species(species)
+	restart_count += 1
+	_refresh_hud()
+	round_restarted.emit(restart_count)
+	print("DBG|restart_round|%s|count=%d|species=%s|world_time=%.3f|level=%s" % [
+		String(reason), restart_count, species, _world_time_now(),
+		level.name if level != null else "<none>"
+	])
+	return restart_count
 
 func _build_hud() -> void:
 	hud = CanvasLayer.new()
@@ -569,11 +621,14 @@ func resource_line() -> String:
 ## 要显示的资源点：优先"当前交互目标"（T016 只显示一个目标）；否则取组里 ID 最小的那个
 func _resource_for_display() -> ResourcePoint:
 	if player != null and player.interaction != null:
-		var t := player.interaction.current_target()
-		if t is ResourcePoint:
+		# 目标是 `Variant`：**已释放的实例不能直接做 `is` 判定**（会报 SCRIPT ERROR），先验有效性
+		var t: Variant = player.interaction.current_target()
+		if is_instance_valid(t) and t is ResourcePoint:
 			return t as ResourcePoint
 	var best: ResourcePoint = null
 	for n in get_tree().get_nodes_in_group(&"resource_points"):
+		if not is_instance_valid(n):
+			continue
 		if n is ResourcePoint:
 			var rp := n as ResourcePoint
 			if best == null or rp.interaction_id < best.interaction_id:
@@ -584,6 +639,8 @@ func _resource_for_display() -> ResourcePoint:
 ## `MOV|` 的余量字段：食物 `x/y`、水 `inf`，没有任何资源点时 `-`
 func _resource_units(kind: StringName) -> String:
 	for n in get_tree().get_nodes_in_group(&"resource_points"):
+		if not is_instance_valid(n):
+			continue
 		if n is ResourcePoint and (n as ResourcePoint).kind == kind:
 			var rp := n as ResourcePoint
 			return "inf" if rp.infinite else "%d/%d" % [rp.units, rp.capacity]
@@ -745,7 +802,9 @@ func hud_text() -> String:
 	lines.append(resource_line())
 	lines.append(ai_line())
 	lines.append(sense_line())
-	lines.append("keys: F1=cat  F2=mouse  F3=collision  F4=path  F5=hud  (WASD/Space/Shift/Ctrl 同正式操作)")
+	if player.survival != null and player.survival.is_dead():
+		lines.append("death: 已死亡 —— 按 F6 重开（T022 临时入口；正式轮回属 P4）")
+	lines.append("keys: F1=cat  F2=mouse  F3=collision  F4=path  F5=hud  F6=restart  (WASD/Space/Shift/Ctrl 同正式操作)")
 	return "\n".join(lines)
 
 

@@ -116,6 +116,9 @@ func _initialize() -> void:
 	# T021：猫扑击与捕获结算（扑击中途 / 撞墙被挡 / 命中并生成捕获食物）。只在显式传 `-- t021` 时执行。
 	if OS.get_cmdline_user_args().has("t021"):
 		await _capture_t021_frames(lab)
+	# T022：猫循环回归（死亡 HUD 的 F6 重开提示 / 重开后再跑一次捕获）。只在显式传 `-- t022` 时执行。
+	if OS.get_cmdline_user_args().has("t022"):
+		await _capture_t022_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -1130,3 +1133,114 @@ func _t021_find_food(arena: Node) -> Node:
 		if child is ResourcePoint:
 			found = child
 	return found
+
+
+# ---------------------------------------------------------------------------
+# T022：猫循环回归（死亡 HUD 的 F6 重开提示 / 重开后再跑一次捕获并生成捕获食物）
+# ---------------------------------------------------------------------------
+
+const T022_ENTRY := "res://scenes/debug/debug_entry.tscn"
+const T022_BODY := "res://scenes/characters/animal_body.tscn"
+const T022_MOUSE := "res://resources/species/mouse.tres"
+
+
+## 两帧（都带屏幕空间的调试 HUD，所以"重开提示是否真的显示出来"可直接看图）：
+##   ① 死亡态：`hud_text()` 应含"按 F6 重开"，用**玩家自己的相机**（真实玩家视角）；
+##   ② 重开后：新一局活着 + 再捕一次成功 → 猎物表现消失、命中点出现捕获食物。
+func _capture_t022_frames(lab: Node) -> void:
+	print("CAP|t022|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+	var packed: PackedScene = load(T022_ENTRY)
+	if packed == null:
+		print("CAP|t022|ERROR|debug entry load failed")
+		return
+	var entry: Node3D = packed.instantiate() as Node3D
+	root.add_child(entry)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	for i in SETTLE_FRAMES:
+		await process_frame
+	var player: AnimalBody = entry.get("player") as AnimalBody
+	var level: Node3D = entry.get("level") as Node3D
+	if player == null or level == null:
+		print("CAP|t022|ERROR|player/level missing")
+		return
+	print("CAP|t022|boot|species=%s|player_pos=%s|hud=%s|start_species=%s" % [
+		str(entry.get("current_species")), str(player.global_position),
+		str(entry.call("hud_enabled")), str(entry.get("start_species"))])
+
+	# ① 死亡态（玩家自己的相机 = 真实玩家视角）
+	player.survival.apply_damage(9999.0, &"test")
+	for i in 20:
+		await process_frame
+	var hud_dead := String(entry.call("hud_text"))
+	var cam0 := root.get_viewport().get_camera_3d()
+	print("CAP|t022|death|is_dead=%s|act=%s|hud_has_restart_hint=%s|cam=%s" % [
+		str(player.survival.is_dead()), player.action_state_name(),
+		str(hud_dead.contains("重开")), cam0.name if cam0 != null else "<none>"])
+	print("CAP|t022|death_hud_text=%s" % hud_dead.replace("\n", " | "))
+	if cam0 != null:
+		await _capture_view("t022_death_hud", cam0)
+
+	# ② 重开 → 再捕一次
+	var rc: int = int(entry.call("restart_round", &"capture"))
+	for i in 30:
+		await physics_frame
+	var cat: AnimalBody = entry.get("player") as AnimalBody
+	var level2: Node3D = entry.get("level") as Node3D
+	if cat == null or level2 == null:
+		print("CAP|t022|ERROR|new round player/level missing")
+		return
+	print("CAP|t022|restart|count=%d|species=%s|player_pos=%s|world_time=%.2f|on_floor=%s|captures=%d" % [
+		rc, str(cat.species_config.species_id), str(cat.global_position), _t021_world_time(),
+		str(cat.is_on_floor()), cat.captures])
+
+	var mouse_cfg := load(T022_MOUSE) as SpeciesConfig
+	var body_packed := load(T022_BODY) as PackedScene
+	if mouse_cfg == null or body_packed == null:
+		print("CAP|t022|ERROR|mouse config/body missing")
+		return
+	var mouse := body_packed.instantiate() as AnimalBody
+	mouse.species_config = mouse_cfg
+	mouse.player_controlled = false
+	mouse.ai_enabled = false
+	var fwd := -cat.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length_squared() > 1e-8 else Vector3.FORWARD
+	mouse.position = cat.global_position + fwd * 0.90 - Vector3(0.0, 0.15, 0.0)
+	level2.add_child(mouse)
+	for i in 24:
+		await physics_frame
+	print("CAP|t022|prey|pos=%s|on_floor=%s|capsule_h=%.3f" % [
+		str(mouse.global_position), str(mouse.is_on_floor()), mouse.species_config.capsule_height()])
+
+	var started := cat.request_pounce()
+	var waited := 0
+	while waited < 90 and cat.captures == 0:
+		await physics_frame
+		waited += 1
+	for i in 6:
+		await physics_frame
+	var food: Node = _t021_find_food(level2)
+	var cam := Camera3D.new()
+	cam.name = "T022Camera"
+	cam.near = 0.05
+	cam.far = 400.0
+	cam.fov = 60.0
+	level2.add_child(cam)
+	# 机位：猎物/食物前方侧上（主体是"命中点上的捕获食物 + 它身后的猫"）
+	cam.global_position = cat.global_position + fwd * 1.55 + Vector3(1.45, 1.10, 0.0)
+	cam.look_at(cat.global_position + fwd * 0.35 + Vector3(0.0, 0.05, 0.0), Vector3.UP)
+	cam.current = true
+	var hud_alive := String(entry.call("hud_text"))
+	print("CAP|t022|capture|started=%s|frames=%d|pounces=%d|captures=%d|prey_captured=%s|prey_by=%s|world_captures=%d|food_count=%d|food=%s|food_units=%d|food_expire_in=%.1f" % [
+		str(started), waited, cat.pounce_count, cat.captures, str(mouse.captured), mouse.captured_by,
+		_t021_world_captures(), _t021_world_food_count(),
+		str(food.global_position) if food != null else "-",
+		int(food.units) if food != null else -1,
+		float(food.expire_at) - _t021_world_time() if food != null else -1.0])
+	print("CAP|t022|alive_hud_has_restart_hint=%s|hud_text=%s" % [
+		str(hud_alive.contains("重开")), hud_alive.replace("\n", " | ")])
+	await _capture_view("t022_loop_capture", cam, 8)
+	print("CAP|t022|done")

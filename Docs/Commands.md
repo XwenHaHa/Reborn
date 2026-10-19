@@ -503,6 +503,50 @@ $p = 'E:\Reborn\Game\Reborn'
 - **视觉判读统一走项目工具**：`node "E:/claude-vision-skill/vision.js" "<png>" "<中文几何问题>"`（**不用 Read 读图**）。
   无美术阶段（身体是胶囊占位）提问改成"几何位置关系"（几个胶囊 / 墙在胶囊哪一侧 / 间隔），不要问"像不像猫"。
 
+## 2.18 T022 猫循环回归与打包（VERIFIED — 2026-10-19 实测）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+# 1) 断言套件（**必须核对 SUMMARY|checks=168|failures=0**，不能只看退出码）
+& $g --headless --path $p --script 'res://tests/run_t022_loop.gd' --quit-after 300000      # exit=0，168/0
+
+# 2) **脚本错误必须单独扫日志**（套件读不到自己的 stderr；SUMMARY 全绿也可能是假通过）
+#    实测教训：修复前每次 6 条报错，退出码依然是 0
+Select-String -Path <本次运行的 stdout 日志> -Pattern 'SCRIPT ERROR'                        # 期望 0 条
+
+# 3) 全量回归（19 套既有套件，合计 1999 条）
+
+# 4) 导出两预设 + 记录字节
+& $g --headless --path $p --export-release "Windows Desktop"          "$out\Reborn.exe"         # 0 → Reborn.pck 220,116 B
+& $g --headless --path $p --export-debug   "Windows Desktop SelfTest" "$out\RebornSelfTest.exe" # 0 → SelfTest.pck 694,696 B
+
+# 5) 包内复验（只能用编辑器二进制 + --main-pack）
+& $g --headless --main-pack "$out\RebornSelfTest.pck" --script 'res://tests/run_t022_loop.gd' --quit-after 300000   # 168/0
+
+# 6) 视觉两帧（**不能加 --headless**；后台跑 + 轮询日志，`--quit-after` 是帧数）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 3000 -- t022
+#   → CAP|t022|death|is_dead=true|act=dead|hud_has_restart_hint=true
+#   → CAP|t022|save_result=0 (OK) ×2 → CAP|t022|done
+#   图先落 user://（%APPDATA%\Godot\app_userdata\Reborn\），复制到 Art/Probes/t022_{death_hud,loop_capture}.png（LFS）
+```
+
+### 本任务踩到的坑
+
+- **"SUMMARY 全绿"不等于"日志干净"**：T022 首次运行时 `SUMMARY|checks=165|failures=0 | RESULT|PASS | exit=0`，
+  但每次运行的日志里都有 **6 条** `SCRIPT ERROR: Left operand of 'is' is a previously freed instance.`
+  （栈顶 `DebugEntry._resource_for_display`）。原因是重开后 `InteractionDetector.current_target()` 仍返回**已释放**的
+  `ResourcePoint`，而调试 HUD 对它做了 `is` 判定。修法：`current_target()` 先 `is_instance_valid()` 清理失效目标；
+  HUD 侧用 `var t: Variant` + `is_instance_valid()` 兜底，并补 E13 三条回归断言。
+  **结论：每次验收都要把 stdout 落盘并单独扫一次报错行。**
+- **扫描会被自己污染**：把 `SCRIPT ERROR` 字面量写进 `NOTE|` 输出后，扫描结果永远 ≥ 1 条。写日志文本时避开要扫的 token。
+- **重开（`restart_round()`）必须"先释放旧玩家 → 释放旧关卡 → 重置世界账本 → 重建关卡 → 重新切物种"**：
+  顺序写错会出现"两个关卡瞬时并存"或出生点翻倍；E11/E12 断言（`spawn_points` 仍 2、只有一个 `Player`、
+  组内只有一个身体、可重复重开且结果一致）就是守这个顺序的。
+- **旧导出会误导包内复验**：规范路径是 `Builds/P0-Win64/`（§5.1/§5.2）；`Builds/P0-Win64/T022/` 下的包是**修复前**产物，别拿它跑断言。
+
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -805,3 +849,5 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-15 | **T018 完成**。新增 §2.14 最小 HUD 与调参页命令（73 条断言 + `-- t018` 三张截图 + 包内复验 + 四条实测坑：`mouse_filter` 默认 STOP；带类型参数遇已释放目标报错；HUD 进度必须用真实世界时间；状态不变断言要在同帧比）。 |
 | 2026-10-15 | **T019 完成**。新增 §2.15 鼠 NPC 觅食与警戒命令（72 条断言 + 包内复验 + 四条实测坑：AI 默认开启会让 7 个既有套件回退 57 条；`navigation_layers` 是位掩码；无路径要清 `move_intent`；测试的"直到"条件不能一开始就为真）。 |
 | 2026-10-16 | **T020 完成**。新增 §2.16 老鼠视觉、听觉与逃跑命令（164 条断言 + `-- t020` 三帧 + 关卡重生成→重烤导航的顺序 + 包内复验 + 四条实测坑：`get_meta` 的 null 默认值**等同报错**、读错 meta 键会让**猫用上鼠的导航面**；生成器会清掉导航区域、必须重烤；捕获取景要按"推进量"当条件；0.3 s 的 Alert 抓不到静帧，要如实标注 `held_by`）。 |
+| 2026-10-17 | **T021 完成**。新增 §2.17 猫扑击与捕获结算命令（279 条断言 + `-- t021` 三帧 + 包内复验 + 实测坑：取景前必须隔离 lab 自带的 `Player`；扫掠用 `move_and_collide` 逐帧推进、不传送；障碍优先于障碍后的猎物；捕获后不移除节点，只隐藏网格 / 层 0 / 出组 / 停物理）。 |
+| 2026-10-19 | **T022 完成**。新增 §2.18 猫循环回归与打包命令（168 条断言 + 两预设导出与字节记录 + 包内复验 + `-- t022` 两帧 + 四条实测坑：**"SUMMARY 全绿"不等于日志干净，必须单独扫 `SCRIPT ERROR`**；扫描会被写进 `NOTE` 的字面量污染；重开必须"先释放 / 再重建 / 再切物种"；`Builds/P0-Win64/T022/` 旧包是修复前产物）。 |
