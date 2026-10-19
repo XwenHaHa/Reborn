@@ -651,7 +651,61 @@ $out = 'E:\Reborn\Builds\P0-Win64'
 - **视觉捕获的窗口运行会收到真实输入**：`pounce` 绑的是**鼠标左键**（`project.godot`），窗口获得焦点时的一次点击就会产生
   `pounces=1`（**AI 路径从不扑击**；`--headless` 套件不受影响，套件 B8 断言 `pounce_count == 0`）。
 
+
+## 2.21 T025 NPC 攻击与玩家受伤（VERIFIED — 2026-10-22 实测）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+# 0) 新增 class_name AttackSettlement → **先 import**，再查语法
+& $g --headless --path $p --import
+& $g --headless --path $p --check-only --script 'res://scripts/systems/attack.gd'              # 0
+& $g --headless --path $p --check-only --script 'res://scripts/characters/animal_body.gd'      # 0
+& $g --headless --path $p --check-only --script 'res://scripts/ai/cat_ai.gd'                   # 0
+
+# 1) 断言套件（核对 SUMMARY|checks=175|failures=0）
+& $g --headless --path $p --script 'res://tests/run_t025_attack.gd' --quit-after 300000        # exit=0，175/0
+
+# 2) 改动会波及 T023 / T024 的**夹具**（关掉攻击）→ 这两套必须一起跑
+& $g --headless --path $p --script 'res://tests/run_t023_cat_ai.gd' --quit-after 300000        # 177/0
+& $g --headless --path $p --script 'res://tests/run_t024_chase_search.gd' --quit-after 300000  # 136/0
+
+# 3) 全量回归 23 套（合计 2655 条）
+
+# 4) 导出两预设
+& $g --headless --path $p --export-release "Windows Desktop"          "$out\Reborn.exe"          # 0 → Reborn.pck 249,140 B
+& $g --headless --path $p --export-debug   "Windows Desktop SelfTest" "$out\RebornSelfTest.exe"  # 0 → SelfTest.pck 825,204 B
+
+# 5) 包内复验（只能用编辑器二进制 + --main-pack）
+& $g --headless --main-pack "$out\RebornSelfTest.pck" --script 'res://tests/run_t025_attack.gd' --quit-after 300000
+#   → 174/0（比源码内少 1 条：源码静态检查在包内标 STATIC|NOT-APPLICABLE）
+
+# 6) 视觉两帧（**不能加 --headless**；建议**同步跑**）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 2000 -- t025
+#   → CAP|t025|setup|prey_hp=100.0|gap=0.65|range=0.65|telegraph=0.45|damage=35.0
+#   → CAP|t025|telegraph|state=attack|reason=attacking|attack_state=telegraphing|elapsed=0.017|hits=0|prey_hp=100.0
+#   → CAP|t025|hit|hits=1|misses=0|attack_state=recovering|prey_hp=65.0|damage=35.0|reason=attack
+#   → 两张 save_result=0 (OK) → CAP|t025|done
+```
+
+### 本任务踩到的坑（**会污染别的测试**）
+
+- **`ACT` 枚举只能往末尾追加**：`run_t021_capture.gd` 的 A 段把前 5 个值的序号锁死（`IDLE=0…DEAD=4`）；
+  把 `ATTACKING` 插在中间会让 T021 立刻挂。
+- **"锁定方向"要先结算再清零**：`_facing_direction()` 对零向量走"无方向 = 放行"的兜底 ——
+  先清 `_locked_dir` 再结算伤害帧，等于**朝向检查彻底失效**（侧方 90° 也能打中）。
+- **攻击的遮挡复核不能借感知**：攻击距离 0.65 m 落在 `Perception` 的近距豁免（0.80 m）内，
+  用 `can_see_point()` 判"绕墙"永远命中；要自己打 `world_static` 射线。
+- **断言别在参数里重复调被测函数**：`_assert("x", str(f()), f())` 会调用两次 → 第二次被拒 → **假失败**；
+  `died`/`changed` 这类计数要 `append` 到数组（GDScript lambda **按值捕获**局部变量）。
+- **夹具的"隐藏点"必须在竞技场内**（±20 m）：放到场外会让身体一直下落，回场时按落地速度吃"跌落伤害"
+  （实测 88.85 m/s → 直接摔死），后续断言会以完全无关的理由失败。
+- **`ResourcePoint.new()` 没有碰撞体**：交互检测找不到它；要用 `resource_point.tscn` 实例。
+- **后台 `Start-Process` 取景这次全程无输出**（log/err 都 0 字节、进程立刻结束）→ 改用**同步执行**一次成功。
 ## 3. Blender（VERIFIED）
+
 
 ### 3.1 版本与能力探针
 
@@ -957,3 +1011,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-19 | **T022 完成**。新增 §2.18 猫循环回归与打包命令（168 条断言 + 两预设导出与字节记录 + 包内复验 + `-- t022` 两帧 + 四条实测坑：**"SUMMARY 全绿"不等于日志干净，必须单独扫 `SCRIPT ERROR`**；扫描会被写进 `NOTE` 的字面量污染；重开必须"先释放 / 再重建 / 再切物种"；`Builds/P0-Win64/T022/` 旧包是修复前产物）。 |
 | 2026-10-20 | **T023 完成**。新增 §2.19 猫 NPC 巡游与发现命令（177 条断言 + 两预设导出与字节记录 + 包内复验 175 条 + `-- t023` 两帧 + 六条实测坑：**导航代理必须挂脚下（`NavigationAgent3D` 位置取自父节点，挂中心会让高个子物种零位移）**；"朝目标"兜底只在**有路径**时生效，否则不可达会被走成可达；几何段必须关 AI；遮挡测试要注意近距豁免与"沿墙绕开"；到点要清 `patrol_target_id`；环上巡游的 `ring_*` 是方向索引会重复）。 |
 | 2026-10-21 | **T024 完成**。新增 §2.20 追击、搜索和放弃命令（134 条断言 ×3 + 两预设导出与字节记录 + 包内复验 133 条 + `-- t024` 两帧 + 五条实测坑：**`ai_enabled` 不是暂停开关（关掉会释放、再打开会重建 AI 实例，旧引用失效甚至崩）**、**瞬时 `state_reason()` 同帧会被覆盖 → 触发原因要用转移账断言**、**实心墙造遮挡会同时挡路（失败链会早于 5 s 超时）**、**"隐藏"的猎物必须在视锥与视距之外**、**窗口捕获会收到真实输入（`pounce` = 鼠标左键）**）；T023 的 2 条断言升级为"失视 → `SEARCH`"。 |
+| 2026-10-22 | **T025 完成**。新增 §2.21 NPC 攻击与玩家受伤命令（175 条断言 ×3 + 两预设导出与字节记录 + 包内复验 174 条 + `-- t025` 两帧 + 七条实测坑：**`ACT` 枚举只能追加**、**"锁定方向"要先结算再清零**、**攻击遮挡复核不能借感知（近距豁免）**、**断言里别重复调被测函数 / lambda 按值捕获**、**夹具隐藏点必须在竞技场内（否则摔死）**、**`ResourcePoint.new()` 没有碰撞体**、**后台 Start-Process 取景无输出 → 同步跑**）；T023/T024 的夹具改为"关掉攻击"；两帧截图已产出，**判读因 vision 服务 503 记 NOT-VERIFIED**。 |

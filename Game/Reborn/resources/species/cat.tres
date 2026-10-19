@@ -58,5 +58,13 @@ pounce_duration = 0.25
 pounce_stamina_cost = 25.0
 pounce_recovery = 0.6
 capture_food_expire = 300.0
+; 攻击（T025）：Parameters.md 第 69 行（预警 0.45 s / 伤害 35 / 攻击恢复 1.2 s / AttackRange 65 cm ÷100）；
+; 朝向半角 60° 是 T025 新增的实现默认值（Parameters 无对应行，待负责人并入正式值）。
+can_attack = true
+attack_damage = 35.0
+attack_telegraph = 0.45
+attack_recovery = 1.2
+attack_range = 0.65
+attack_facing_half_angle_deg = 60.0
 ; 行为（T023）：猫 NPC = 巡游 / 发现 / 警戒 / 接近；Alert 0.4 s 与 AttackRange 0.65 见 Docs/Parameters.md 第 69 行
 ai_script = ExtResource("2_ai")

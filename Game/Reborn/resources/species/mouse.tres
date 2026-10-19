@@ -51,5 +51,12 @@ allowed_food_types = Array[int]([1])
 can_jump = false
 can_pounce = false
 can_use_mouse_tunnel = true
+; 攻击（T025）：鼠**不主动攻击**。`can_attack=false` 时五项必须为 0（`SpeciesConfig` 自校验守着）
+can_attack = false
+attack_damage = 0.0
+attack_telegraph = 0.0
+attack_recovery = 0.0
+attack_range = 0.0
+attack_facing_half_angle_deg = 0.0
 ; 行为（T019）：鼠有觅食+警戒状态机；猫留空（T023 再做）
 ai_script = ExtResource("2_ai")

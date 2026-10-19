@@ -50,7 +50,8 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T022 | **done（2026-10-19）** | `Docs/Evidence/T022.md`；`Docs/Tasks/T022.md`；`tests/run_t022_loop.gd`；`scripts/debug/debug_entry.gd`（`restart_round()` + 死亡 HUD 提示 + 失效实例守卫）；`scripts/characters/interaction.gd`（`current_target()` 清失效目标）；`project.godot`（`debug_restart` = F6）；`tool_capture_render.gd -- t022`；`Art/Probes/t022_*.png` | 猫循环回归与打包：真实关卡 `l_courtyard.tscn` 上跑通 **探索 → 发现 → 扑击捕获 → 进食 → 饮水 → 再次探索**（位移 1.350 m、`captures=1`、捕获食物落点 0.072 m、Hunger Δ34.89、Thirst Δ39.88、再次扑击成功）；**连按与幂等**（10 帧只启动一次、扑击中 8 次全拒 `busy` 且不重复扣体力、交互连按 `consumed_count` 恒 1、重复上报 `invalid`）；**体力耗尽**（被拒不位移 0.00000 m、不进恢复态、冲刺回落 1.80 m/s、恢复后可再扑）；**寻路失败回退**（1.22 s 内记录失败 → `wait`/`path_failed` 2.83 s → 重选 3 次放弃且不再查询 → 恢复后路径点数 2、账本不变）；**临时死亡重开**（`died` 只一次、死后交互/扑击全拒、`restart_round()` 计数 1→2→3、`world_time` 归零、旧实例释放、无残留、新一局可再次捕获）；**168/168 ×3** + 包内 168/168；全量回归 **19 套件 1999 条全绿**；包 **Reborn.pck 220,116 B / RebornSelfTest.pck 694,696 B**；视觉 2 图已判读；**修掉重开后 HUD 读已释放目标导致的 6 条脚本错误**（补 E13 回归断言，并把 A14 判据改成"套件内看汇总 + 日志由外部扫描"） |
 | T023 | **done（2026-10-20）** | `Docs/Evidence/T023.md`；`Docs/Tasks/T023.md`；`scripts/ai/cat_ai.gd`；`resources/species/cat.tres`（`ai_script`）；`scripts/ai/animal_ai.gd`（**脚下导航锚点** + 兜底收紧）；`debug_entry.gd`（`patrol=`）；`tests/run_t023_cat_ai.gd`；`tool_capture_render.gd -- t023`；`Art/Probes/t023_*.png` | 猫 NPC 巡游与发现：新 `CatAI`（`EXPLORE` 巡游 → `ALERT` **0.4 s** → `APPROACH` 到 **0.65 m 停住**，**不扑击、不造成伤害**）；巡游点来自组 `patrol_points`（**按名字排序 = 确定性**），无组时退化为环上可达点；到点 **2.43 s**/0.475 m、换点 2.00 s；不每帧请求路径（1 s 增量 1）；目标全不可达 → 2.74 s `WAIT`(`path_failed`) → 1.02 s 自恢复（**不永久阻塞、不假装到点**）；视觉 **9 m / 60°** + `world_static` 遮挡 + 草丛 0.4 + 近距 0.8 豁免、听觉 **12 m × loudness**（**完全复用 T020 感知，零新增算法**）；警戒 0.517 s 内结束且停手停脚、重复注入不无限延长；接近 **2.30 s 收敛到 0.632 m**，失视后 `last_seen` 偏差 **0.0000 m**（不追实时坐标）、不可达记 `finished_without_progress`；**177/177 ×3** + 包内 175/175（少 2 条为包内不可读的源码静态检查）；全量回归 **20 套件 2167 条全绿**；包 **Reborn.pck 228,792 B / SelfTest.pck 741,544 B**；视觉 2 帧（HUD `ai:` 逐字含 `patrol=`、`state=approach reason=in_range`；两胶囊相距 < 0.5 身位）；**顺带修好基类两个真实缺陷**（代理挂在身体中心 → 高个子物种零位移；兜底把"不可达"走成"可达"） |
 | T024 | **done（2026-10-21）** | `Docs/Evidence/T024.md`；`Docs/Tasks/T024.md`；`scripts/ai/cat_ai.gd`（`CHASE`/`SEARCH`/洞口等待/逃脱账本）；`tests/run_t024_chase_search.gd`；`tests/run_t023_cat_ai.gd`（2 处断言升级）；`debug_entry.gd`（HUD `search=`；`MOV` 行 `search=`/`giveups=`/`chase=`）；`tool_capture_render.gd -- t024`；`Art/Probes/t024_*.png` | 追击、搜索和放弃：`CatAI` 新增 **`CHASE`**（猎物跑开后的持续追击 / 搜索中重新发现）与 **`SEARCH`**（失视 → 警戒 0.4 s → 搜）；**搜索目标 = 失视时刻的快照，搜索/等待期间永不更新**（瞬移猎物后快照偏差 **0.0000 m**、目的地距实时位置 > 0.5 m）；普通搜索 **5 s** 超时 → `EXPLORE(search_timeout)`、洞口场景**到达洞口起 6 s** → `hole_timeout`（另加 `search_overall_max` 12 s 兜底），**都记一次放弃、绝不无限走**；洞口判定用组 `hide_spots` + `metadata kind=mouse_hole`，**停在洞外 ≥ 半径**（不进洞、`move_intent=0`、1 s 位移 ≤ 0.15 m）；**逃脱账本**（`encounter_id` 唯一、一场只结算一次、**猎物存活才算逃脱**，信号 `chase_started`/`chase_ended`）；到 0.65 m 仍**只停住不攻击**（伤害属 T025）；**134/134 ×3** + 包内 133/133；全量回归 **22 套件 2478 条全绿**；包 **Reborn.pck 236,472 B / SelfTest.pck 781,180 B**；视觉 2 帧（HUD 逐字 `state=chase reason=chasing`、`state=search reason=arrived search=(-4.00, 0.19, 19.60)/0.8s`） |
-| T025～T063 | pending | 无 | 见 `轮生_Reborn_开发计划_v1.0.md` |
+| T025 | **done（2026-10-22）** | `Docs/Evidence/T025.md`；`Docs/Tasks/T025.md`；`scripts/systems/attack.gd`（新组件 `AttackSettlement`）；`scripts/data/species_config.gd`（`Attack` 组 + 自校验）；`resources/species/cat.tres`/`mouse.tres`；`scripts/characters/animal_body.gd`（`ACT.ATTACKING` + `attack` 组件）；`scripts/ai/cat_ai.gd`（`State.ATTACK` + `attack_enabled`）；`debug_entry.gd`（`attack=` / `atk*`）；`tests/run_t025_attack.gd`；`tool_capture_render.gd -- t025`；`Art/Probes/t025_*.png` | NPC 攻击与玩家受伤：`AttackSettlement` 走 **预警 0.45 s → 伤害帧 35 → 恢复 1.2 s**（真源 `Parameters` 第 69 行）；**伤害帧四查一结算**（目标个体仍在 / 水平距离 ≤ 0.65 + 0.05 / 与**锁定方向**夹角 ≤ 60° / **无遮挡**）——躲开、绕墙、目标已死或被捕获**都无伤**；**遮挡复核刻意不走 `Perception` 的近距豁免**（0.65 m < 0.80 m，否则"绕墙"永远命中）；预警期不掉血、不位移（1 s ≤ 0.15 m）；恢复期内**绝不重复伤害**（同帧连按 10 次只启动 1 次）；伤害走既有 `survival.apply_damage(…, "attack")`，**受伤中断交互且无收益**、`died` 只发一次；鼠 `can_attack=false`（不建组件、AI 永不进 `attack`）；攻击不消耗体力、不扑击（T021 不受影响）；**175/175 ×3** + 包内 174/174；全量回归 **23 套件 2655 条全绿**；包 **Reborn.pck 249,140 B / SelfTest.pck 825,204 B**；**视觉 2 帧已产出**（`t025_telegraph` 抓在预警窗口 `attack_state=telegraphing` / `prey_hp=100`；`t025_hit` 抓在伤害帧后 `hits=1` / `prey_hp=65`）**但判读因 vision 服务 503 记 NOT-VERIFIED** |
+| T026～T063 | pending | 无 | 见 `轮生_Reborn_开发计划_v1.0.md` |
 
 ### T001 判定明细（Godot 版）
 
@@ -80,13 +81,13 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 E01 的视觉部分**已补验通过**；**E02 本次通过**（`Docs/Evidence/T005.md`）；**E03 已通过**（T006 骨骼往返 65/65）。
 
 ## 选择顺序
-T001 / T002 / T003 / T005 / T006 / T007 / T008 ～ **T024 均已完成**；台阶、导航、调试入口、生存时间入口、交互接口、食物/饮水、正式 HUD、
-**鼠 NPC 状态机**、**感知（视觉 / 听觉 / 逃跑躲藏）**、**猫扑击与捕获结算**、**猫循环回归与打包**、**猫 NPC 巡游与发现**、**猫的追击 / 搜索 / 放弃**已落地。
+T001 / T002 / T003 / T005 / T006 / T007 / T008 ～ **T025 均已完成**；台阶、导航、调试入口、生存时间入口、交互接口、食物/饮水、正式 HUD、
+**鼠 NPC 状态机**、**感知（视觉 / 听觉 / 逃跑躲藏）**、**猫扑击与捕获结算**、**猫循环回归与打包**、**猫 NPC 巡游与发现**、**猫的追击 / 搜索 / 放弃**、**NPC 攻击与玩家受伤**已落地。
 （口径变化：T011/T012 是"游戏代码零改动、差异全在配置/关卡/导航数据"；**T013 起开始真的改游戏代码** —— `step_climb` 抬升修复、调试入口、`SurvivalState`/`SurvivalController`、`AnimalBody` 接入、`Interactable`/`InteractionDetector`/`ResourcePoint` 与动作事务、`Perception`/`CaptureSettlement`、`AnimalBody.enum ACT` 扑击状态机、`DebugEntry.restart_round()`、`CatAI`（巡游 → 警戒 → 接近 → **追击 → 搜索**）与**导航代理的脚下锚点**。）
-**P0 阶段门完成**；**P1 完成**（T008～T013）；**P2 完成**（T014～T022）；**P3 进行中**（T023、T024 已 done）→ 下一步 **T025 NPC 攻击与玩家受伤**。
+**P0 阶段门完成**；**P1 完成**（T008～T013）；**P2 完成**（T014～T022）；**P3 进行中**（T023、T024、T025 已 done）→ 下一步 **T026 老鼠藏身与掩体规则**。
 
 下一步可执行（按建议优先级）：
-1. **T025（NPC 攻击与玩家受伤）**（4～8h，前置 T015、T024 **都已满足**）：预警 **0.45 s**、伤害 **35**、攻击恢复 **1.2 s**；伤害帧以**当前距离与遮挡**复核（`Parameters.md` 第 69 行）。
+1. **T026（老鼠藏身与掩体规则）**（4～8h，前置 T010、T025 **都已满足**）：**鼠洞阻止猫进入**；**草丛只降低可见性**（不改碰撞）；**躲藏不凭空恢复全部资源**。
    顺带带上待定：**猫跨 0.50 屏障是否加 `NavigationLink3D`**（T013 §9）、**跳跃是否消耗体力**（T015 §9）、
    **交互是否要朝向/视锥限制**（T016/T017 §9）、**食物/水恢复值是否按物种分列**（T017 §9）、
    **"调参页"是否要做成可交互面板**（T018 §8）、**交互用"按住开始/松开取消"是否最终设计、距离是否要含竖直差**（T016 §7）。
@@ -95,6 +96,9 @@ T001 / T002 / T003 / T005 / T006 / T007 / T008 ～ **T024 均已完成**；台�
    T021 §8 待定：**捕获食物营养 35.0**、**恢复期是否锁姿态**。　T022 §9 待定：**"重开"是否升级为正式 UI**（P4）、**F6 是否与正式快捷键冲突**、**发布节奏**。
    T023 §9 待定：**5 个新实现默认值**（`patrol_radius` 6.0 / `patrol_pause` 1.0 / `patrol_min_move` 0.5 / `patrol_retry_wait` 1.0 / `approach_repath_interval` 0.5）、**巡逻点位布置属 T027**、**环上巡游的目标 ID 会重复**（无稳定点位）。
    T024 §9 待定：**5 个新实现默认值**（`chase_repath_interval` 0.25 / `search_arrive_radius` 0.6 / `hole_search_radius` 0.6 / `search_overall_max` 12.0 / `chase_trigger_move` 0.5）、
+   T025 §9 待定：**3 个新实现默认值**（`attack_facing_half_angle_deg` 60 / `attack_retry_interval` 0.25 / `attack_fail_max` 8）、
+   **伤害帧遮挡复核刻意不走感知的近距豁免**（0.65 m < 0.80 m；若将来统一改掉可合并）、**攻击是否消耗体力**（第 69 行没给）、
+   **被攻击后的逃跑 / 仇恨属 T026 与 P4**、**攻击音效属 T055**；**视觉两帧已产出但判读 NOT-VERIFIED（vision 服务 503）**，待补。
    **`APPROACH → CHASE` 的判据是"猎物跳变 > 0.5 m"**（连续低速奔跑不切 `CHASE`，只是状态名不同、行为等价）、**多洞口优先级属 T026/T027**、
    **"洞口不可达"的几何/导航验证属 T026**、**逃脱账本落 `LifeRecord` 与 `encounter_id` 持久化属 P4**。
 2. ~~T008 / T009 / T010 / T011 / T012~~ **已完成**；正式角色/骨骼资产仍属 **P6** 阶段门，不得提前。

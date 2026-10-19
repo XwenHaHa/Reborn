@@ -151,6 +151,12 @@ var last_pounce_blocked_reason: StringName = &""
 ## 交互受阻原因（`""` = 不阻塞；`"pouncing"` / `"recovering"`）
 var interaction_blocked_reason: StringName = &""
 
+## --- 攻击（T025）---
+## 攻击结算组件：只有 `can_attack()` 为真时（= `SpeciesConfig.can_attack`）才在 `apply_config()` 里建立
+var attack: AttackSettlement = null
+## 最近一次攻击启动被拒的原因（`""` / `species` / `dead` / `captured` / `airborne` / `busy` / `target`）
+var last_attack_blocked_reason: StringName = &""
+
 var _pouncing: bool = false
 ## 启动时锁定的扑击方向（水平单位向量）
 var _pounce_dir: Vector3 = Vector3.ZERO
@@ -219,6 +225,9 @@ func _physics_process(delta: float) -> void:
 	# 感知（T020）：每物理帧刷新"是否看见威胁"（只观察：不写 move_intent、不改状态机）
 	if perception != null:
 		perception.tick(world_time_now())
+	# 攻击（T025）：预警计时与伤害帧都由组件推进；它**不写位移**（AI 负责给不给意图）
+	if attack != null and is_instance_valid(attack):
+		attack.step(world_time_now())
 
 	# 扑击（T021 D3）：扑击期间**只**跑扑击位移 —— 不叠加输入、不交互、不推进姿态。
 	# 生存与脚步按世界时间差结算，扑击帧跳过会在下一帧自动补齐（`tick_to()` 用绝对时间）。
@@ -236,7 +245,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		has_touched_floor = true
 		# 恢复期禁止跳跃（T021 D8）：`want_jump` 直接被吞掉（扑击帧在更早处 return，不会走到这里）
-		if want_jump and is_recovering():
+		if want_jump and (is_recovering() or is_attacking()):
 			want_jump = false
 		elif want_jump and can_jump():
 			velocity.y = species_config.jump_velocity
@@ -466,6 +475,17 @@ func apply_config() -> void:
 	elif capture != null and is_instance_valid(capture):
 		capture.queue_free()
 		capture = null
+
+	# 攻击结算组件（T025）：只有**会攻击**的物种才建（鼠不建 → `request_attack()` 直接拒 `species`）
+	if can_attack():
+		if attack == null:
+			attack = AttackSettlement.new()
+			attack.name = "Attack"
+			add_child(attack)
+		attack.setup(self, species_config)
+	elif attack != null and is_instance_valid(attack):
+		attack.queue_free()
+		attack = null
 	# 行为状态机（T019）：脚本来自配置；**默认关闭**，由生成者显式打开 `ai_enabled`
 	# （否则测试夹具/玩家身体会被 AI 抢走移动意图 —— 实测会让 T010/T011/T012/T017 大面积回退）
 	_sync_ai()
@@ -503,6 +523,11 @@ func can_jump() -> bool:
 func can_pounce() -> bool:
 	return species_config != null and species_config.can_pounce
 
+
+
+## 会主动攻击吗（T025）= `SpeciesConfig.can_attack`；鼠为 false
+func can_attack() -> bool:
+	return species_config != null and species_config.can_attack
 
 func can_use_mouse_tunnel() -> bool:
 	return species_config != null and species_config.can_use_mouse_tunnel
@@ -578,6 +603,10 @@ func debug_state() -> Dictionary:
 		"interaction_blocked": interaction_blocked_reason != &"",
 		"interaction_blocked_reason": String(interaction_blocked_reason),
 		"capture": capture.report() if capture != null else {},
+		"attack": (attack.report() if attack != null and is_instance_valid(attack) else {}),
+		"attack_can": can_attack(),
+		"attacking": is_attacking(),
+		"attack_blocked": String(last_attack_blocked_reason),
 	}
 
 
@@ -684,15 +713,19 @@ func _on_survival_died(_reason: StringName) -> void:
 
 ## 动作互斥状态（`Docs/TechnicalDesign.md` §1 的 `ActionState`）。
 ## 只由 `action_state()` 按实时状态汇总，**不单独存一份**，避免出现两套真相。
-enum ACT { IDLE, INTERACTING, POUNCING, RECOVERING, DEAD }
+## **新增值只能追加在末尾**：`run_t021_capture.gd` 的 A 段断言锁死了前 5 个值的序号（0..4）。
+enum ACT { IDLE, INTERACTING, POUNCING, RECOVERING, DEAD, ATTACKING }
 
 
 ## 当前动作状态（T021 D1）。优先级：DEAD > POUNCING > RECOVERING > INTERACTING > IDLE
+## 当前动作状态（T021 D1 / T025）。优先级：DEAD > POUNCING > **ATTACKING** > RECOVERING > INTERACTING > IDLE
 func action_state() -> ACT:
 	if _is_dead_state():
 		return ACT.DEAD
 	if _pouncing:
 		return ACT.POUNCING
+	if is_attacking():
+		return ACT.ATTACKING
 	if is_recovering():
 		return ACT.RECOVERING
 	if interaction != null and interaction.is_interacting():
@@ -701,10 +734,13 @@ func action_state() -> ACT:
 
 
 ## 动作状态名（`debug_state()` / `MOV|` 用字符串；工具不必认识枚举）
+## 动作状态名（`debug_state()` / `MOV|` 用字符串；工具不必认识枚举）
 func action_state_name() -> String:
 	match action_state():
 		ACT.POUNCING:
 			return "pouncing"
+		ACT.ATTACKING:
+			return "attacking"
 		ACT.RECOVERING:
 			return "recovering"
 		ACT.INTERACTING:
@@ -720,15 +756,17 @@ func is_pouncing() -> bool:
 	return _pouncing
 
 
-## 是否处于扑击后的恢复期。按**世界时间**判定；到点自动结束并解除交互封锁（T021 D7）。
+## 是否处于**恢复期**（扑击恢复 T021 / 攻击恢复 T025）。
+## 按**世界时间**判定；到点自动结束并解除交互封锁（T021 D7）。
 func is_recovering() -> bool:
-	if _recover_until <= 0.0:
-		return false
-	if world_time_now() < _recover_until:
+	if _recover_until > 0.0:
+		if world_time_now() < _recover_until:
+			return true
+		_recover_until = 0.0
+		if interaction_blocked_reason == &"recovering":
+			interaction_blocked_reason = &""
+	if attack != null and is_instance_valid(attack) and attack.is_in_recovery():
 		return true
-	_recover_until = 0.0
-	if interaction_blocked_reason == &"recovering":
-		interaction_blocked_reason = &""
 	return false
 
 
@@ -796,6 +834,38 @@ func request_pounce() -> bool:
 	var started := start_pounce()
 	want_pounce = false
 	return started
+
+
+## 发起攻击（T025）：门控与结算都在 `AttackSettlement` 里；身体只负责"动作互斥 + 锁朝向 + 封锁交互"。
+## 返回启动结果，并把拒绝原因写进 `last_attack_blocked_reason`（可查看）。
+func request_attack() -> bool:
+	if attack == null or not is_instance_valid(attack):
+		last_attack_blocked_reason = &"species"
+		return false
+	var started: bool = attack.start_attack()
+	last_attack_blocked_reason = attack.blocked_reason
+	return started
+
+
+## 是否正在预警（未到伤害帧）
+func is_attacking() -> bool:
+	return attack != null and is_instance_valid(attack) and attack.is_attacking()
+
+
+## 攻击开始（由 `AttackSettlement` 回调）：锁定朝向由攻击组件持有；这里只封动作
+func on_attack_started() -> void:
+	if interaction != null and interaction.is_interacting():
+		interaction.release_interact(&"attacking")
+	want_pounce = false
+	want_jump = false
+	interaction_blocked_reason = &"attacking"
+	last_attack_blocked_reason = &""
+
+
+## 一次攻击彻底结束（含 1.2 s 恢复期；由 `AttackSettlement` 回调）
+func on_attack_ended() -> void:
+	if interaction_blocked_reason == &"attacking":
+		interaction_blocked_reason = &""
 
 
 ## 锁定扑击方向：把当前朝向的前方投影到水平面并归一化（退化时兜底 `FORWARD`）

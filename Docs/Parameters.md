@@ -153,3 +153,23 @@
 
 - **动作状态枚举**：`ActionState { IDLE, INTERACTING, POUNCING, RECOVERING, DEAD }`（`TechnicalDesign` §1 已定义，
   由 `AnimalBody.action_state()` 只读汇总，优先级 `DEAD > POUNCING > RECOVERING > INTERACTING > IDLE`）。
+
+
+## NPC 攻击（T025 落地口径）
+
+- **阈值真源**：第 69 行（`AttackRange 65` → 0.65 m；预警 0.45 s；伤害 35；攻击恢复 1.2 s；**伤害帧以当前距离/遮挡检查**）。
+  落成字段（`SpeciesConfig` 的 `Attack` 组，**只有 `can_attack` 的物种才建 `AttackSettlement`**）：
+  `attack_damage = 35.0`、`attack_telegraph = 0.45`、`attack_recovery = 1.2`、`attack_range = 0.65`；猫 `can_attack = true`，鼠 `can_attack = false`（五项必须为 0，自校验守着）。
+- **伤害帧四查一结算**：目标个体仍在 → 水平距离 ≤ `attack_range` + 0.05 → 与**攻击开始时锁定的方向**夹角 ≤ 半角 → 无遮挡；
+  全过才 `survival.apply_damage(35, "attack")`，否则记 `out_of_range` / `facing` / `occluded` / `dead` / `target_lost` 且**不掉血**。
+- **遮挡复核单独打 `world_static` 射线**（**不借感知的近距豁免**）：攻击距离 0.65 m 落在近距豁免 0.80 m 内，
+  用感知判据会让"绕墙"永远命中（A04 的反面用例）。
+- **T025 新增 3 个实现默认值（原文没有，需负责人并入正式起测值）**：
+
+| 参数 | 值 | 含义与实测 |
+|---|---:|---|
+| `attack_facing_half_angle_deg` | 60 | 伤害帧的朝向半角（与猫的视锥半角同量级）；目标偏 90° 时 `facing` 不命中 |
+| `attack_retry_interval` | 0.25 | 在攻击距离内但被拒（朝向/遮挡/目标层）时的重试间隔（实测：连续被拒 8 次后回 `CHASE` 重新走位，**不永久卡**） |
+| `attack_fail_max` | 8 | 连续被拒多少次就回 `CHASE`（实现默认值） |
+
+- **明确不做的**：攻击**不消耗体力**（第 69 行没给成本）；伤害值不按物种分列；被攻击后的逃跑/仇恨属 T026 与 P4；攻击音效属 T055。

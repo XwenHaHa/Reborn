@@ -106,6 +106,22 @@ enum FoodType { MEAT, SEED }
 ## 捕获生成的食物对象多久后失效（秒）= 300
 @export var capture_food_expire: float = 0.0
 
+## 攻击（T025）：真源 `Docs/Parameters.md` 第 69 行「预警 0.45s；伤害 35；攻击恢复 1.2s；AttackRange 65（cm）」。
+## 只有 `can_attack` 的物种才建 `AttackSettlement`（与 T021 的 `can_pounce` 同口径，**不写物种名分支**）。
+@export_group("Attack")
+## 这个物种会主动攻击吗（猫 true / 鼠 false）
+@export var can_attack: bool = false
+## 一次攻击的伤害（点）= 35
+@export var attack_damage: float = 0.0
+## 攻击预警时长（秒）= 0.45；预警期间不掉血，目标可以躲开或绕墙（A04）
+@export var attack_telegraph: float = 0.0
+## 命中后的恢复时长（秒）= 1.2；期间不能再次攻击 / 扑击 / 跳跃 / 交互（**不重复伤害**）
+@export var attack_recovery: float = 0.0
+## 攻击距离（米）= 65 cm ÷100（**水平**距离，竖直差不算）
+@export var attack_range: float = 0.0
+## 伤害帧的朝向半角（度）= 60 —— **T025 新增的实现默认值**（`Parameters.md` 无对应行）
+@export var attack_facing_half_angle_deg: float = 0.0
+
 
 ## 行为（T019）：指向驱动这个物种的 AI 脚本（`AnimalAI` 子类）。
 ## 用**脚本引用**而不是"物种名判断"来选择状态机 —— 差异全在 `resources/species/*.tres` 里。
@@ -219,4 +235,16 @@ func validate_config() -> PackedStringArray:
 			problems.append("%s 必须 > 0（can_pounce 为 true）" % pair[0])
 		if not can_pounce and v != 0.0:
 			problems.append("%s 应为 0（can_pounce 为 false 的物种不该有扑击参数）" % pair[0])
+	# 攻击（T025）：真源 `Parameters.md` 第 69 行；可攻击物种五项必须齐备，不可攻击物种不允许携带攻击参数
+	var t025_attack := [
+		["attack_damage", attack_damage], ["attack_telegraph", attack_telegraph],
+		["attack_recovery", attack_recovery], ["attack_range", attack_range],
+		["attack_facing_half_angle_deg", attack_facing_half_angle_deg],
+	]
+	for pair in t025_attack:
+		var v := float(pair[1])
+		if can_attack and (v <= 0.0 or not is_finite(v)):
+			problems.append("%s 必须 > 0（can_attack 为 true）" % pair[0])
+		if not can_attack and v != 0.0:
+			problems.append("%s 应为 0（can_attack 为 false 的物种不该有攻击参数）" % pair[0])
 	return problems

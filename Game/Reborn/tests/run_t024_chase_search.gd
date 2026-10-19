@@ -179,6 +179,10 @@ func _section_b_chase() -> void:
 			"%.3f m" % _ai.approach_distance(), _ai.approach_distance() <= ATTACK_RANGE)
 
 	_assert("B8_no_pounce", "0", str(_npc.pounce_count), _npc.pounce_count == 0)
+	# T025 起猫在攻击距离内会**真的攻击**；本任务（T024）只验证追击 / 搜索 → 夹具已关掉攻击（T025 §8）
+	_assert("B8_attack_disabled_this_task", "false", str(_ai.attack_enabled), not _ai.attack_enabled)
+	_assert("B8_attack_count_zero", "0", str(_npc.attack.attack_count if _npc.attack != null else -1),
+		_npc.attack != null and _npc.attack.attack_count == 0)
 	_assert("B8_no_captures", "0", str(_npc.captures), _npc.captures == 0)
 	_assert("B8_prey_health_unchanged", "100.0", "%.1f" % _prey.survival.state.health,
 		absf(_prey.survival.state.health - 100.0) <= 0.01)
@@ -306,8 +310,23 @@ func _section_d_timeout() -> void:
 	await _run_seconds(4.0, func() -> bool: return _ai.state_id() == &"chase" or _ai.state_id() == &"approach")
 	_place_prey(_front(3.0))
 	await _advance_frames(3)
+	print("MEASURE|d4a|hp=%.1f|state=%s|visible=%s|gap=%.2f" % [
+		(float(_prey.survival.state.health) if _prey != null and is_instance_valid(_prey) else -1.0),
+		str(_ai.state_id()), str(_npc.perception.is_threat_visible()),
+		(_npc.global_position.distance_to(_prey.global_position) if _prey != null and is_instance_valid(_prey) else -1.0)])
 	_add_wall_at(1.5, 0.0, 8.0)
 	await _run_seconds(2.0, func() -> bool: return _ai.is_searching())
+	print("MEASURE|d4|hp=%.1f|reason=%s|attack_enabled=%s|hits=%d|starts=%d|fall=%.2f" % [
+		float(_prey.survival.state.health) if _prey != null and is_instance_valid(_prey) else -1.0,
+		str(_prey.survival.state.last_damage_reason) if _prey != null else "-",
+		str(_ai.attack_enabled),
+		(_npc.attack.hit_count if _npc != null and _npc.attack != null else -1),
+		(_npc.attack.attack_count if _npc != null and _npc.attack != null else -1),
+		(float(_prey.last_fall_speed) if _prey != null and is_instance_valid(_prey) else -1.0)])
+	print("MEASURE|d4|state=%s|reason=%s|searches=%d|giveups=%d|hp=%.1f|visible=%s|chase=%d" % [
+		str(_ai.state_id()), str(_ai.state_reason()), _ai.search_count(), _ai.give_up_count(),
+		(float(_prey.survival.state.health) if _prey != null and is_instance_valid(_prey) else -1.0),
+		str(_npc.perception.is_threat_visible()), _ai.chase_count()])
 	_assert("D4_second_search_count_2", "≥ 2", str(_ai.search_count()), _ai.search_count() >= 2)
 	# 同上：保持"看不见"但把路让开，让 5 s 上限能真的走到
 	_hide_prey()
@@ -687,6 +706,7 @@ func _fresh_world(opts: Dictionary = {}) -> void:
 	_ai = _npc.ai as CatAI
 	if _ai != null:
 		_ai.patrol_enabled = false        # 本任务不需要巡游
+		_ai.attack_enabled = false        # 本任务不看攻击（攻击属 T025；见 Docs/Tasks/T025.md §8）
 		if not _ai.state_changed.is_connected(_on_state_changed):
 			_ai.state_changed.connect(_on_state_changed)
 		if not _ai.chase_started.is_connected(_on_chase_started):
@@ -790,9 +810,10 @@ func _add_wall_at(dist: float, angle_deg := 0.0, width := 8.0) -> StaticBody3D:
 	return wall
 
 
-## 把猎物搬到**看得见之外**（默认放到猫身后 25 m）：模拟"藏起来了"。
+## 把猎物搬到**看得见之外**（默认放到猫身后 15 m）：模拟"藏起来了"。
 ## 必须真的看不见 —— 否则猫会按"重新发现"（T024 C7）转追击，快照类断言就不成立了。
-func _hide_prey(at := Vector3(0.0, MOUSE_Y, 25.0)) -> AnimalBody:
+## **必须留在竞技场内**（±20 m）：放到场外会让身体一直下落，回场时按落地速度吃到"跌落伤害"（实测 88 m/s → 直接摔死）。
+func _hide_prey(at := Vector3(0.0, MOUSE_Y, 15.0)) -> AnimalBody:
 	return _place_prey(at)
 
 

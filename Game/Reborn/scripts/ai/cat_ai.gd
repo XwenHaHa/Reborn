@@ -57,6 +57,14 @@ const HOLE_KIND := "mouse_hole"
 ## 判定"猎物跳变（跑开 / 瞬移）"的距离阈值（米）→ `APPROACH → CHASE`
 @export var chase_trigger_move: float = 0.5
 
+# --- T025 攻击 ---
+## 允许转入 `ATTACK`（默认开；**测试夹具可关掉**以单独验证追击 / 搜索，见 T024 §7 D7）
+@export var attack_enabled: bool = true
+## 攻击被拒后的重试间隔（秒）——**实现默认值**（`Parameters.md` 无对应行）
+@export var attack_retry_interval: float = 0.25
+## 连续被拒多少次就回 `CHASE` 重新走位（**不永久卡**）——实现默认值
+@export var attack_fail_max: int = 8
+
 var _patrol_ids: Array[String] = []
 var _patrol_index := 0
 var _patrol_target_id := ""
@@ -93,6 +101,10 @@ var _encounter_settled := false
 ## 上一帧看见猎物时的位置（判"跳变"用；只在看得见时更新）
 var _prey_seen_pos := Vector3.ZERO
 var _has_prey_seen_pos := false
+## 攻击（T025）：被拒后多久再试一次（秒）——**实现默认值**
+var _attack_retry_at := -1000.0
+## 连续被拒次数（达到 `attack_fail_max` 就回 `CHASE` 重新走位，**不永久卡**）
+var _attack_fail_streak := 0
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +115,11 @@ func setup(p_body: AnimalBody) -> void:
 	super(p_body)
 	if npc_alert_time > 0.0:
 		alert_max_time = npc_alert_time
+	# T025：攻击距离以**物种配置**为真源（`Parameters.md` 第 69 行 AttackRange 65 cm）；
+	# `@export` 的默认值只在配置缺失时兜底，避免同一数值出现两个真源。
+	if body != null and is_instance_valid(body) and body.species_config != null \
+			and body.species_config.attack_range > 0.0:
+		attack_range = body.species_config.attack_range
 	change_state(State.EXPLORE, &"boot")
 
 
@@ -137,6 +154,9 @@ func _step(world_time: float) -> void:
 	if _state == State.CHASE:
 		_step_chase(world_time)
 		return
+	if _state == State.ATTACK:
+		_step_attack(world_time)
+		return
 	if _state == State.SEARCH:
 		_step_search(world_time)
 		return
@@ -156,8 +176,8 @@ func _react_to_senses(world_time: float) -> void:
 			_enter_chase(world_time, &"reacquired")
 		return
 	if visible:
-		if _state == State.APPROACH or _state == State.CHASE:
-			return          # 已经在接近 / 追击 → 交给各自的 `_step_*`
+		if _state == State.APPROACH or _state == State.CHASE or _state == State.ATTACK:
+			return          # 已经在接近 / 追击 / 攻击 → 交给各自的 `_step_*`
 		if not _has_alert:
 			_alert_from_sight = true
 			_detect_count += 1
@@ -167,7 +187,7 @@ func _react_to_senses(world_time: float) -> void:
 			alert_for(p.threat_position(), &"saw_prey")
 		return
 	# 看不见了：接近 / 追击中 → 警戒（0.4 s）后再决定搜索还是重新接近
-	if _state == State.APPROACH or _state == State.CHASE:
+	if _state == State.APPROACH or _state == State.CHASE or _state == State.ATTACK:
 		_alert_from_sight = true
 		alert_for(p.last_seen_position(), &"lost_sight")
 		return
@@ -193,6 +213,8 @@ func _on_alert_ended(world_time: float) -> void:
 		_lost_sight_count += 1
 		if not _prey_id.is_empty():
 			prey_lost.emit(_prey_id)
+		# T025 试过"猎物已经死了就跳过搜索"的捷径 → **撤回**：那要靠 `_prey_alive()` 全图查询，
+		# 等于让猫读到上帝视角信息（它并没有看见猎物死）；一律走既有"失视 → SEARCH → 超时 → EXPLORE"。
 		_enter_search(world_time, &"lost_sight")
 		return
 	change_state(State.EXPLORE, &"alert_done")
@@ -222,6 +244,9 @@ func _step_approach(world_time: float) -> void:
 		_enter_chase(world_time, &"chasing")
 		return
 	if _approach_dist <= attack_range + RANGE_HYSTERESIS:
+		if _should_attack():
+			_enter_attack(world_time, &"in_range")
+			return
 		body.move_intent = Vector2.ZERO
 		_clear_destination()
 		set_reason(&"in_range")
@@ -264,6 +289,9 @@ func _step_chase(world_time: float) -> void:
 	_prey_seen_pos = prey_pos
 	_has_prey_seen_pos = true
 	if _approach_dist <= attack_range + RANGE_HYSTERESIS:
+		if _should_attack():
+			_enter_attack(world_time, &"in_range")
+			return
 		body.move_intent = Vector2.ZERO
 		_clear_destination()
 		set_reason(&"in_range")
@@ -277,6 +305,70 @@ func _step_chase(world_time: float) -> void:
 	_advance_along_path()
 	_track_progress(world_time)
 
+
+
+# ---------------------------------------------------------------------------
+# 攻击（T025）
+# ---------------------------------------------------------------------------
+
+## 现在该不该转入攻击：开关打开 + 物种会攻击 + 组件在
+func _should_attack() -> bool:
+	if not attack_enabled:
+		return false
+	if body == null or not is_instance_valid(body):
+		return false
+	if not body.can_attack():
+		return false
+	return _attack_comp() != null
+
+
+## 进入攻击：停住 + 锁朝向由 `AttackSettlement` 在启动时负责
+func _enter_attack(world_time: float, reason: StringName) -> void:
+	_clear_destination()
+	if body != null and is_instance_valid(body):
+		body.move_intent = Vector2.ZERO
+	_last_repath_at = -1000.0
+	_attack_retry_at = -1000.0
+	_attack_fail_streak = 0
+	_seed_prey_seen_pos()
+	change_state(State.ATTACK, reason)
+
+
+## 攻击：停住 → 请求攻击（预警 0.45 s → 伤害帧 35 → 恢复 1.2 s）→ 恢复完再打。
+## **本状态不写位移、不扑击**（`Parameters.md` 第 69 行；伤害在 `AttackSettlement` 里结算）。
+## 猎物跑出攻击距离 → 回 `CHASE` 重新走位；连续被拒几次也回 `CHASE`（**不永久卡**）。
+func _step_attack(world_time: float) -> void:
+	if body == null or not is_instance_valid(body):
+		return
+	body.move_intent = Vector2.ZERO
+	var comp := _attack_comp()
+	if comp == null:
+		_enter_chase(world_time, &"chasing")
+		return
+	var p := _perception()
+	if p != null and p.is_threat_visible():
+		_approach_dist = horizontal_distance_to(p.threat_position())
+		if _approach_dist > attack_range + RANGE_HYSTERESIS:
+			_enter_chase(world_time, &"chasing")
+			return
+	if comp.is_attacking():
+		set_reason(&"attacking")
+		return
+	if comp.is_in_recovery():
+		set_reason(&"recovering")
+		return
+	if world_time < _attack_retry_at:
+		return
+	_attack_retry_at = world_time + attack_retry_interval
+	if body.request_attack():
+		_attack_fail_streak = 0
+		set_reason(&"attacking")
+		return
+	# 被拒（多半是 `target`：朝向 / 遮挡 / 目标层）→ 记几次后回 CHASE 重新走位
+	_attack_fail_streak += 1
+	if _attack_fail_streak >= attack_fail_max:
+		_attack_fail_streak = 0
+		_enter_chase(world_time, &"chasing")
 
 # ---------------------------------------------------------------------------
 # 搜索（T024）
@@ -679,8 +771,28 @@ func encounter_id() -> String:
 	return _encounter_id
 
 
+
+## 发起过的攻击次数（没有攻击组件 = 0）
+func attack_count() -> int:
+	var comp := _attack_comp()
+	return comp.attack_count if comp != null else 0
+
+
+## 攻击组件的状态名（`idle` / `telegraphing` / `recovering`；没有组件 = `none`）
+func attack_state() -> String:
+	var comp := _attack_comp()
+	return comp.state_name() if comp != null else "none"
+
+
+## 身体上的攻击组件（没有 = null；鼠不会走到这里）
+func _attack_comp() -> AttackSettlement:
+	if body == null or not is_instance_valid(body):
+		return null
+	return body.attack
+
 func ai_report() -> Dictionary:
 	var d := super()
+	var comp := _attack_comp()
 	d["ai_kind"] = "cat"
 	d["patrol_enabled"] = patrol_enabled
 	d["patrol_index"] = _patrol_index
@@ -704,6 +816,16 @@ func ai_report() -> Dictionary:
 	d["chase_count"] = _chase_count
 	d["escape_reports"] = _escape_reports
 	d["encounter_id"] = _encounter_id
+	# --- T025 攻击 ---
+	d["attack_enabled"] = attack_enabled
+	d["attack_count"] = attack_count()
+	d["attack_hits"] = (comp.hit_count if comp != null else 0)
+	d["attack_misses"] = (comp.miss_count if comp != null else 0)
+	d["attack_state"] = attack_state()
+	d["attack_target"] = (comp.target_id() if comp != null else "")
+	d["attack_miss_reason"] = (comp.last_miss_reason() if comp != null else &"")
+	d["attack_blocked"] = (String(body.last_attack_blocked_reason) if body != null and is_instance_valid(body) else "")
+	d["attack_fail_streak"] = _attack_fail_streak
 	d["search_timeout"] = search_timeout
 	d["hole_wait_max"] = hole_wait_max
 	return d

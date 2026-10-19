@@ -125,6 +125,9 @@ func _initialize() -> void:
 	# T024：追击与搜索（追击中 / 失视后走向最后已知位置）。只在显式传 `-- t024` 时执行。
 	if OS.get_cmdline_user_args().has("t024"):
 		await _capture_t024_frames(lab)
+	# T025：NPC 攻击与玩家受伤（预警中 / 命中后）。只在显式传 `-- t025` 时执行。
+	if OS.get_cmdline_user_args().has("t025"):
+		await _capture_t025_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -1469,3 +1472,105 @@ func _capture_t024_frames(lab: Node) -> void:
 	else:
 		print("CAP|t024|ERROR|no active camera for search frame")
 	print("CAP|t024|done")
+
+
+# ---------------------------------------------------------------------------
+# T025：NPC 攻击与玩家受伤
+# ---------------------------------------------------------------------------
+
+const T025_ENTRY := "res://scenes/debug/debug_entry.tscn"
+const T025_BODY := "res://scenes/characters/animal_body.tscn"
+const T025_MOUSE := "res://resources/species/mouse.tres"
+
+
+## 两帧（都用**玩家自己的相机** = 第一人称，HUD 里带 `ai:` 行）：
+## ① `t025_telegraph`：猎物在 0.6 m（攻击距离 0.65 内）→ 进 `ATTACK`、**预警中**（0.45 s 窗口内抓帧，HUD 应显示 `attack=telegraphing`）；
+## ② `t025_hit`：伤害帧之后（HUD 应显示 `attack=recovering` 且命中计数 +1；CAP 行打印猎物生命 100 → 65）。
+## 判据：结尾 `CAP|t025|done` 且两张 `save_result=0 (OK)`。
+func _capture_t025_frames(lab: Node) -> void:
+	print("CAP|t025|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+	var packed: PackedScene = load(T025_ENTRY)
+	if packed == null:
+		print("CAP|t025|ERROR|entry load failed")
+		return
+	var entry: Node3D = packed.instantiate() as Node3D
+	root.add_child(entry)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	for i in SETTLE_FRAMES:
+		await process_frame
+	var player: AnimalBody = entry.get("player") as AnimalBody
+	var level: Node3D = entry.get("level") as Node3D
+	if player == null or level == null:
+		print("CAP|t025|ERROR|player/level missing")
+		return
+	player.ai_enabled = true
+	var ai := player.ai as CatAI
+	if ai == null:
+		print("CAP|t025|ERROR|CatAI missing")
+		return
+	ai.patrol_enabled = false
+	ai.attack_enabled = true
+	var mouse_cfg := load(T025_MOUSE) as SpeciesConfig
+	var body_packed := load(T025_BODY) as PackedScene
+	if mouse_cfg == null or body_packed == null:
+		print("CAP|t025|ERROR|mouse config/body missing")
+		return
+	var fwd := -player.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length_squared() > 1e-8 else Vector3.FORWARD
+	var mouse := body_packed.instantiate() as AnimalBody
+	mouse.species_config = mouse_cfg
+	mouse.player_controlled = false
+	mouse.ai_enabled = false
+	var spot := player.global_position + fwd * 0.6
+	mouse.position = Vector3(spot.x, 0.10, spot.z)
+	level.add_child(mouse)
+	await physics_frame
+	var hp0: float = mouse.survival.state.health
+	print("CAP|t025|setup|prey_hp=%.1f|gap=%.2f|range=%.2f|telegraph=%.2f|damage=%.1f" % [
+		hp0, player.global_position.distance_to(mouse.global_position),
+		(player.attack.config.attack_range if player.attack != null else -1.0),
+		(player.attack.config.attack_telegraph if player.attack != null else -1.0),
+		(player.attack.config.attack_damage if player.attack != null else -1.0)])
+	var t0 := _t021_world_time()
+	var tele := false
+	while _t021_world_time() - t0 < 8.0:
+		await physics_frame
+		if player.attack != null and player.attack.is_attacking():
+			tele = true
+			break
+	print("CAP|t025|telegraph|state=%s|reason=%s|attack_state=%s|elapsed=%.3f|hits=%d|prey_hp=%.1f" % [
+		str(ai.state_id()), str(ai.state_reason()),
+		(player.attack.state_name() if player.attack != null else "none"),
+		(player.attack.telegraph_elapsed() if player.attack != null else -1.0),
+		(player.attack.hit_count if player.attack != null else -1), mouse.survival.state.health])
+	var cam0 := root.get_viewport().get_camera_3d()
+	if tele and cam0 != null:
+		await _capture_view("t025_telegraph", cam0, 2)
+	else:
+		print("CAP|t025|ERROR|no telegraph window（tele=%s）" % str(tele))
+	var t1 := _t021_world_time()
+	var hit := false
+	while _t021_world_time() - t1 < 4.0:
+		await physics_frame
+		if player.attack != null and player.attack.hit_count >= 1:
+			hit = true
+			break
+	for i in 6:
+		await physics_frame
+	print("CAP|t025|hit|hits=%d|misses=%d|attack_state=%s|prey_hp=%.1f|damage=%.1f|reason=%s" % [
+		(player.attack.hit_count if player.attack != null else -1),
+		(player.attack.miss_count if player.attack != null else -1),
+		(player.attack.state_name() if player.attack != null else "none"),
+		mouse.survival.state.health,
+		(player.attack.last_damage if player.attack != null else -1.0),
+		str(mouse.survival.state.last_damage_reason)])
+	var cam1 := root.get_viewport().get_camera_3d()
+	if hit and cam1 != null:
+		await _capture_view("t025_hit", cam1, 2)
+	else:
+		print("CAP|t025|ERROR|no hit（hit=%s）" % str(hit))
+	print("CAP|t025|done")

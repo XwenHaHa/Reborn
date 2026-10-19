@@ -820,6 +820,10 @@ func _fresh_world(opts: Dictionary = {}) -> void:
 		_ai.state_changed.connect(_on_state_changed)
 	if _ai != null and opts.has("patrol") and not bool(opts["patrol"]):
 		_ai.patrol_enabled = false      # 夹具级关闭：**在第一次 tick 之前**生效（避免"先巡游再停"）
+	# T025 起猫在攻击距离内会**真的攻击**（预警 0.45 s → 伤害 35）；T023 的契约是"到 0.65 m 停住、
+	# **不扑击、不造成伤害**"（攻击属 T025）→ 夹具级关掉攻击（见 `Docs/Tasks/T025.md` §8）
+	if _ai != null:
+		_ai.attack_enabled = false
 	if _ai == null:
 		push_warning("猫 NPC 没有 CatAI（cat.tres 未接 ai_script 或实现缺失）")
 	await _advance_frames(SPAWN_FRAMES)

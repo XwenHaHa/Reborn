@@ -564,7 +564,7 @@ func mov_line() -> String:
 	var reason := "none"
 	if player.climb != null and not player.climb.last_probe.is_empty():
 		reason = str(player.climb.last_probe.get("reason", player.climb.last_probe.keys()))
-	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f|food=%s|water=%s|ai_state=%s|ai_reason=%s|ai_target=%s|patrol=%s|patrol_reached=%s|search=%s|giveups=%d|chase=%d|seen=%s|heard=%d|noise_age=%.1f|steps=%d|hide=%s|act=%s|pounce=%d|captures=%d|blocked=%s" % [
+	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f|food=%s|water=%s|ai_state=%s|ai_reason=%s|ai_target=%s|patrol=%s|patrol_reached=%s|search=%s|giveups=%d|chase=%d|atk=%s|atk_state=%s|atk_hits=%d|atk_miss=%d|seen=%s|heard=%d|noise_age=%.1f|steps=%d|hide=%s|act=%s|pounce=%d|captures=%d|blocked=%s" % [
 		_frame, d["species_id"], d["position"].x, d["position"].y, d["position"].z,
 		d["velocity"].x, d["velocity"].y, d["velocity"].z, d["wish_speed"],
 		"crouch" if d["is_crouching"] else "stand", str(d["on_floor"]),
@@ -575,6 +575,7 @@ func mov_line() -> String:
 		_resource_units(&"food"), _resource_units(&"water"),
 		_ai_state(d), _ai_reason(d), _ai_target(d), _patrol_target(d), _patrol_reached(d),
 		_search_field(d), _search_giveups(d), _search_chases(d),
+		_attack_target(d), _attack_state(d), _attack_hits(d), _attack_misses(d),
 		str(d.get("seen", false)), int(d.get("heard", 0)), float(d.get("noise_age", -1.0)),
 		int(d.get("footsteps", 0)), _hide_target(d),
 		str(d.get("action_state", "?")), int(d.get("pounce_count", 0)),
@@ -625,6 +626,39 @@ func _ai_search_field(r: Dictionary) -> String:
 		return "<none>"
 	var t: Vector3 = r.get("search_target", Vector3.ZERO)
 	return "(%.2f, %.2f, %.2f)/%.1fs" % [t.x, t.y, t.z, float(r.get("search_elapsed", 0.0))]
+
+
+## 猫 AI（T025）的 HUD `ai:` 攻击字段：状态 + 命中 / 未命中次数（没有攻击组件时 `none`）
+func _ai_attack_field(r: Dictionary) -> String:
+	if not bool(r.get("attack_enabled", false)):
+		return "off"
+	return "%s h=%d m=%d" % [String(r.get("attack_state", "none")),
+		int(r.get("attack_hits", 0)), int(r.get("attack_misses", 0))]
+
+
+## `MOV|` 的攻击目标（正在攻击谁；没有 = `-`）
+func _attack_target(d: Dictionary) -> String:
+	var a: Dictionary = d.get("attack", {})
+	var t := String(a.get("target", ""))
+	return t if not t.is_empty() else "-"
+
+
+## `MOV|` 的攻击状态（`idle` / `telegraphing` / `recovering`；没有组件 = `none`）
+func _attack_state(d: Dictionary) -> String:
+	var a: Dictionary = d.get("attack", {})
+	return String(a.get("state", "none"))
+
+
+## `MOV|` 的攻击命中次数
+func _attack_hits(d: Dictionary) -> int:
+	var a: Dictionary = d.get("attack", {})
+	return int(a.get("hit_count", 0))
+
+
+## `MOV|` 的攻击未命中次数
+func _attack_misses(d: Dictionary) -> int:
+	var a: Dictionary = d.get("attack", {})
+	return int(a.get("miss_count", 0))
 
 
 ## 当前交互目标 ID（无目标为 `-`）。**只显示一个**目标（T016：不列出全部候选）
@@ -710,11 +744,11 @@ func ai_line() -> String:
 	if player == null or player.ai == null:
 		return "ai: <none>"
 	var r: Dictionary = player.ai.ai_report()
-	return "ai: state=%s reason=%s target=%s patrol=%s search=%s elapsed=%.1fs path_failures=%d replans=%d nav_layer=%d(%s) dest=%s" % [
+	return "ai: state=%s reason=%s target=%s patrol=%s search=%s attack=%s elapsed=%.1fs path_failures=%d replans=%d nav_layer=%d(%s) dest=%s" % [
 		str(r.get("state", "?")), str(r.get("reason", "?")),
 		str(r.get("target", "")) if not str(r.get("target", "")).is_empty() else "<none>",
 		str(r.get("patrol_target", "")) if not str(r.get("patrol_target", "")).is_empty() else "<none>",
-		_ai_search_field(r),
+		_ai_search_field(r), _ai_attack_field(r),
 		float(r.get("elapsed", 0.0)), int(r.get("path_failures", 0)), int(r.get("replans", 0)),
 		int(r.get("nav_layer", 0)), str(r.get("nav_layer_source", "?")),
 		str(r.get("has_destination", false))
