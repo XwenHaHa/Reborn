@@ -547,6 +547,56 @@ Select-String -Path <本次运行的 stdout 日志> -Pattern 'SCRIPT ERROR'     
   组内只有一个身体、可重复重开且结果一致）就是守这个顺序的。
 - **旧导出会误导包内复验**：规范路径是 `Builds/P0-Win64/`（§5.1/§5.2）；`Builds/P0-Win64/T022/` 下的包是**修复前**产物，别拿它跑断言。
 
+## 2.19 T023 猫 NPC 巡游与发现（VERIFIED — 2026-10-20 实测）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+# 0) 新增 class_name CatAI → **先 import**
+& $g --headless --path $p --import
+& $g --headless --path $p --check-only --script 'res://scripts/ai/cat_ai.gd'              # 0
+& $g --headless --path $p --check-only --script 'res://scripts/ai/animal_ai.gd'           # 0
+
+# 1) 断言套件（**必须核对 SUMMARY|checks=177|failures=0**，不能只看退出码）
+& $g --headless --path $p --script 'res://tests/run_t023_cat_ai.gd' --quit-after 300000   # exit=0，177/0
+#   日志扫描：Select-String -Pattern 'SCRIPT ERROR' → 0 条
+
+# 2) 全量回归（20 套既有套件，合计 2167 条）
+
+# 3) 导出两预设 + 记录字节
+& $g --headless --path $p --export-release "Windows Desktop"          "$out\Reborn.exe"          # 0 → Reborn.pck 228,792 B
+& $g --headless --path $p --export-debug   "Windows Desktop SelfTest" "$out\RebornSelfTest.exe"  # 0 → SelfTest.pck 741,544 B
+
+# 4) 包内复验（只能用编辑器二进制 + --main-pack）
+& $g --headless --main-pack "$out\RebornSelfTest.pck" --script 'res://tests/run_t023_cat_ai.gd' --quit-after 300000
+#   → 175/0（比源码内少 2 条：两条**源码静态检查**在包内标 STATIC|NOT-APPLICABLE）
+
+# 5) 视觉两帧（**不能加 --headless**；后台轮询 `CAP|t023|done`，`--quit-after` 要够大）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 9000 -- t023
+#   → CAP|t023|patrol|ids=["PatrolA","PatrolB"]|nav_layer=2
+#   → CAP|t023|patrolling|reason=patrol_pause|moved=3.99 m|reached=1
+#   → CAP|t023|t023_patrol|save_result=0 (OK)
+#   → CAP|t023|detect|seen=true|alert=true|approach=true|dist=0.69|pounces=0|prey_health=100.0
+#   → CAP|t023|t023_approach|save_result=0 (OK) → CAP|t023|done
+#   图先落 user://（%APPDATA%\Godot\app_userdata\Reborn\），复制到 Art/Probes/t023_{patrol,approach}.png（LFS）
+```
+
+### 本任务踩到的坑
+
+- **`NavigationAgent3D` 继承 `Node`、没有自己的变换**，位置**取自父节点**：挂在胶囊中心时，与导航面的垂直差会超过
+  `path_desired_distance`(0.10)，`get_next_path_position()` **永远**返回"脚下的投影起点"（水平差 ≈ 0）。
+  表现是**有目的地、有路径却零位移，速度来回翻向**（猫 0.24 m 中招；鼠 0.09 m 侥幸没事）。
+  修法：把代理挂到**脚下**的 `AnimalBody/NavOrigin`（`Marker3D`，本地 y = −`capsule_half_height`）。
+- **"朝目标走"的兜底只有在真有路径时才能用**：否则"不在导航面上 / 层不匹配"的**不可达**目标会被走成**可达**
+  （T019 挂 4 条、T022 挂 7 条）。判据：`get_current_navigation_path().is_empty()` → 照旧清空 `move_intent`。
+- **测试几何段要关掉 AI**（`_npc.ai_enabled = false`）：感知是**身体组件**、照常 tick，但猫不会"先警戒再走向猎物"，
+  否则被测位置与被放下的墙都会漂（实测 `C_near_beyond_1_2m` 会假过）。
+- **遮挡测试的两条前提**：① ≤ 0.80 m 时**近距豁免**会忽略遮挡；② 3 m 宽的墙会被猫**沿墙边滑出去绕开**（1.5 s 内）。
+  所以先把猫放到 2.8 m、再用 **8 m 宽**的墙放在连线的 40% 处。
+- **"到点"要清 `patrol_target_id`**：否则 `ai_report()` 会继续声称"正在去 X"（可查看字段必须诚实）。
+- **环上巡游的 `ring_*` 是方向索引**（相对当前位置取环），会重复出现；判据用"持续在巡游 / 会换点"，不要用"ID 必须变"。
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -851,3 +901,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-16 | **T020 完成**。新增 §2.16 老鼠视觉、听觉与逃跑命令（164 条断言 + `-- t020` 三帧 + 关卡重生成→重烤导航的顺序 + 包内复验 + 四条实测坑：`get_meta` 的 null 默认值**等同报错**、读错 meta 键会让**猫用上鼠的导航面**；生成器会清掉导航区域、必须重烤；捕获取景要按"推进量"当条件；0.3 s 的 Alert 抓不到静帧，要如实标注 `held_by`）。 |
 | 2026-10-17 | **T021 完成**。新增 §2.17 猫扑击与捕获结算命令（279 条断言 + `-- t021` 三帧 + 包内复验 + 实测坑：取景前必须隔离 lab 自带的 `Player`；扫掠用 `move_and_collide` 逐帧推进、不传送；障碍优先于障碍后的猎物；捕获后不移除节点，只隐藏网格 / 层 0 / 出组 / 停物理）。 |
 | 2026-10-19 | **T022 完成**。新增 §2.18 猫循环回归与打包命令（168 条断言 + 两预设导出与字节记录 + 包内复验 + `-- t022` 两帧 + 四条实测坑：**"SUMMARY 全绿"不等于日志干净，必须单独扫 `SCRIPT ERROR`**；扫描会被写进 `NOTE` 的字面量污染；重开必须"先释放 / 再重建 / 再切物种"；`Builds/P0-Win64/T022/` 旧包是修复前产物）。 |
+| 2026-10-20 | **T023 完成**。新增 §2.19 猫 NPC 巡游与发现命令（177 条断言 + 两预设导出与字节记录 + 包内复验 175 条 + `-- t023` 两帧 + 六条实测坑：**导航代理必须挂脚下（`NavigationAgent3D` 位置取自父节点，挂中心会让高个子物种零位移）**；"朝目标"兜底只在**有路径**时生效，否则不可达会被走成可达；几何段必须关 AI；遮挡测试要注意近距豁免与"沿墙绕开"；到点要清 `patrol_target_id`；环上巡游的 `ring_*` 是方向索引会重复）。 |

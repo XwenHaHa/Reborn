@@ -331,7 +331,22 @@ func _advance_along_path() -> void:
 	var to_next := next - body.global_position
 	to_next.y = 0.0
 	if to_next.length() < 0.01:
-		body.move_intent = Vector2.ZERO
+		# **下一点正好在脚下**：身体胶囊中心比导航面高过 `path_desired_distance` 时，`get_next_path_position()`
+		# 会返回投影出的起点（水平差 0）。若就此清空意图，**体型高的物种会原地卡死**
+		# （T023 实测：猫胶囊中心高 0.24 m、路径明明有 2 点，却零位移；鼠 0.10 m 高所以没暴露）。
+		#
+		# **但只在真的存在路径时**才兜底"朝目标走"：路径为空（不在导航面上 / 层不匹配）必须照旧清空意图，
+		# 否则"不可达"会被走成"可达"（T019 G 段 / T022 D 段的回归就是踩在这里）。
+		if agent.get_current_navigation_path().is_empty():
+			body.move_intent = Vector2.ZERO
+			return
+		var to_goal := agent.target_position - body.global_position
+		to_goal.y = 0.0
+		if to_goal.length() < 0.01:
+			body.move_intent = Vector2.ZERO
+			return
+		body.look_at(body.global_position + to_goal.normalized(), Vector3.UP)
+		body.move_intent = Vector2(0.0, -1.0)
 		return
 	body.look_at(body.global_position + to_next.normalized(), Vector3.UP)
 	body.move_intent = Vector2(0.0, -1.0)
@@ -420,13 +435,42 @@ func ai_report() -> Dictionary:
 func _find_or_make_agent() -> NavigationAgent3D:
 	if body == null:
 		return null
-	var existing := body.get_node_or_null("NavigationAgent3D") as NavigationAgent3D
+	var origin := _nav_origin()
+	if origin == null:
+		return null
+	var existing := origin.get_node_or_null("NavigationAgent3D") as NavigationAgent3D
 	if existing != null:
 		return existing
 	var a := NavigationAgent3D.new()
 	a.name = "NavigationAgent3D"
-	body.add_child(a)
+	origin.add_child(a)
 	return a
+
+
+## 导航代理的**定位锚点**：`NavigationAgent3D` 继承 `Node`（**不是 `Node3D`，自己没有变换**），
+## 位置取自**父节点**（同一坑在 T013 的 `debug_entry` 里踩过，见其 §遗留项 ②）。
+##
+## 锚点放在**脚下**：身体原点是胶囊中心（猫 0.24 m、鼠 0.09 m）。代理留在中心时，垂直差会超过
+## `path_desired_distance`(0.10)，`get_next_path_position()` 就**永远**返回"脚下的投影起点"（水平差 ≈ 0）
+## → NPC 原地抖、速度来回翻向（T023 实测：猫零位移）。
+func _nav_origin() -> Node3D:
+	var existing := body.get_node_or_null("NavOrigin") as Node3D
+	if existing != null:
+		existing.position = _nav_origin_offset()
+		return existing
+	var anchor := Marker3D.new()
+	anchor.name = "NavOrigin"
+	anchor.position = _nav_origin_offset()
+	body.add_child(anchor)
+	return anchor
+
+
+## 锚点相对身体原点的偏移（向下 = 胶囊半高）
+func _nav_origin_offset() -> Vector3:
+	var half := 0.0
+	if body != null and is_instance_valid(body) and body.species_config != null:
+		half = body.species_config.capsule_half_height
+	return Vector3(0.0, -half, 0.0)
 
 
 # ---------------------------------------------------------------------------

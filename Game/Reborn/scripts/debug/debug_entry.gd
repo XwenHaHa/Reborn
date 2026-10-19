@@ -564,7 +564,7 @@ func mov_line() -> String:
 	var reason := "none"
 	if player.climb != null and not player.climb.last_probe.is_empty():
 		reason = str(player.climb.last_probe.get("reason", player.climb.last_probe.keys()))
-	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f|food=%s|water=%s|ai_state=%s|ai_reason=%s|ai_target=%s|seen=%s|heard=%d|noise_age=%.1f|steps=%d|hide=%s|act=%s|pounce=%d|captures=%d|blocked=%s" % [
+	return "MOV|frame=%d|species=%s|pos=(%.3f, %.3f, %.3f)|vel=(%.3f, %.3f, %.3f)|wish=%.2f|stance=%s|on_floor=%s|headroom=%s|step_reason=%s|nav_points=%d|nav_len=%.2f|hp=%.1f|hunger=%.1f|thirst=%.1f|stamina=%.1f|iact=%s|iact_state=%s|iact_progress=%.2f|food=%s|water=%s|ai_state=%s|ai_reason=%s|ai_target=%s|patrol=%s|patrol_reached=%s|seen=%s|heard=%d|noise_age=%.1f|steps=%d|hide=%s|act=%s|pounce=%d|captures=%d|blocked=%s" % [
 		_frame, d["species_id"], d["position"].x, d["position"].y, d["position"].z,
 		d["velocity"].x, d["velocity"].y, d["velocity"].z, d["wish_speed"],
 		"crouch" if d["is_crouching"] else "stand", str(d["on_floor"]),
@@ -573,12 +573,25 @@ func mov_line() -> String:
 		float(d.get("thirst", -1.0)), float(d.get("stamina", -1.0)),
 		_interaction_id(d), _interaction_state(d), _interaction_progress(d),
 		_resource_units(&"food"), _resource_units(&"water"),
-		_ai_state(d), _ai_reason(d), _ai_target(d),
+		_ai_state(d), _ai_reason(d), _ai_target(d), _patrol_target(d), _patrol_reached(d),
 		str(d.get("seen", false)), int(d.get("heard", 0)), float(d.get("noise_age", -1.0)),
 		int(d.get("footsteps", 0)), _hide_target(d),
 		str(d.get("action_state", "?")), int(d.get("pounce_count", 0)),
 		int(d.get("captures", 0)), String(d.get("pounce_blocked", "")),
 	]
+## 猫 NPC（T023）的巡游目标：**鸭子类型**（`patrol_target_id()`），不是猫 AI 时 `-`
+func _patrol_target(_d: Dictionary) -> String:
+	if player == null or player.ai == null or not player.ai.has_method("patrol_target_id"):
+		return "-"
+	var id := String(player.ai.call("patrol_target_id"))
+	return id if not id.is_empty() else "-"
+
+
+## 猫 NPC（T023）已到达的巡游点数（不是猫 AI 时 `-`）
+func _patrol_reached(_d: Dictionary) -> String:
+	if player == null or player.ai == null or not player.ai.has_method("patrol_reached_count"):
+		return "-"
+	return str(int(player.ai.call("patrol_reached_count")))
 
 
 ## 当前交互目标 ID（无目标为 `-`）。**只显示一个**目标（T016：不列出全部候选）
@@ -664,9 +677,10 @@ func ai_line() -> String:
 	if player == null or player.ai == null:
 		return "ai: <none>"
 	var r: Dictionary = player.ai.ai_report()
-	return "ai: state=%s reason=%s target=%s elapsed=%.1fs path_failures=%d replans=%d nav_layer=%d(%s) dest=%s" % [
+	return "ai: state=%s reason=%s target=%s patrol=%s elapsed=%.1fs path_failures=%d replans=%d nav_layer=%d(%s) dest=%s" % [
 		str(r.get("state", "?")), str(r.get("reason", "?")),
 		str(r.get("target", "")) if not str(r.get("target", "")).is_empty() else "<none>",
+		str(r.get("patrol_target", "")) if not str(r.get("patrol_target", "")).is_empty() else "<none>",
 		float(r.get("elapsed", 0.0)), int(r.get("path_failures", 0)), int(r.get("replans", 0)),
 		int(r.get("nav_layer", 0)), str(r.get("nav_layer_source", "?")),
 		str(r.get("has_destination", false))

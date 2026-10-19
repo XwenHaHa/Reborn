@@ -1,9 +1,10 @@
-[gd_resource type="Resource" script_class="SpeciesConfig" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="SpeciesConfig" load_steps=3 format=3]
 
 ; 猫的起测配置。数值来源：Docs/Parameters.md（厘米 → 米，÷100）。
 ; 改数值请改这里，不要在系统代码里另写一份（见 Docs/Tasks/T008.md）。
 
 [ext_resource type="Script" path="res://scripts/data/species_config.gd" id="1_cfg"]
+[ext_resource type="Script" path="res://scripts/ai/cat_ai.gd" id="2_ai"]
 
 [resource]
 script = ExtResource("1_cfg")
@@ -57,3 +58,5 @@ pounce_duration = 0.25
 pounce_stamina_cost = 25.0
 pounce_recovery = 0.6
 capture_food_expire = 300.0
+; 行为（T023）：猫 NPC = 巡游 / 发现 / 警戒 / 接近；Alert 0.4 s 与 AttackRange 0.65 见 Docs/Parameters.md 第 69 行
+ai_script = ExtResource("2_ai")

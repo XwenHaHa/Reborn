@@ -119,6 +119,9 @@ func _initialize() -> void:
 	# T022：猫循环回归（死亡 HUD 的 F6 重开提示 / 重开后再跑一次捕获）。只在显式传 `-- t022` 时执行。
 	if OS.get_cmdline_user_args().has("t022"):
 		await _capture_t022_frames(lab)
+	# T023：猫 NPC 巡游与发现（巡游中 / 发现后接近猎物）。只在显式传 `-- t023` 时执行。
+	if OS.get_cmdline_user_args().has("t023"):
+		await _capture_t023_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -1244,3 +1247,110 @@ func _capture_t022_frames(lab: Node) -> void:
 		str(hud_alive.contains("重开")), hud_alive.replace("\n", " | ")])
 	await _capture_view("t022_loop_capture", cam, 8)
 	print("CAP|t022|done")
+
+
+# ---------------------------------------------------------------------------
+# T023：猫 NPC 巡游与发现（两帧）。只在显式传 `-- t023` 时执行。
+# ---------------------------------------------------------------------------
+
+const T023_ENTRY := "res://scenes/debug/debug_entry.tscn"
+const T023_BODY := "res://scenes/characters/animal_body.tscn"
+const T023_MOUSE := "res://resources/species/mouse.tres"
+
+
+## 两帧：① 猫 NPC 在真实关卡里朝第一个巡逻点走（用**玩家自己的相机** = 第一人称）；
+## ② 视野内放入猎物，走完 `ALERT → APPROACH` 后从侧后方看猫与鼠（探针相机）。
+## 判据：结尾有 `CAP|t023|done` 且两张 `save_result=0 (OK)`。
+func _capture_t023_frames(lab: Node) -> void:
+	print("CAP|t023|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+	var packed: PackedScene = load(T023_ENTRY)
+	if packed == null:
+		print("CAP|t023|ERROR|entry load failed")
+		return
+	var entry: Node3D = packed.instantiate() as Node3D
+	root.add_child(entry)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	for i in SETTLE_FRAMES:
+		await process_frame
+	var player: AnimalBody = entry.get("player") as AnimalBody
+	var level: Node3D = entry.get("level") as Node3D
+	if player == null or level == null:
+		print("CAP|t023|ERROR|player/level missing")
+		return
+	var fwd := -player.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length_squared() > 1e-8 else Vector3.FORWARD
+	var right := player.global_transform.basis.x
+	right.y = 0.0
+	right = right.normalized() if right.length_squared() > 1e-8 else Vector3.RIGHT
+	# 两个巡逻点在**运行时**放进关卡（正式点位属 T027）
+	for i in 2:
+		var marker := Marker3D.new()
+		marker.name = &"PatrolA" if i == 0 else &"PatrolB"
+		marker.position = player.global_position + fwd * 4.0 + right * (1.5 if i == 0 else -1.5)
+		marker.add_to_group("patrol_points")
+		level.add_child(marker)
+	player.ai_enabled = true
+	var ai := player.ai as CatAI
+	if ai == null:
+		print("CAP|t023|ERROR|CatAI missing（cat.tres 未接 ai_script？）")
+		return
+	print("CAP|t023|patrol|ids=%s|nav_layer=%d|state=%s|reason=%s" % [
+		str(ai.patrol_ids()), ai.nav_layer(), str(ai.state_id()), str(ai.state_reason())])
+	var start_pos := player.global_position
+	var t0 := _t021_world_time()
+	while _t021_world_time() - t0 < 3.0:
+		await physics_frame
+	print("CAP|t023|patrolling|state=%s|reason=%s|target=%s|moved=%.2f m|reached=%d" % [
+		str(ai.state_id()), str(ai.state_reason()), ai.patrol_target_id(),
+		start_pos.distance_to(player.global_position), ai.patrol_reached_count()])
+	var cam0 := root.get_viewport().get_camera_3d()
+	if cam0 != null:
+		await _capture_view("t023_patrol", cam0, 8)
+	else:
+		print("CAP|t023|ERROR|no active camera for patrol frame")
+	# 视野内放一只鼠 NPC（AI 关掉，站着不动）→ 应走 `ALERT → APPROACH`
+	var mouse_cfg := load(T023_MOUSE) as SpeciesConfig
+	var body_packed := load(T023_BODY) as PackedScene
+	if mouse_cfg == null or body_packed == null:
+		print("CAP|t023|ERROR|mouse config/body missing")
+		return
+	var mouse := body_packed.instantiate() as AnimalBody
+	mouse.species_config = mouse_cfg
+	mouse.player_controlled = false
+	mouse.ai_enabled = false
+	# 按猫**当前**朝向放猎物：猫在巡游中已经转过向，用开局朝向会放偏（实测 seen=false）
+	var fwd_now := -player.global_transform.basis.z
+	fwd_now.y = 0.0
+	fwd_now = fwd_now.normalized() if fwd_now.length_squared() > 1e-8 else fwd
+	var prey_spot := player.global_position + fwd_now * 5.0
+	mouse.position = Vector3(prey_spot.x, 0.10, prey_spot.z)
+	level.add_child(mouse)
+	await physics_frame
+	var t1 := _t021_world_time()
+	var seen := false
+	var alerted := false
+	var approached := false
+	while _t021_world_time() - t1 < 8.0:
+		await physics_frame
+		seen = seen or player.perception.is_threat_visible()
+		alerted = alerted or ai.state_id() == &"alert"
+		approached = approached or ai.state_id() == &"approach"
+		if approached and ai.approach_distance() <= ai.attack_range + 0.05:
+			break
+	print("CAP|t023|detect|seen=%s|alert=%s|approach=%s|detect_count=%d|dist=%.2f|pounces=%d|prey_health=%.1f" % [
+		str(seen), str(alerted), str(approached), ai.detect_count(), ai.approach_distance(),
+		player.pounce_count, mouse.survival.state.health])
+	var cam := Camera3D.new()
+	cam.name = "T023Camera"
+	root.add_child(cam)
+	var focus := (player.global_position + mouse.global_position) * 0.5 + Vector3(0.0, 0.25, 0.0)
+	cam.global_position = focus + right * 2.6 + fwd * -1.4 + Vector3(0.0, 1.5, 0.0)
+	cam.look_at(focus)
+	cam.make_current()
+	await physics_frame
+	await _capture_view("t023_approach", cam, 8)
+	print("CAP|t023|done")
