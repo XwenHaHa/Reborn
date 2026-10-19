@@ -122,6 +122,9 @@ func _initialize() -> void:
 	# T023：猫 NPC 巡游与发现（巡游中 / 发现后接近猎物）。只在显式传 `-- t023` 时执行。
 	if OS.get_cmdline_user_args().has("t023"):
 		await _capture_t023_frames(lab)
+	# T024：追击与搜索（追击中 / 失视后走向最后已知位置）。只在显式传 `-- t024` 时执行。
+	if OS.get_cmdline_user_args().has("t024"):
+		await _capture_t024_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -1354,3 +1357,115 @@ func _capture_t023_frames(lab: Node) -> void:
 	await physics_frame
 	await _capture_view("t023_approach", cam, 8)
 	print("CAP|t023|done")
+
+
+# ---------------------------------------------------------------------------
+# T024：追击与搜索
+# ---------------------------------------------------------------------------
+
+const T024_ENTRY := "res://scenes/debug/debug_entry.tscn"
+const T024_BODY := "res://scenes/characters/animal_body.tscn"
+const T024_MOUSE := "res://resources/species/mouse.tres"
+
+
+## 两帧（都用**玩家自己的相机** = 第一人称，HUD 里带 `ai:` 行）：
+## ① `t024_chase`：视野内放鼠 → 猫接近，再把它"拔到 3 m 处跑开" → `CHASE`（追）；
+## ② `t024_search`：把鼠搬到猫**身后 25 m**（视野与视距之外）→ `ALERT → SEARCH`，
+##    猫走向**最后已知位置**（HUD `search=(x, y, z)/Ns`）。
+## 判据：结尾 `CAP|t024|done` 且两张 `save_result=0 (OK)`。
+func _capture_t024_frames(lab: Node) -> void:
+	print("CAP|t024|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+	var packed: PackedScene = load(T024_ENTRY)
+	if packed == null:
+		print("CAP|t024|ERROR|entry load failed")
+		return
+	var entry: Node3D = packed.instantiate() as Node3D
+	root.add_child(entry)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	for i in SETTLE_FRAMES:
+		await process_frame
+	var player: AnimalBody = entry.get("player") as AnimalBody
+	var level: Node3D = entry.get("level") as Node3D
+	if player == null or level == null:
+		print("CAP|t024|ERROR|player/level missing")
+		return
+	player.ai_enabled = true
+	var ai := player.ai as CatAI
+	if ai == null:
+		print("CAP|t024|ERROR|CatAI missing（cat.tres 未接 ai_script？）")
+		return
+	ai.patrol_enabled = false          # 本任务只看追击与搜索
+	var mouse_cfg := load(T024_MOUSE) as SpeciesConfig
+	var body_packed := load(T024_BODY) as PackedScene
+	if mouse_cfg == null or body_packed == null:
+		print("CAP|t024|ERROR|mouse config/body missing")
+		return
+	var fwd := -player.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length_squared() > 1e-8 else Vector3.FORWARD
+	var mouse := body_packed.instantiate() as AnimalBody
+	mouse.species_config = mouse_cfg
+	mouse.player_controlled = false
+	mouse.ai_enabled = false           # 站着不动的猎物，便于对照
+	mouse.position = Vector3(player.global_position.x + fwd.x * 6.0, 0.10, player.global_position.z + fwd.z * 6.0)
+	level.add_child(mouse)
+	await physics_frame
+	# ① 发现 → 警戒 0.4 s → 接近
+	var t0 := _t021_world_time()
+	var saw := false
+	var alerted := false
+	while _t021_world_time() - t0 < 8.0:
+		await physics_frame
+		saw = saw or player.perception.is_threat_visible()
+		alerted = alerted or ai.state_id() == &"alert"
+		if saw and alerted and ai.state_id() == &"approach":
+			break
+	print("CAP|t024|found|seen=%s|alert=%s|state=%s|reason=%s|dist=%.2f" % [
+		str(saw), str(alerted), str(ai.state_id()), str(ai.state_reason()), ai.approach_distance()])
+	# 猎物"跑开"：拔到 3 m 处（同方向、仍在视野内且超出攻击距离）→ 应转 CHASE
+	var fwd_now := -player.global_transform.basis.z
+	fwd_now.y = 0.0
+	fwd_now = fwd_now.normalized() if fwd_now.length_squared() > 1e-8 else fwd
+	mouse.global_position = Vector3(
+		player.global_position.x + fwd_now.x * 3.0, 0.10, player.global_position.z + fwd_now.z * 3.0)
+	var t1 := _t021_world_time()
+	var chasing := false
+	while _t021_world_time() - t1 < 8.0:
+		await physics_frame
+		chasing = chasing or ai.is_chasing()
+		if chasing and ai.approach_distance() <= 2.4:
+			break
+	print("CAP|t024|chase|state=%s|reason=%s|chasing=%s|dist=%.2f|chase_count=%d|enc=%s|pounces=%d" % [
+		str(ai.state_id()), str(ai.state_reason()), str(ai.is_chasing()), ai.approach_distance(),
+		ai.chase_count(), ai.encounter_id(), player.pounce_count])
+	var cam0 := root.get_viewport().get_camera_3d()
+	if cam0 != null:
+		await _capture_view("t024_chase", cam0, 8)
+	else:
+		print("CAP|t024|ERROR|no active camera for chase frame")
+	# ② 猎物"藏起来"：搬到猫**身后 25 m**（视野与视距之外）→ ALERT → SEARCH 到最后已知位置
+	mouse.global_position = Vector3(
+		player.global_position.x - fwd_now.x * 25.0, 0.10, player.global_position.z - fwd_now.z * 25.0)
+	var t2 := _t021_world_time()
+	var searched := false
+	while _t021_world_time() - t2 < 8.0:
+		await physics_frame
+		searched = searched or ai.is_searching()
+		if searched and ai.state_reason() == &"moving_to_last_seen":
+			break
+	var t3 := _t021_world_time()
+	while _t021_world_time() - t3 < 0.6:     # 走一小段，截图里能看到它在朝最后已知位置去
+		await physics_frame
+	var snap := ai.search_target()
+	print("CAP|t024|search|state=%s|reason=%s|searching=%s|snapshot=(%.2f, %.2f, %.2f)|elapsed=%.2f|giveups=%d|escapes=%d" % [
+		str(ai.state_id()), str(ai.state_reason()), str(ai.is_searching()), snap.x, snap.y, snap.z,
+		ai.search_elapsed(), ai.give_up_count(), ai.escape_report_count()])
+	var cam1 := root.get_viewport().get_camera_3d()
+	if cam1 != null:
+		await _capture_view("t024_search", cam1, 8)
+	else:
+		print("CAP|t024|ERROR|no active camera for search frame")
+	print("CAP|t024|done")

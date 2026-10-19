@@ -597,6 +597,60 @@ $out = 'E:\Reborn\Builds\P0-Win64'
   所以先把猫放到 2.8 m、再用 **8 m 宽**的墙放在连线的 40% 处。
 - **"到点"要清 `patrol_target_id`**：否则 `ai_report()` 会继续声称"正在去 X"（可查看字段必须诚实）。
 - **环上巡游的 `ring_*` 是方向索引**（相对当前位置取环），会重复出现；判据用"持续在巡游 / 会换点"，不要用"ID 必须变"。
+
+
+## 2.20 T024 追击、搜索和放弃（VERIFIED — 2026-10-21 实测）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+# 0) 语法门（本任务没有新增 class_name → 不需要 --import）
+& $g --headless --path $p --check-only --script 'res://scripts/ai/cat_ai.gd'          # 0
+& $g --headless --path $p --check-only --script 'res://scripts/debug/debug_entry.gd'  # 0
+& $g --headless --path $p --check-only --script 'res://tests/tool_capture_render.gd'  # 0
+
+# 1) 断言套件（**核对 SUMMARY|checks=134|failures=0**，不能只看退出码）
+& $g --headless --path $p --script 'res://tests/run_t024_chase_search.gd' --quit-after 300000  # exit=0，134/0
+#   日志扫描：Select-String -Pattern 'SCRIPT ERROR' → 0 条
+
+# 2) 回归里要同时跑 T023（它的 2 条断言按 T024 规格升级成"失视 → SEARCH"）
+& $g --headless --path $p --script 'res://tests/run_t023_cat_ai.gd' --quit-after 300000       # exit=0，177/0
+
+# 3) 全量回归 22 套（合计 2476 条）
+
+# 4) 导出两预设 + 记录字节
+& $g --headless --path $p --export-release "Windows Desktop"          "$out\Reborn.exe"          # 0 → Reborn.pck 236,472 B
+& $g --headless --path $p --export-debug   "Windows Desktop SelfTest" "$out\RebornSelfTest.exe"  # 0 → SelfTest.pck 781,180 B
+
+# 5) 包内复验（只能用编辑器二进制 + --main-pack）
+& $g --headless --main-pack "$out\RebornSelfTest.pck" --script 'res://tests/run_t024_chase_search.gd' --quit-after 300000
+#   → 133/0（比源码内少 1 条：源码静态检查在包内标 STATIC|NOT-APPLICABLE）
+
+# 6) 视觉两帧（**不能加 --headless**；后台轮询 `CAP|t024|done`；`--quit-after` 是帧数）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 24000 -- t024
+#   → CAP|t024|found|seen=true|alert=true|state=approach|reason=closing|dist=6.00
+#   → CAP|t024|chase|state=chase|reason=chasing|chasing=true|dist=2.39|chase_count=1|enc=enc-1|pounces=1
+#   → CAP|t024|t024_chase|save_result=0 (OK)
+#   → CAP|t024|search|state=search|reason=moving_to_last_seen|searching=true|snapshot=(-4.00, 0.19, 19.60)|elapsed=0.60|giveups=0|escapes=1
+#   → CAP|t024|t024_search|save_result=0 (OK) → CAP|t024|done
+```
+
+### 本任务踩到的坑（**会污染别的测试**）
+
+- **`ai_enabled` 不是"暂停开关"**：`AnimalBody._sync_ai()` 关掉时会 `queue_free()` 掉 AI 实例、再打开时**重建一个新实例**
+  （旧引用立刻失效 → `Nonexistent function … in base 'Nil'`；本会话实测还**崩过一次** `0xC0000005`）。
+  测试要"暂时停 AI"就**重建一对新身体**，不要去拨 `ai_enabled`。
+- **瞬时 `state_reason()` 会被同一帧覆盖**：`lost_sight` → 同帧被写成 `moving_to_last_seen`；`reacquired` → 同帧被写成 `chasing`。
+  断言"触发原因"要用 `state_changed` 的**转移账**，别抓瞬时值（否则会假失败）。
+- **用实心墙造遮挡会同时挡路**：猫顶着墙 → `1 s / 3 次 / WAIT` 的失败链（≈4.3 s）会**早于** 5 s 搜索超时，
+  `arrived` 也永远不会发生。要测"超时/到点"就把猎物搬到**视野外**（保持看不见）并**撤掉墙**，让猫真的走到快照点。
+- **"隐藏"的猎物必须在视锥与视距之外**：放在猫正前方 6.5–9.0 m 仍会被看见 → 按"重新发现"转 `CHASE`，快照类断言必然假失败。
+  夹具要用**前置断言**先证明"看不见"，再断言快照不动。
+- **视觉捕获的窗口运行会收到真实输入**：`pounce` 绑的是**鼠标左键**（`project.godot`），窗口获得焦点时的一次点击就会产生
+  `pounces=1`（**AI 路径从不扑击**；`--headless` 套件不受影响，套件 B8 断言 `pounce_count == 0`）。
+
 ## 3. Blender（VERIFIED）
 
 ### 3.1 版本与能力探针
@@ -902,3 +956,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-17 | **T021 完成**。新增 §2.17 猫扑击与捕获结算命令（279 条断言 + `-- t021` 三帧 + 包内复验 + 实测坑：取景前必须隔离 lab 自带的 `Player`；扫掠用 `move_and_collide` 逐帧推进、不传送；障碍优先于障碍后的猎物；捕获后不移除节点，只隐藏网格 / 层 0 / 出组 / 停物理）。 |
 | 2026-10-19 | **T022 完成**。新增 §2.18 猫循环回归与打包命令（168 条断言 + 两预设导出与字节记录 + 包内复验 + `-- t022` 两帧 + 四条实测坑：**"SUMMARY 全绿"不等于日志干净，必须单独扫 `SCRIPT ERROR`**；扫描会被写进 `NOTE` 的字面量污染；重开必须"先释放 / 再重建 / 再切物种"；`Builds/P0-Win64/T022/` 旧包是修复前产物）。 |
 | 2026-10-20 | **T023 完成**。新增 §2.19 猫 NPC 巡游与发现命令（177 条断言 + 两预设导出与字节记录 + 包内复验 175 条 + `-- t023` 两帧 + 六条实测坑：**导航代理必须挂脚下（`NavigationAgent3D` 位置取自父节点，挂中心会让高个子物种零位移）**；"朝目标"兜底只在**有路径**时生效，否则不可达会被走成可达；几何段必须关 AI；遮挡测试要注意近距豁免与"沿墙绕开"；到点要清 `patrol_target_id`；环上巡游的 `ring_*` 是方向索引会重复）。 |
+| 2026-10-21 | **T024 完成**。新增 §2.20 追击、搜索和放弃命令（134 条断言 ×3 + 两预设导出与字节记录 + 包内复验 133 条 + `-- t024` 两帧 + 五条实测坑：**`ai_enabled` 不是暂停开关（关掉会释放、再打开会重建 AI 实例，旧引用失效甚至崩）**、**瞬时 `state_reason()` 同帧会被覆盖 → 触发原因要用转移账断言**、**实心墙造遮挡会同时挡路（失败链会早于 5 s 超时）**、**"隐藏"的猎物必须在视锥与视距之外**、**窗口捕获会收到真实输入（`pounce` = 鼠标左键）**）；T023 的 2 条断言升级为"失视 → `SEARCH`"。 |

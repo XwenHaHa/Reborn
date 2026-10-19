@@ -509,7 +509,8 @@ func _section_e_alert() -> void:
 	_assert("E_saw_prey_first", "true", str(seen_once), seen_once)
 	_free_prey()
 	await _run_seconds(0.6)
-	_assert("E_lost_sight_returns_explore", "explore", str(_ai.state_id()), _ai.state_id() == &"explore")
+	_assert("E_lost_sight_returns_search", "search（T024 起失视 → SEARCH）", str(_ai.state_id()),
+		_ai.state_id() == &"search")
 	_assert("E_lost_sight_counted", "≥ 1", str(_ai.lost_sight_count()), _ai.lost_sight_count() >= 1)
 
 
@@ -589,9 +590,9 @@ func _section_f_approach() -> void:
 	_assert("F_last_seen_unchanged", "≤ 0.01 m（不跟随）",
 		"%.4f m" % last_seen_at_loss.distance_to(_npc.perception.last_seen_position()),
 		last_seen_at_loss.distance_to(_npc.perception.last_seen_position()) <= 0.01)
-	var back := await _run_seconds(1.5, func() -> bool: return _ai.state_id() == &"explore")
-	_assert("F_back_to_explore_after_loss", "explore（%.2f s）" % back, str(_ai.state_id()),
-		_ai.state_id() == &"explore")
+	var back := await _run_seconds(1.5, func() -> bool: return _ai.state_id() == &"search")
+	_assert("F_search_after_loss", "search（T024 起失视 → SEARCH，%.2f s）" % back, str(_ai.state_id()),
+		_ai.state_id() == &"search")
 	_assert("F_lost_sight_counted", "≥ 1", str(_ai.lost_sight_count()), _ai.lost_sight_count() >= 1)
 	occluder.queue_free()
 	await _advance_frames(3)
