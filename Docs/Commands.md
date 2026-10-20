@@ -860,6 +860,40 @@ node "E:\claude-vision-skill\vision.js" "E:\Reborn\Art\Probes\t028_cat_chase.png
   也别把"某局 0.43 s 被发现"当成猫的发现能力（本轮是**两者相向接近**的结果）。
 - **别把 `state_id()` 的首次出现当"AI 坏了"**：`spotted_s=0.43` 看着像初始化就 alert，探针一打才知道是真视觉触发（`alert/saw_prey` @8.92 m ≈ `vision_range 9.0`）。**先加状态原因采样，再下结论**。
 - **vision 的小目标辨识不可靠**：鼠胶囊 `r=0.06 × h=0.18` 在远机位就是几个像素，同一张图三次判读给出 0/1/3 个角色 → **只把 HUD 逐字读出当硬证据**，角色辨识记未确认。
+
+## 2.25 T029 猫 AI 追击冲刺（VERIFIED — 2026-10-26 实测）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+& $g --headless --path $p --check-only --script 'res://scripts/ai/cat_ai.gd'               # 0
+& $g --headless --path $p --check-only --script 'res://scripts/world/ecology_spawner.gd'   # 0
+& $g --headless --path $p --check-only --script 'res://tests/run_t029_sprint_chase.gd'     # 0
+& $g --headless --path $p --script 'res://tests/run_t029_sprint_chase.gd' --quit-after 300000   # 39/0 ×3
+
+# 复测同一把尺子（T028 走查）：看 cat_min_to_player / hp / cat_states
+& $g --headless --path $p --script 'res://tests/tool_t028_walkthrough.gd' --quit-after 300000
+
+# 导出 + 包内复验
+& $g --headless --path $p --export-release "Windows Desktop"          "$out\Reborn.exe"           # Reborn.pck 263,436 B
+& $g --headless --path $p --export-debug   "Windows Desktop SelfTest" "$out\RebornSelfTest.exe"   # SelfTest.pck 921,704 B
+& $g --headless --main-pack "$out\RebornSelfTest.pck" --script 'res://tests/run_t029_sprint_chase.gd' --quit-after 300000   # 39/0
+
+# 视觉一帧（**不能加 --headless**）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 3000 -- t029
+#   → CAP|t029|chase|sprint_enabled=true|want_sprint_frames=0/90|...|state=explore   ← 本轮**没抓到冲刺瞬间**，如实记录
+```
+
+### 本任务踩到的坑
+- **`_sprint_gate()` 的距离初值不能写 `INF`**：`if d > min_gap` 会把 `EXPLORE`/`ALERT` 全判成"离目标很远"→ **巡游也冲刺**（实测 `B2` 25 帧假阳性）。初值必须 `0.0`。
+- **刹车距离是硬约束**：`sprint_speed²/(2×max_acceleration)` = 4.5²/20 ≈ **1.01 m**。收步门控必须 ≥ 刹车距离 + 攻击停步线（0.65+0.05），
+  否则进 `in_range` 后还滑 **0.475 m**、洞口挤到 **0.276 m**（T023 `F_stops_after_in_range`、T024 `E3/E4` 就是这么红的）。
+- **只给 `CHASE` 加冲刺等于没改**：`CHASE` 只在猎物"跳变"时进入（T024），猫几乎不进 → 必须授权给 `APPROACH`/`SEARCH` 赶路。
+- **出生安全距离要按最快速度算**：`predator_min_distance` 由 14 → **24 m**（冲刺 4 秒 18 m + 余量），否则 T027 的"出生 4 s 零伤害"必红。
+- **禁止用 shell 做文本编辑**：`Get-Content | -replace | Set-Content` 会改掉整个文件的编码/行尾（一次实测 `228 insertions / 297 deletions`）；
+  误操作后 `git checkout -- <file>` 恢复，再用 Edit 重做。
 ## 3. Blender（VERIFIED）
 
 
@@ -1171,3 +1205,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-23 | **T026 完成**。新增 §2.22 老鼠藏身与掩体规则命令（96 条断言 ×3 + 两预设导出与字节记录 + 包内复验 96 条 + `-- t026` 两帧 + 七条实测坑：**`map_get_closest_point` 层盲**（猫鼠共用一张世界地图 RID → 必须用带层的 `map_get_path`）、**"朝出生点"来向与墙平行会把身体摆进墙里**（→ 洞轴取 `RootBarrierLintel` 本地 z 轴）、**每段都要夹具守卫断言**、`ai_enabled` 关→开会**重建 AI 实例**（旧引用 `previously freed`）、**鼠背对猫时永不 `FLEE`**、**夹具草丛体量要自带可见网格**、**洞口通视很挑机位**）。**生产代码零改动**（验证型任务：三条规则实测全为真）。 |
 | 2026-10-24 | **T027 完成**。新增 §2.23 按玩家物种布置测试生态命令（96 条断言 ×3 + 两预设导出与字节记录 + 包内复验 96 条 + `-- t027` 两帧 + 六条实测坑：**导出包里资源是 `.res`/`.remap`**（按扩展名过滤会静默变空）、**`_ready` 阶段导航未 iteration**（组件自己 pending 重试）、**摆位前先关 NPC 巡游/朝向**、**判据别只看末帧**、**可玩默认放新场景以零改动既有夹具**、**异种植入的朝向**）。新增 `EcologySpawner` 组件与 `ecology_entry.tscn` 可玩入口。 |
 | 2026-10-25 | **T028 完成自测半边（awaiting-review）**。新增 §2.24 第一轮概念试玩的自测走查命令（走查工具 4/4 硬判据 ×3 + 包内 4/4 + 两预设导出与字节记录 + `-- t028` 两帧 + vision 判读口径）；§2.24 补 **8 条实测坑**（`player_controlled` 会吃掉 `move_intent`、`look_at` 只在无 AI 时可靠、固定斜机位会被 `RootBarrier*` 挡、洞的穿行方向是 ±z、探针别把方法当属性、生态落点每局不同、别把首次 `alert` 当 bug 先采样 `state_reason()`、vision 的小目标辨识不可靠）；§9 记 **U01 真人半边仍 NOT-RUN** |
+| 2026-10-26 | **T029 完成（能力）/ awaiting-review（默认开否）**。新增 §2.25 猫 AI 追击冲刺命令（39 条断言 ×3 + 两预设导出与字节记录 + 包内复验 39 条 + `-- t029` 一帧 + vision 口径）；§2.25 补 **3 条实测坑**（`_sprint_gate` 的距离初值不能写 `INF`、**刹车距离 `v²/2a` 必须算进收步门控**、**禁止用 shell 做文本编辑**——一次 `Set-Content` 把整文件行尾改坏 228+/297-，只能 `git checkout` 恢复）；§9 记"洞里能被咬"这一 T026 遗留项的实测结论。 |

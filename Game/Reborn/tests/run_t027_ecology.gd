@@ -62,11 +62,11 @@ func _section_a_interface() -> void:
 		if not probe.has_method(m):
 			missing.append(m)
 	_assert("A1_interface_complete", "0 缺失", str(missing), missing.is_empty())
-	_assert("A1_defaults", "count=2 min=8.0 pred=14.0 max=3",
+	_assert("A1_defaults", "count=2 min=8.0 pred=24.0 max=3",
 		"count=%d min=%.1f pred=%.1f max=%d" % [probe.count_per_species, probe.min_spawn_distance,
 			probe.predator_min_distance, probe.max_npcs],
 		probe.count_per_species == 2 and absf(probe.min_spawn_distance - 8.0) < EPS
-			and absf(probe.predator_min_distance - 14.0) < EPS and probe.max_npcs == 3)
+			and absf(probe.predator_min_distance - 24.0) < EPS and probe.max_npcs == 3)
 	var defs: Array = probe.call("default_candidates")
 	_assert("A1_default_candidates_from_disk", "2（源码与**包内**都要成立）", str(defs.size()), defs.size() == 2)
 	probe.free()
@@ -132,10 +132,10 @@ func _section_a_interface() -> void:
 	var rep := _eco.spawn_report()
 	_assert("A6_report_has_player_species", String(_player_species()), str(rep.get("player_species", "")),
 		String(rep.get("player_species", "")) == String(_player_species()))
-	_assert("A6_report_has_thresholds", "8.0/14.0",
+	_assert("A6_report_has_thresholds", "8.0/24.0",
 		"%.1f/%.1f" % [float(rep.get("non_predator_min", -1.0)), float(rep.get("predator_min", -1.0))],
 		absf(float(rep.get("non_predator_min", -1.0)) - 8.0) < EPS
-			and absf(float(rep.get("predator_min", -1.0)) - 14.0) < EPS)
+			and absf(float(rep.get("predator_min", -1.0)) - 24.0) < EPS)
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +321,7 @@ func _section_d_spawn_safety() -> void:
 	if sp2.size() >= 1:
 		d_pred = float((sp2[0] as Dictionary).get("distance", -1.0))
 		pred_can_attack = bool((sp2[0] as Dictionary).get("can_attack", false))
-	_assert("D2_predator_min_distance_14", "≥ 14.00 m", "%.2f m" % d_pred, d_pred >= 14.0 - EPS)
+	_assert("D2_predator_min_distance_24", "≥ 24.00 m（T029 冲刺后按 4.5×4s+余量重算）", "%.2f m" % d_pred, d_pred >= 24.0 - EPS)
 	_assert("D2_predator_min_beats_vision", "> %.2f" % _cat_cfg.vision_range, "%.2f m" % d_pred,
 		d_pred > _cat_cfg.vision_range)
 	_assert("D2_predator_flagged_can_attack", "true", str(pred_can_attack), pred_can_attack)

@@ -201,11 +201,31 @@
   数量用 `count_per_species` + `count_overrides`（`species_id → int`）。
 - **出生安全（"出生周围无即时攻击"的可验口径）**：每只 NPC 距玩家出生点 ≥ `min_distance_for(cfg)`，且该值**必须大于该物种的 `vision_range`**
   （出生瞬间连看都看不见玩家）：非捕食者 `min_spawn_distance = 8.0 m`（> 鼠 6.5 m）、
-  **捕食者 `predator_min_distance = 14.0 m`（> 猫 9.0 m）**——**按 `can_attack` 分派，不看物种名**。
+  **捕食者 `predator_min_distance = 24.0 m`**——**按 `can_attack` 分派，不看物种名**。（T029 起捕食者会冲刺，4 s 窗口能跑 18 m，故由 14.0 上调到 24.0，见下方 T029 段。）
   另有 NPC 相互最小间距 `min_npc_separation = 2.0 m`、最远可接受 `max_spawn_distance = 45.0 m`、层吸附容差 `snap_tolerance = 0.60 m`、
   环上候选 `ring_radius = 4.0 m`（每个出生标记 12 个角度 × 2 圈）。
 - **数量**：`max_npcs = 3`；本入口的覆盖是 **猫 NPC 1 / 鼠 NPC 2**（`predator_npc_count` / `npc_count_per_species`）。
-- **T027 新增实现默认值（原文没有，需负责人并入正式起测值）**：`min_spawn_distance 8.0` / `predator_min_distance 14.0` /
+- **T027 新增实现默认值（原文没有，需负责人并入正式起测值）**：`min_spawn_distance 8.0` / `predator_min_distance 24.0`（T029 上调，原 14.0） /
   `min_npc_separation 2.0` / `max_spawn_distance 45.0` / `snap_tolerance 0.60` / `ring_radius 4.0` / `count_per_species 2` / `max_npcs 3`。
 - **明确不做的**：区域 NPC 数量账本与容量（T035）；正式出生链（T030）；按区域布置正式出生点（本轮只用"现有出生标记 + 环上候选"，
   **未改关卡几何**；代码已支持 `npc_spawn_points` 组）。
+
+## 猫 AI 追击冲刺（T029 落地口径）
+
+- **能力**：`CatAI` 在**移动阶段**（`APPROACH` / `CHASE` / `SEARCH` 赶路）且**离当前目标 > `chase_sprint_min_gap`** 时置
+  `body.want_sprint = true`；`EXPLORE`（巡游）/ `ALERT` / `ATTACK` / `WAIT` **一律不冲刺**（巡逻要可预期、可观察）。
+  实现在 `_sprint_gate()`；`_step()` 每帧先把 `want_sprint` 清成 `false` 再按状态重算（无残留）。
+- **能不能真跑**由 `AnimalBody` 的既有双门控决定（`sprint_min_stamina`、体力消耗）——AI 只管"想不想"。
+- **实测（`tests/run_t029_sprint_chase.gd`，39 条 ×3 + 包内 39/39）**：`CHASE` 远距冲刺 **4.02 m/s**、关掉后 **1.79~1.80 m/s**（= `walk_speed`）；
+  体力压到 `sprint_min_stamina` 以下 → 回落 **1.81 m/s** 且不崩；回满 → 恢复 **4.29 m/s**。`APPROACH` 在 6 m 时也冲刺（19/19 帧）。
+- **`chase_sprint_enabled` 默认 `false`**（能力已实现、已实测；是否默认开是**产品平衡**问题，见 `Docs/Evidence/T029.md` §6）。
+- **`chase_sprint_min_gap = 3.0 m`**（实现默认值）：
+  ① 刹车距离倒推 —— 4.5 m/s 在 `max_acceleration 10` 下需 4.5²/(2×10) ≈ **1.01 m** 才停，加攻击停步线 0.65 + 迟滞 0.05 →
+  门控 **≥ 1.7 m**，否则"进 `in_range` 后还滑 0.475 m、洞口挤到 0.276 m"（实测）；
+  ② 再给"鼠 `sprint 3.0` 拉开距离"留反应带 —— 2.0 m 时实测鼠玩家在远离洞口处会被追上打死。
+- **连带调整**：`EcologySpawner.predator_min_distance` **14.0 → 24.0 m**。原值按 `walk 1.8` 的 4 s 窗口（7.2 m）留余量，
+  冲刺后 4 s 能跑 **18 m**，14 m 不再够（实测 T027 的"出生 4 s 零伤害"判据转红）→ 按**最快速度 × 窗口 + 6 m 余量**重算。
+  仍受 `max_spawn_distance 45.0` 约束。
+- **不做**：不改任何 `walk_speed` / `sprint_speed`（速度差是设计）；不改 `AnimalBody` 的冲刺门控；不动鼠的 `ALERT` 停留（T028 候选 A 留给 U01）。
+- **已知未解**：**鼠洞当前不是安全区** —— 鼠进洞（距洞心 0.24 m）后，猫在洞外 0.79 m 处仍在攻击距离（0.65+0.05）内，
+  实测把鼠咬死（`hp 100 → 0`）。这回答了 T026 的"洞里能否被打中=未测"，且**与冲刺无关**（关掉冲刺同样发生）→ 需设计决策。

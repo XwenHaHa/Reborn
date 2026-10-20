@@ -600,6 +600,11 @@ func _section_f_approach() -> void:
 	# 可见但不可达（两块平台中间有沟）→ 记录失败 / 不永久卡
 	await _fresh_world({"split_platform": true, "patrol": false})
 	_ai.patrol_enabled = false
+	# T029 起捕食者会冲刺，实测在这块**无护栏的合成平台**上会直冲下沟（y = -210 m、on_floor=false）→
+	# 本段验证的是"路径失败语义"（看得到、走不到），与冲刺无关，因此显式关掉冲刺。
+	# 真实关卡 `l_courtyard` 是平地无悬崖，不触发；"AI 掉落后怎么办"作为新发现记进 `Docs/Evidence/T029.md`。
+	_ai.chase_sprint_enabled = false
+	_assert("F_sprint_off_for_path_semantics", "false", str(_ai.chase_sprint_enabled), not _ai.chase_sprint_enabled)
 	await _advance_frames(3)
 	_place_prey(Vector3(0.0, MOUSE_Y, -6.5))
 	await _advance_frames(6)
@@ -607,6 +612,10 @@ func _section_f_approach() -> void:
 		_npc.perception.is_threat_visible())
 	var stuck := await _run_seconds(8.0, func() -> bool:
 		return int(_ai.ai_report()["path_failures"]) >= 1 or _ai.state_id() == &"wait")
+	print("MEASURE|F_stuck|pos=%s|y=%.2f|on_floor=%s|gap=%.2f|state=%s|reason=%s|failures=%d" % [
+		str(_npc.global_position), _npc.global_position.y, str(_npc.is_on_floor()),
+		_npc.global_position.distance_to(_prey.global_position), str(_ai.state_id()),
+		str(_ai.state_reason()), int(_ai.ai_report()["path_failures"])])
 	_assert("F_unreachable_no_permanent_block", "≥ 1 失败或进 wait（%.2f s）" % stuck,
 		"failures=%d state=%s" % [int(_ai.ai_report()["path_failures"]), str(_ai.state_id())],
 		int(_ai.ai_report()["path_failures"]) >= 1 or _ai.state_id() == &"wait")

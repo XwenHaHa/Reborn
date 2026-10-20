@@ -1,10 +1,10 @@
-# 开发交接：2026-10-25（T028 自测走查完成 —— **P3 进行中，等真人试玩**）
+# 开发交接：2026-10-26（T029 追击冲刺能力落地、默认关 —— **P3 进行中，等平衡决策**）
 
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
 
-**T001 ～ T027 全部完成，T028 完成自测半边（awaiting-review：U01 真人半边 NOT-RUN）**（P0 = T001～T007；P1 = T008～T013；P2 = T014～T022；P3 = T023、T024、T025、T026、T027、T028 自测）；台阶、导航、调试入口、生存时间入口、消耗/伤害、交互接口与食物/饮水、正式 HUD、鼠 NPC 状态机、**感知（视觉 / 听觉 / 逃跑躲藏）**、**猫扑击与捕获结算**、**猫循环回归与打包**、**猫 NPC 巡游与发现**、**猫的追击 / 搜索 / 放弃**、**NPC 攻击与玩家受伤**、**老鼠藏身与掩体规则**、**按玩家物种布置测试生态**与**第一轮概念试玩的自测走查**已落地；技术层文档为 Godot 版。
+**T001 ～ T027 全部完成；T028（自测走查）与 T029（追击冲刺能力 + 默认关）均为 awaiting-review**（P0 = T001～T007；P1 = T008～T013；P2 = T014～T022；P3 = T023～T029）；台阶、导航、调试入口、生存时间入口、消耗/伤害、交互接口与食物/饮水、正式 HUD、鼠 NPC 状态机、**感知（视觉 / 听觉 / 逃跑躲藏）**、**猫扑击与捕获结算**、**猫循环回归与打包**、**猫 NPC 巡游与发现**、**猫的追击 / 搜索 / 放弃**、**NPC 攻击与玩家受伤**、**老鼠藏身与掩体规则**、**按玩家物种布置测试生态**、**第一轮概念试玩的自测走查**与**猫 AI 追击冲刺（默认关）**已落地；技术层文档为 Godot 版。
 
 | 任务 | 状态 | 关键证据 |
 |---|---|---|
@@ -37,8 +37,8 @@
 | T027 | **done（2026-10-24）** | 按玩家物种布置测试生态：新组件 `scripts/world/ecology_spawner.gd`（`EcologySpawner`）+ 可玩入口 `scenes/debug/ecology_entry.tscn`（**唯一**把 `ecology_enabled` 打开的场景；`debug_entry.tscn` 保持关闭 → 12 个既有套件/7 个取景分支零影响）。**按玩家物种铺 NPC**：猫玩家→**2 只鼠 NPC**、鼠玩家→**1 只猫 NPC**，换物种**先 `clear()` 再重铺**（旧实例全释放、id 无残留）；**玩家不计入 NPC 数量**（只数本组件铺出的活跃 NPC，并与关卡 `animal_bodies` 存活数 − 1 交叉核对）；**出生周围无即时攻击** = 距离规则（非捕食者 **8.0 m**、捕食者 **14.0 m**，**都大于该物种视距** 6.5 / 9.0）+ 4 s 行为窗口（玩家零伤害、零攻击启动、最近 **3.63 m**）；落点用"现有出生标记 + 环上候选"，按**物种自己的导航层**吸附（层 1 最差 0.050 m / 层 2 最差 0.201 m）、**不改关卡几何**；集成：鼠 NPC 从 1.51 m 逃到 **8.50 m**、玩家猫 0.98 m 扑击**捕获**（生态计数 2→1）、猫 NPC 4.00 → **0.57 m** 接近、近距离**真的打到玩家**（100 → 65 一次 35 不秒杀）；**96/96 ×3 + 包内 96/96**；全量回归 **25 套 2846 条全绿**；包 **Reborn.pck 263,052 B / SelfTest.pck 889,120 B**；**视觉 2 帧判读通过**；顺带**修掉 1 个真实导出缺陷**（默认候选按 `.tres` 过滤 → 包里是 `.res`/`.remap` → 包内列表为空） |
 | T028 | **awaiting-review（2026-10-25）** | 第一轮概念试玩（**自测半边完成、U01 真人半边 NOT-RUN**）：新增 `tests/tool_t028_walkthrough.gd`（`extends SceneTree` 走查工具：把玩家 `player_controlled=false`，每帧"朝下一个**按层**导航路点 `look_at` + `move_intent=(0,-1)`"驱动），在可玩入口 `scenes/debug/ecology_entry.tscn` 上跑两条真实路线。**猫线**：11.18 m 内 **0.90 s** 看见鼠（`sense: seen=true`）→ **1 次扑击 3.9 s 捕获**（`route_len 10.96 / straight 11.18 / ratio 0.98`、`prey_states=["explore","alert"]`、`prey_min_gap 1.10 m`、捕获后生态 2→1）。**鼠线**：0.43 s 被猫看见（探针复核 = `alert/saw_prey` @8.92 m ≈ 猫 `vision_range 9.0` 的**视觉**触发，**不是**初始化 alert）→ **14.1 s 进洞**（`hole_gap 0.24 m`；逃段 `21.39 m / straight 21.12 / ratio 1.01` = 几乎直线）、**猫最近只到洞心 6.99 m**、12 s 内回 `explore` 且 `giveups=1`；两线 `hp 100→100`。**W1~W4 4/4 ×3 次源码 + 包内 4/4**；全量回归 **25 套 2847 条全绿**；包 **Reborn.pck 263,052 B（与 T027 相同 → 生产代码零改动）/ SelfTest.pck 905,604 B**；视觉 2 帧（`t028_cat_chase` 210,342 B 判读通过；`t028_mouse_hole` 221,923 B **只部分确认**：墙+缺口+HUD `pos:(26.68,0.12,19.00)`=洞口坐标，角色辨识 vision 未确认 → 不编造）。**暴露 2 个体验问题候选交 T029**：A 鼠 `ALERT` 0.3 s 在猫 `sprint 4.5` 下形同虚设；B 猫 AI 追击**从不 `want_sprint`**（walk 1.8 < 鼠 sprint 3.0 → 追不上） |
 
-**未完成**：游戏玩法实现（T029 起：路线与参数调整 / 轮回 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**U01 真人试玩半边（T028 只做了自测）**。**T029～T063 全部 pending。**
-**P1 完成（T008～T013）、P2 完成（T014～T022）、P3 进行中（T023、T024、T025、T026、T027 done；T028 自测半边完成、真人半边 NOT-RUN）**；连续通过项：配置与身体、猫移动与相机、鼠移动与通道尺度、生态灰盒、导航可行性、调试入口与移动回归、生存状态与统一时间入口、消耗·警告·基础伤害、交互检测与动作接口、食物·饮水·可取消交互、最小 HUD、鼠 NPC 觅食与警戒、老鼠视觉·听觉·逃跑躲藏、猫扑击与捕获结算、猫循环回归与打包、猫 NPC 巡游与发现、猫的追击 / 搜索 / 放弃、NPC 攻击与玩家受伤、老鼠藏身与掩体规则、按玩家物种布置测试生态、**第一轮概念试玩的自测走查（两物种各一条真实路线 + 两帧视觉，W1~W4 4/4）** → **下一步 T029 调整路线与参数**。
+**未完成**：游戏玩法实现（T030 起：生命周期 / 轮回 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T030～T063 全部 pending。**
+**P1 完成（T008～T013）、P2 完成（T014～T022）、P3 进行中（T023～T027 done；T028 / T029 awaiting-review）**；连续通过项：配置与身体、猫移动与相机、鼠移动与通道尺度、生态灰盒、导航可行性、调试入口与移动回归、生存状态与统一时间入口、消耗·警告·基础伤害、交互检测与动作接口、食物·饮水·可取消交互、最小 HUD、鼠 NPC 觅食与警戒、老鼠视觉·听觉·逃跑躲藏、猫扑击与捕获结算、猫循环回归与打包、猫 NPC 巡游与发现、猫的追击 / 搜索 / 放弃、NPC 攻击与玩家受伤、老鼠藏身与掩体规则、按玩家物种布置测试生态、第一轮概念试玩的自测走查（W1~W4 4/4）、**猫 AI 追击冲刺（能力 39/39 ×3 + 包内，默认关）** → **下一步 T030 生命周期状态与事件记录**。
 
 > ## ⚠ 本次最重要的教训
 >
@@ -95,7 +95,7 @@ Tools/Blender/t005_static_probe.py / t006_rig_probe.py   Blender 无头脚本（
 Art/Probes/t005_lab_probe_render.png       正交对照帧（T005 视觉证据，LFS）
 Art/Probes/t006_rig_t000.png / t050.png    骨骼两帧位姿（T006 视觉证据，LFS）
 
-Builds/P0-Win64/                   导出产物（.gitignore 已排除；**T028 已两预设重导出并复验：Reborn.pck 263,052 B（与 T027 相同 = 生产代码零改动）/ RebornSelfTest.pck 905,604 B**）
+Builds/P0-Win64/                   导出产物（.gitignore 已排除；**T029 已两预设重导出并复验：Reborn.pck 263,436 B / RebornSelfTest.pck 921,704 B**）
 ├── Reborn.exe / Reborn.pck / Reborn.console.exe
 └── RebornSelfTest.exe / .pck / .console.exe
 ```
@@ -120,6 +120,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 & $g --headless --path $proj --script 'res://tests/run_t025_attack.gd' --quit-after 300000
 & $g --headless --path $proj --script 'res://tests/run_t026_cover.gd' --quit-after 300000
 & $g --headless --path $proj --script 'res://tests/run_t027_ecology.gd' --quit-after 300000
+& $g --headless --path $proj --script 'res://tests/run_t029_sprint_chase.gd' --quit-after 300000
 
 # 走查工具（T028，切换玩家物种跑两条真实路线；不是断言套件）
 & $g --headless --path $proj --script 'res://tests/tool_t028_walkthrough.gd' --quit-after 300000
@@ -132,7 +133,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 & $g --headless --path $proj --script 'res://tests/tool_dump_scene_tree.gd' --quit-after 600 `
     -- 'res://assets/tests/sk_rig_probe.glb'
 
-# 视觉（**不能 headless**；`-- t005` 正交对照，`-- t006` 骨骼两帧，`-- t020` 感知三帧，`-- t021` 扑击/撞墙/命中三帧，`-- t022` 死亡 HUD / 重开后捕获两帧，`-- t023` 巡游 / 警戒后接近两帧，`-- t024` 追击 / 失视后搜索两帧，`-- t025` 预警 / 命中两帧，`-- t026` 草丛掩护 / 洞口外等待两帧，`-- t027` 猫玩家 / 鼠玩家两帧，`-- t028` 猫追鼠 / 鼠在洞口两帧）
+# 视觉（**不能 headless**；`-- t005` 正交对照，`-- t006` 骨骼两帧，`-- t020` 感知三帧，`-- t021` 扑击/撞墙/命中三帧，`-- t022` 死亡 HUD / 重开后捕获两帧，`-- t023` 巡游 / 警戒后接近两帧，`-- t024` 追击 / 失视后搜索两帧，`-- t025` 预警 / 命中两帧，`-- t026` 草丛掩护 / 洞口外等待两帧，`-- t027` 猫玩家 / 鼠玩家两帧，`-- t028` 猫追鼠 / 鼠在洞口两帧，`-- t029` 追击冲刺一帧）
 & $g --path $proj --script 'res://tests/tool_capture_render.gd' --quit-after 1200 -- t006
 & $g --path $proj --script 'res://tests/tool_capture_render.gd' --quit-after 30000 -- t020
 & $g --path $proj --script 'res://tests/tool_capture_render.gd' --quit-after 60000 -- t021
@@ -142,6 +143,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 & $g --path $proj --script 'res://tests/tool_capture_render.gd' --quit-after 2000 -- t025
 & $g --path $proj --script 'res://tests/tool_capture_render.gd' --quit-after 2000 -- t026
 & $g --path $proj --script 'res://tests/tool_capture_render.gd' --quit-after 3000 -- t028
+& $g --path $proj --script 'res://tests/tool_capture_render.gd' --quit-after 3000 -- t029
 ```
 退出码 0 = 通过。**必须加 `--quit-after`**，否则脚本出错会挂死。
 
@@ -213,14 +215,14 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 ## 下一步（按建议优先级）
 
-1. **T029（调整路线与参数）**（P3，2～4h，前置 T028 **已满足**）：针对 T028 暴露的**一个最大体验问题**调参并复测、更新 `Docs/Parameters.md`。
-   两个候选见 `Docs/Evidence/T028.md` §6：**A** 鼠 `ALERT` 停留 0.3 s 在猫 `sprint 4.5` 下形同虚设（实测 `prey_states` 只到 `alert` 就被扑到）；
-   **B** 猫 AI 追击**从不 `want_sprint`**（`cat_ai.gd`/`animal_ai.gd` grep 零命中 → 全程 walk 1.8 < 鼠 sprint 3.0，`cat_min_to_player=6.76 m` 就放弃）。**选一条改，改完复跑 `tests/tool_t028_walkthrough.gd`**。
+1. **T030（生命周期状态与事件记录）**（4～8h，前置 T022、T027 **已满足**）：存活/结算/选物种/出生明确；`LifeId`、结束原因与事件记录；死亡只触发一次。
+   必须带上 T029 的两条**待决策**（`Docs/Evidence/T029.md` §6）：**① 鼠洞不是安全区**（洞里能被打中）/ **② 冲刺会把 AI 冲出无护栏平台**（`split_platform` 实测 `y=-210 m`）。
+   T029 的冲刺能力已实现但**默认关**（`chase_sprint_enabled = false`，推荐 `chase_sprint_min_gap = 3.0`）：是否默认开等 **U01 真人试玩**。
    **U01 真人半边仍 NOT-RUN**：2～3 位外部试玩者的最小请求在 `Docs/Tasks/T028.md` §7 与 `Docs/Evidence/T028.md` §10，等负责人安排。
 2. 带上 T027 的 4 条待定（`Docs/Evidence/T027.md` §7）：**正式启动链属 T030**（`main.tscn` 仍是占位）、**区域 NPC 账本属 T035**、
    **NPC 出生点正式布置**（本轮未改关卡几何；代码已支持 `npc_spawn_points` 组）、**猫 : 鼠 NPC 配比 1 : 2** 是否最终（T029 按试玩调）。
-3. 带上 T026 的两条新发现（`Docs/Evidence/T026.md` §7）：**洞里"看得见但够不到"**（缺口同轴通视；洞里**能否被打中未测**）、
-   **`AnimalAI.reachable()` 判据① 层盲**（判据② 带层故结论不变，但① 只会造成假否 → **会影响 T019/T023/T024 共享代码**）。
+3. 带上 T026 的两条新发现（`Docs/Evidence/T026.md` §7）：**洞里"看得见但够不到"** —— **T029 已实测"洞里能被咬"**（`Docs/Evidence/T029.md` §6 ①，
+   洞外 0.79 m 的猫咬死洞里 0.24 m 的鼠）→ 已升级为待决策项；**`AnimalAI.reachable()` 判据① 层盲**（判据② 带层故结论不变，但① 只会造成假否 → **会影响 T019/T023/T024 共享代码**）。
 4. 带上遗留项：**猫跨 0.50 m 屏障是否加 `NavigationLink3D`**（`Docs/Evidence/T013.md` §9）；
    **T020 的 4 个感知默认值**与**近距豁免是否受视锥限制**（`Docs/Evidence/T020.md` §8）；
    **T021 捕获食物营养 35.0** 与**恢复期是否锁姿态**（`Docs/Evidence/T021.md` §8）；
@@ -235,9 +237,9 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 | 事项 | 说明 |
 |---|---|
-| **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T005~T009 分 4 个提交：`562fba4`/`0a7442b`/`bcc65be`/`44eb062`，提交策略 `965120a`，T010 → `8140d6f`，T011 → `1f71f46`，T012 → `2968909`，T013 → `89ac039`，T014 → `b6351d9`，T015 → `79f2bbd`，T016 → `692fe9a`，T017 → `ab6225e`，T018 → `a2070bc`，T019 → `5bfb1c7`，T020 → `38be427`，T021 → `c36fff2`，T022 → `5b922be`，T023 → `899444c`，T024 → `cd66a9f`，T025 → `80b7eba`，T026 → `2769811`，T027 → `3ae16b9`，T028 → `d8374b3`**）；当前 `main` 比 `origin/main` **ahead 以 `git rev-list --count origin/main..main` 为准（T028 的 feat 提交与其文档修补提交），未推送** |
+| **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T010 → `8140d6f`，T011 → `1f71f46`，T012 → `2968909`，T013 → `89ac039`，T014 → `b6351d9`，T015 → `79f2bbd`，T016 → `692fe9a`，T017 → `ab6225e`，T018 → `a2070bc`，T019 → `5bfb1c7`，T020 → `38be427`，T021 → `c36fff2`，T022 → `5b922be`，T023 → `899444c`，T024 → `cd66a9f`，T025 → `80b7eba`，T026 → `2769811`，T027 → `3ae16b9`，T028 → `d8374b3`，**T029 → 本次 feat 提交**）；当前 `main` 比 `origin/main` **ahead 以 `git rev-list --count origin/main..main` 为准（T029 的 feat 提交与其文档修补提交），未推送** |
 | **Git 推送 / 发布** | 仍需确认。推送要经本机代理 `127.0.0.1:7897`（`Docs/Commands.md` §4.1），推送前先确认远端无他人提交 |
-| 是否发布新构建 | `Builds/P0-Win64/` 已按 T028 改动**重新导出两个预设并再复验**：发布包 `Reborn.pck` **263,052 B**（与 T027 相同 = 生产代码零改动）、自检包 `RebornSelfTest.pck` **905,604 B**（包内 T002 18/18、T019 72/72、T020 164/164、T023 175/175、T024 136/136、T025 174/174、T026 96/96、T027 96/96、**T028 走查 4/4**）；**发布动作本身仍需负责人确认**（发布节奏未定） |
+| 是否发布新构建 | `Builds/P0-Win64/` 已按 T029 改动**重新导出两个预设并再复验**：发布包 `Reborn.pck` **263,436 B**（+384 = 两个生产脚本改动）、自检包 `RebornSelfTest.pck` **921,704 B**（包内 T002 18/18、T019 72/72、T020 164/164、T023 178/178、T024 136/136、T025 174/174、T026 96/96、T027 96/96、T028 走查 4/4、**T029 39/39**）；**发布动作本身仍需负责人确认**（发布节奏未定） |
 | 真实按键输入验证方式 | 需受审查的输入自动化工具（**需授权**），或真人操作录像。**不要盲发按键** |
 | 相机轴语义 D1 / 蹲姿高度 D2 | 见上方"关键事实"：D1 已按竖直偏移实现并断言锁定；D2 需并入 `Parameters.md` 正式起测值 |
 | **T020 感知新增的 4 个默认值** | `footstep_interval_base` 0.5 s、`flee_timeout` 3.0 s、`reach_tolerance` 0.5 m、`hide_arrive_radius` 0.30 m —— `Parameters.md` 原本没有，需负责人并入正式起测值（`Docs/Evidence/T020.md` §8） |
@@ -251,13 +253,14 @@ $proj = 'E:\Reborn\Game\Reborn'
 | 确认脚本语言 | 默认 GDScript（无需额外工具链）。改 C# 需追加 .NET 配置 |
 | Godot 渲染器 | **Forward+ 已确认可渲染**（T009 捕获工具实测 `renderer=forward_plus`、1280×720 出图正常）；**帧率未测** |
 
-## 本次边界声明（T028）
+## 本次边界声明（T029）
 
 - **未安装/卸载任何软件**；未连接 MCP；未改 git 全局配置；**未删除任何源资产**；**未推送、未发布**。
-- **没有改生产代码**（T028 是体验观察型任务）：只新增 `tests/tool_t028_walkthrough.gd`（自测走查工具）与 `tool_capture_render.gd` 的 `-- t028` 取景分支；
-  **`Reborn.pck` 与 T027 字节相同（263,052 B）** 即为证据（只有 `SelfTest.pck` 因新脚本变大 → 905,604 B）；
-  两个体验问题（鼠的警戒窗口 / 猫追击不 sprint）**只记录不改**，交 T029。
-- 一次性探针 `tests/tmp_t028_probe.gd` 跑完**立即删除**（`git status` 可核）。
+- **改了两处生产代码**（T029 是调参任务）：`cat_ai.gd`（冲刺能力 + 默认**关**）、`ecology_spawner.gd`（`predator_min_distance` 14.0→24.0）；
+  测试侧：新增 `tests/run_t029_sprint_chase.gd`、改 `run_t023_cat_ai.gd`（`split_platform` 段关冲刺）/ `run_t027_ecology.gd`（三处阈值）/ `tool_capture_render.gd`（`-- t029`）。
+- **默认关**是刻意的：打开后"鼠被发现即被咬死"，而根因是**既有缺陷**（洞里能被打中），不是冲刺 → 平衡归负责人 / U01。
+- ❌ **一次严重操作失误（已恢复）**：曾用 `Get-Content | -replace | Set-Content` 改 `tool_capture_render.gd`，
+  把整文件编码/行尾改坏（`228 insertions / 297 deletions`）→ 立刻 `git checkout --` 恢复并改用 Edit 重做（最终 diff 只有 62 行新增）。
 - **已按任务提交 Git**（T005~T009 → `562fba4` / `0a7442b` / `bcc65be` / `44eb062`；提交策略 `965120a`；T010 → `8140d6f`；T011 → `1f71f46`；T012 → `2968909`；T013 → `89ac039`；T014 → `b6351d9`；T015 → `79f2bbd`；T016 → `692fe9a`；T017 → `ab6225e`；T018 → `a2070bc`；T019 → `5bfb1c7`；T020 → `38be427`；T021 → `c36fff2`；T022 → `5b922be`；T023 → `899444c`；T024 → `cd66a9f`；T025 → `80b7eba`；T026 → `2769811`；T027 → `3ae16b9`；T028 → `d8374b3`）；
   **未推送**（推送需另行授权）。
 - 运行过的受限程序：Godot **非 headless** 渲染捕获（创建窗口并短暂捕获鼠标，工具立即放开）。
@@ -291,12 +294,12 @@ $proj = 'E:\Reborn\Game\Reborn'
 > **测试生态入口（T027）**：`scenes/debug/ecology_entry.tscn`（= `debug_entry.gd` + `ecology_enabled = true`）——
 > 玩家是猫 → 场上 **2 只鼠 NPC**（可捕）；玩家是鼠 → 场上 **1 只猫 NPC**（要躲）；F1/F2 换物种会**先清再重铺**；
 > `debug_entry.tscn` 本身保持生态关闭（**既有 24 套夹具语义不变**）。
-> **视觉捕获**：`tests/tool_capture_render.gd -- t009` / `-- t010` / `-- t011` / `-- t012` / `-- t018` / `-- t020` / `-- t021` / `-- t022` / `-- t023` / `-- t024` / `-- t025` / `-- t026` / `-- t027` / `-- t028`（**不能加 `--headless`**，`--quit-after` 给到 30000+；
+> **视觉捕获**：`tests/tool_capture_render.gd -- t009` / `-- t010` / `-- t011` / `-- t012` / `-- t018` / `-- t020` / `-- t021` / `-- t022` / `-- t023` / `-- t024` / `-- t025` / `-- t026` / `-- t027` / `-- t028` / `-- t029`（**不能加 `--headless`**，`--quit-after` 给到 30000+；
 > **必须检查 `CAP|done` 与每张 `save_result=OK`** —— T011 实测遇到过一次"中途静默退出、退出码却仍是 0"）。
 > **不要写物种名分支**：能力差异走配置字段（`can_jump` / `can_pounce` / `can_use_mouse_tunnel`），有静态断言守着。
 > 打包：`export_presets.cfg` 两个预设；**导出产物拒绝 `--script`**，包内断言用 `--main-pack` + 编辑器二进制。
-> **P0 / P1 / P2 已完成（T001～T022 done）；P3 进行中（T023、T024、T025、T026、T027 done；T028 自测半边完成、真人半边 NOT-RUN → awaiting-review）**。下一个动作：**T029 调整路线与参数**
-> （针对 `Docs/Evidence/T028.md` §6 的两个候选 A/B 选一个改、改完复跑 `tests/tool_t028_walkthrough.gd`；U01 真人半边等负责人安排 2～3 位外部试玩者）。
+> **P0 / P1 / P2 已完成（T001～T022 done）；P3 进行中（T023～T027 done；T028 / T029 awaiting-review）**。下一个动作：**T030 生命周期状态与事件记录**
+> （先读 `Docs/Evidence/T029.md` §6 的两条待决策：**鼠洞不是安全区**、**冲刺会把 AI 冲出平台**；冲刺开关默认关，等 U01 真人试玩定）。
 > 已知阻塞：真实按键输入无安全自动化手段（**禁止盲发按键**）。
 > 不要在没有实测证据时把任何游戏任务标为 done；不要因无头断言通过就宣称画面正确。
 

@@ -57,6 +57,18 @@ const HOLE_KIND := "mouse_hole"
 ## 判定"猎物跳变（跑开 / 瞬移）"的距离阈值（米）→ `APPROACH → CHASE`
 @export var chase_trigger_move: float = 0.5
 
+# --- T029 追击冲刺 ---
+## 追击/接近/搜索赶路时是否允许冲刺。**默认 `false`**：能力已实现且实测有效，但打开后鼠的
+## "被发现且远离洞口 = 必死"（实测 3/3 被咬死）属**产品平衡**，需负责人 / U01 真人试玩决定后再开。
+## 打开方式：`ai.chase_sprint_enabled = true`（推荐配 `chase_sprint_min_gap = 3.0`）。
+@export var chase_sprint_enabled: bool = false
+## 水平距离超过这个值才冲刺（米）——**实现默认值**，由**刹车距离**倒推：
+## 冲刺 4.5 m/s 在 `max_acceleration` 10 m/s² 下需要 4.5²/(2×10) ≈ 1.01 m 才能停下，加上攻击停步线 0.65 + 迟滞 0.05，
+## 门控必须 ≥ 1.7 m 才不会"冲过头 / 冲进洞口"（实测 1.2 m 时进 in_range 后还滑 0.475 m、洞口挤到 0.276 m）。
+## 取 **3.0 m**：除刹车余量外，再给"鼠 sprint 3.0 拉开距离"留反应带 —— 2.0 m 时实测鼠玩家在远离洞口处
+## 会被追上打死（T028 走查 W4 存活判据 FAIL）；3.0 m 是"有压力但还能逃"的当前最好点（待真人试玩定夺）。
+@export var chase_sprint_min_gap: float = 3.0
+
 # --- T025 攻击 ---
 ## 允许转入 `ATTACK`（默认开；**测试夹具可关掉**以单独验证追击 / 搜索，见 T024 §7 D7）
 @export var attack_enabled: bool = true
@@ -130,6 +142,8 @@ func setup(p_body: AnimalBody) -> void:
 func _step(world_time: float) -> void:
 	if body == null or not is_instance_valid(body):
 		return
+	# 0) 冲刺意图每帧重算：**先清掉**，只有 `_step_chase()` 会按距离重新打开（T029 D3）
+	body.want_sprint = false
 	# 0) 逃脱账本：**只要不再处于 CHASE**（警戒 / 搜索 / 等待 / 探索）就把这场追逐结算掉。
 	#    放在这里而不是分散在各转移里，保证"一场只结算一次"且覆盖所有出口（T024 §4）。
 	if not _encounter_id.is_empty() and _state != State.CHASE:
@@ -147,7 +161,9 @@ func _step(world_time: float) -> void:
 	if _state == State.ALERT or _has_alert:
 		body.move_intent = Vector2.ZERO
 		return
-	# 4) 状态分派
+	# 4) 冲刺意图（T029）：只对**移动阶段**生效，按"离当前目标还多远"开合
+	_sprint_gate()
+	# 5) 状态分派
 	if _state == State.APPROACH:
 		_step_approach(world_time)
 		return
@@ -163,6 +179,22 @@ func _step(world_time: float) -> void:
 	# 5) 巡游（EXPLORE）
 	_step_patrol(world_time)
 
+## T029：冲刺意图——只在**移动阶段**（接近 / 追击 / 搜索赶路）且离当前目标还远时打开。
+## `EXPLORE`（巡游）刻意不冲刺：巡逻要可预期、可观察；`ALERT` / `ATTACK` / `WAIT` 本来就不位移。
+## 能不能真的跑起来由 `AnimalBody` 的双门控决定（体力、`sprint_min_stamina`），这里只管"想不想"。
+func _sprint_gate() -> void:
+	if not chase_sprint_enabled:
+		return
+	var d := 0.0
+	# 只有**移动阶段**才可能冲刺；`EXPLORE` / `ALERT` / `ATTACK` / `WAIT` 保持 `d = 0`
+	# （初值写成 `INF` 会让所有非移动状态都判成"离目标很远"→ 巡游也冲刺，实测踩过）
+	if _state == State.APPROACH or _state == State.CHASE:
+		# 用上一帧的测量值；首次进入时 `_approach_dist` 还没算过，退回"到最后已知位置"的水平距离
+		d = _approach_dist if _approach_dist > 0.0 else horizontal_distance_to(_prey_seen_pos)
+	elif _state == State.SEARCH:
+		d = horizontal_distance_to(_search_goal())
+	if d > chase_sprint_min_gap:
+		body.want_sprint = true
 
 ## 把"看见 / 听见"翻译成状态变化。**本函数不改位移**，只调 `alert_for()` / 切状态。
 func _react_to_senses(world_time: float) -> void:

@@ -32,8 +32,11 @@ const MAX_SETUP_ATTEMPTS := 240
 @export var max_npcs: int = 3
 ## 非捕食者 NPC 距玩家出生点的最小距离（米）。
 @export var min_spawn_distance: float = 8.0
-## **捕食者**（`can_attack == true`）距玩家出生点的最小距离（米）——默认 14 > 猫视距 9.0。
-@export var predator_min_distance: float = 14.0
+## **捕食者**（`can_attack == true`）距玩家出生点的最小距离（米）。
+## 取值按**最快速度 × 出生安全窗口**算：T029 之后捕食者追击会冲刺（`sprint_speed 4.5`），
+## 4 s 窗口内能跑 18 m，所以旧值 14（按 walk 1.8 算的）不再够 —— 取 **24 m**（18 + 6 m 余量）。
+## 仍受 `max_spawn_distance 45` 约束；相机能看见的"出生安静期"由此保证。
+@export var predator_min_distance: float = 24.0
 ## 最远可接受距离（米）。
 @export var max_spawn_distance: float = 45.0
 ## NPC 之间的最小间距（米）。

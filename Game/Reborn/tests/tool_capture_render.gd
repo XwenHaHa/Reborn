@@ -137,6 +137,9 @@ func _initialize() -> void:
 	# T028：第一轮概念试玩的两帧（猫追鼠 / 鼠在洞、猫在洞外）。只在显式传 `-- t028` 时执行。
 	if OS.get_cmdline_user_args().has("t028"):
 		await _capture_t028_frames(lab)
+	# T029：追击冲刺一帧（猫 NPC 打开冲刺追鼠玩家）。只在显式传 `-- t029` 时执行。
+	if OS.get_cmdline_user_args().has("t029"):
+		await _capture_t029_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -1990,3 +1993,64 @@ func _t028_predator(eco: EcologySpawner) -> AnimalBody:
 		if b.species_config != null and b.species_config.can_attack:
 			return b
 	return null
+
+
+## T029：追击冲刺一帧 —— 猫 NPC 打开 `chase_sprint_enabled` 后追鼠玩家（HUD 在画面上）。
+## 判据：`CAP|t029|done` + `save_result=0 (OK)`。只在显式传 `-- t029` 时执行。
+func _capture_t029_frames(lab: Node) -> void:
+	print("CAP|t029|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+	var packed: PackedScene = load(T027_ENTRY)
+	if packed == null:
+		print("CAP|t029|ERROR|entry load failed")
+		return
+	var entry: Node3D = packed.instantiate() as Node3D
+	root.add_child(entry)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	for i in SETTLE_FRAMES:
+		await process_frame
+	var eco: EcologySpawner = entry.get("ecology") as EcologySpawner
+	var player: AnimalBody = entry.get("player") as AnimalBody
+	var mouse_cfg: SpeciesConfig = entry.get("mouse_config") as SpeciesConfig
+	if eco == null or player == null or mouse_cfg == null:
+		print("CAP|t029|ERROR|ecology/player/config missing")
+		return
+	entry.call("switch_species", mouse_cfg.species_id)      # 玩家=鼠（被追的一方）
+	for i in SETTLE_FRAMES:
+		await process_frame
+	eco = entry.get("ecology") as EcologySpawner
+	player = entry.get("player") as AnimalBody
+	var pred := _t028_predator(eco)
+	if player == null or pred == null:
+		print("CAP|t029|ERROR|player/predator missing")
+		return
+	var cai := pred.ai as CatAI
+	if cai == null:
+		print("CAP|t029|ERROR|predator has no CatAI")
+		return
+	cai.chase_sprint_enabled = true          # **显式打开**：默认是关的（平衡待定）
+	player.player_controlled = false
+	# 把猫放到玩家**正前方 9 m**（视距 9.0 的边缘）并朝玩家 —— 否则它在 24 m 外巡逻，不会冲刺
+	_t028_put(pred, player.global_position + Vector3(1.0, 0.0, 0.0) * 9.0)
+	pred.look_at(Vector3(player.global_position.x, pred.global_position.y, player.global_position.z), Vector3.UP)
+	var start := pred.global_position
+	var true_frames := 0
+	var frames := 0
+	var gap0 := pred.global_position.distance_to(player.global_position)
+	for i in 90:
+		await physics_frame
+		frames += 1
+		player.move_intent = Vector2.ZERO             # 鼠站着不动，只看猫的冲刺
+		if pred.want_sprint:
+			true_frames += 1
+	var moved := Vector2(pred.global_position.x - start.x, pred.global_position.z - start.z).length()
+	print("CAP|t029|chase|sprint_enabled=%s|want_sprint_frames=%d/%d|moved=%.2f|gap0=%.2f|gap=%.2f|hp=%.1f|state=%s|reason=%s" % [
+		str(cai.chase_sprint_enabled), true_frames, frames, moved, gap0,
+		pred.global_position.distance_to(player.global_position),
+		float(player.survival.state.health),
+		String(pred.ai.state_id()) if pred.ai != null else "-",
+		String(pred.ai.state_reason()) if pred.ai != null and pred.ai.has_method("state_reason") else "-"])
+	await _t028_frame(player, pred, "t029_chase")
+	print("CAP|t029|done")
