@@ -193,3 +193,19 @@
 - **待负责人定（T026 新发现）**：① **洞里"看得见但够不到"** —— 0.24×0.30 缺口在同轴方向**通视**，
   猫在墙外仍能把洞里的鼠判为 `seen`（实测离洞心 0.806～1.025 m）；洞里**能否被打中未测**（攻击距离 0.65 m < 猫物理极限 ≈ 0.70 m → 预期打不到）→ 交 T027 生态布置。
   ② 草丛是否改成**物理体积**（T020 §8 遗留项，本轮按数据钉住"非实体"）。
+
+
+## 按玩家物种布置测试生态（T027 落地口径）
+
+- **按玩家物种**：只铺"与玩家**不同种**"的 NPC；候选来自 `resources/species/*.tres` 的 `SpeciesConfig`（**代码不写物种名**），
+  数量用 `count_per_species` + `count_overrides`（`species_id → int`）。
+- **出生安全（"出生周围无即时攻击"的可验口径）**：每只 NPC 距玩家出生点 ≥ `min_distance_for(cfg)`，且该值**必须大于该物种的 `vision_range`**
+  （出生瞬间连看都看不见玩家）：非捕食者 `min_spawn_distance = 8.0 m`（> 鼠 6.5 m）、
+  **捕食者 `predator_min_distance = 14.0 m`（> 猫 9.0 m）**——**按 `can_attack` 分派，不看物种名**。
+  另有 NPC 相互最小间距 `min_npc_separation = 2.0 m`、最远可接受 `max_spawn_distance = 45.0 m`、层吸附容差 `snap_tolerance = 0.60 m`、
+  环上候选 `ring_radius = 4.0 m`（每个出生标记 12 个角度 × 2 圈）。
+- **数量**：`max_npcs = 3`；本入口的覆盖是 **猫 NPC 1 / 鼠 NPC 2**（`predator_npc_count` / `npc_count_per_species`）。
+- **T027 新增实现默认值（原文没有，需负责人并入正式起测值）**：`min_spawn_distance 8.0` / `predator_min_distance 14.0` /
+  `min_npc_separation 2.0` / `max_spawn_distance 45.0` / `snap_tolerance 0.60` / `ring_radius 4.0` / `count_per_species 2` / `max_npcs 3`。
+- **明确不做的**：区域 NPC 数量账本与容量（T035）；正式出生链（T030）；按区域布置正式出生点（本轮只用"现有出生标记 + 环上候选"，
+  **未改关卡几何**；代码已支持 `npc_spawn_points` 组）。

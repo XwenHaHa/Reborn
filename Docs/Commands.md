@@ -762,6 +762,54 @@ Select-String -Path "$env:PI_SCRATCH_DIR\godot_docs\doc\classes\NavigationServer
   视觉帧会被判成"没有角色在草丛里"；给夹具盒加半透明绿 `BoxMesh` 才有有效判读。
 - **洞口缝只有 0.24×0.30，「通视」很挑机位**：要看进洞里，机位得低（y ≈ 0.55）、离轴 ≈ 0.7 m，
   并把猫**侧移 0.3 m** 让开视线；否则画面里只有"猫对着墙"。
+## 2.23 T027 按玩家物种布置测试生态（VERIFIED — 2026-10-24 实测）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+# 0) 新增 class_name EcologySpawner → 先 import，再查语法
+& $g --headless --path $p --import
+& $g --headless --path $p --check-only --script 'res://scripts/world/ecology_spawner.gd'     # 0
+& $g --headless --path $p --check-only --script 'res://scripts/debug/debug_entry.gd'         # 0
+& $g --headless --path $p --check-only --script 'res://tests/run_t027_ecology.gd'            # 0
+
+# 1) 可失败状态（第一次跑）：exit=1、checks=95、failures=4（3 处夹具/判据 + 1 处真实导出缺陷，见"坑"）
+
+# 2) 断言套件 ×3（核对 SUMMARY|checks=96|failures=0）
+& $g --headless --path $p --script 'res://tests/run_t027_ecology.gd' --quit-after 300000      # 96/0 ×3
+
+# 3) 全量回归 25 套（T002…T027，合计 2846 条）：全绿、零脚本错误
+
+# 4) 导出两预设
+& $g --headless --path $p --export-release "Windows Desktop"          "$out\Reborn.exe"          # 0 → Reborn.pck 263,052 B
+& $g --headless --path $p --export-debug   "Windows Desktop SelfTest" "$out\RebornSelfTest.exe"  # 0 → SelfTest.pck 889,120 B
+
+# 5) 包内复验（只能用编辑器二进制 + --main-pack）
+& $g --headless --main-pack "$out\RebornSelfTest.pck" --script 'res://tests/run_t027_ecology.gd' --quit-after 300000   # 96/0
+
+# 6) 视觉两帧（**不能加 --headless**；同步跑）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 2000 -- t027
+#   → CAP|t027|t027_cat_player|player=Cat|npcs=2|of_cat=0|of_mouse=2|min_dist=11.18|safe_min=8.0/14.0|nearest=Mouse|nearest_d=11.18
+#   → CAP|t027|t027_mouse_player|player=Mouse|npcs=1|of_cat=1|of_mouse=0|min_dist=14.47|safe_min=8.0/14.0|nearest=Cat|nearest_d=11.85
+#   → 两张 save_result=0 (OK) → CAP|t027|done
+```
+
+### 本任务踩到的坑（**会污染别的测试**）
+
+- **导出包里资源不是 `.tres`**：`resources/species/` 的 `.tres` 在 PCK 里变成 `.res` / `*.tres.remap`；
+  任何"按扩展名过滤的目录列举"都会**在包里静默变空**（源码内全绿、包内 3 条 FAIL）。
+  列举后要**逐个 `load()` 试**（并处理 `.remap` 后缀），且这种"默认列表"必须有**源码与包内都跑**的断言守着。
+- **`_ready()` 阶段导航图还没 iteration**：`map_get_iteration_id(map) == 0` 时 `map_get_path()` 返回空 →
+  所有落点会被判成 `not_on_layer`。**别在夹具里"多等几帧了事"**：让组件记 `pending`、导航就绪后重试（并加次数上限）。
+- **给 NPC 摆位前先关它的巡游/朝向**：`CatAI` 的 `patrol_moving` 会把它自己带走（实测连走 5.5 s、朝向不受控），
+  `MouseAI` 的 `explore/forage` 同样会改朝向 → **"看不见玩家"往往是夹具朝向问题，不是感知问题**。
+  要触发"发现"，把目标放到**它自己朝向的正前方**（并把目标转向它）最稳。
+- **判据别只看末帧**：`APPROACH` 到 0.65 m 后会停住/回落，用末帧距离会把"已经接近过"判成没接近 → 用**窗口内最小距离**。
+- **可玩默认放新场景更便宜**：`ecology_enabled = true` 只写在**新场景** `scenes/debug/ecology_entry.tscn`，
+  既有 `debug_entry.tscn` 保持默认 false → 12 个既有套件 / 7 个取景分支**零改动**（比"改默认值再逐个修夹具"划算得多）。
+- **异种植入的朝向也要管**：E4 里鼠 NPC 在 `explore` 中背对玩家 → 永不 `FLEE`；把玩家放到**它朝向的正前方 1.5 m** 后立刻逃开（1.51 → 8.50 m）。
 ## 3. Blender（VERIFIED）
 
 
@@ -1071,3 +1119,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-21 | **T024 完成**。新增 §2.20 追击、搜索和放弃命令（134 条断言 ×3 + 两预设导出与字节记录 + 包内复验 133 条 + `-- t024` 两帧 + 五条实测坑：**`ai_enabled` 不是暂停开关（关掉会释放、再打开会重建 AI 实例，旧引用失效甚至崩）**、**瞬时 `state_reason()` 同帧会被覆盖 → 触发原因要用转移账断言**、**实心墙造遮挡会同时挡路（失败链会早于 5 s 超时）**、**"隐藏"的猎物必须在视锥与视距之外**、**窗口捕获会收到真实输入（`pounce` = 鼠标左键）**）；T023 的 2 条断言升级为"失视 → `SEARCH`"。 |
 | 2026-10-22 | **T025 完成**。新增 §2.21 NPC 攻击与玩家受伤命令（175 条断言 ×3 + 两预设导出与字节记录 + 包内复验 174 条 + `-- t025` 两帧 + 七条实测坑：**`ACT` 枚举只能追加**、**"锁定方向"要先结算再清零**、**攻击遮挡复核不能借感知（近距豁免）**、**断言里别重复调被测函数 / lambda 按值捕获**、**夹具隐藏点必须在竞技场内（否则摔死）**、**`ResourcePoint.new()` 没有碰撞体**、**后台 Start-Process 取景无输出 → 同步跑**）；T023/T024 的夹具改为"关掉攻击"；两帧截图已产出，**判读因 vision 服务 503 记 NOT-VERIFIED**。 |
 | 2026-10-23 | **T026 完成**。新增 §2.22 老鼠藏身与掩体规则命令（96 条断言 ×3 + 两预设导出与字节记录 + 包内复验 96 条 + `-- t026` 两帧 + 七条实测坑：**`map_get_closest_point` 层盲**（猫鼠共用一张世界地图 RID → 必须用带层的 `map_get_path`）、**"朝出生点"来向与墙平行会把身体摆进墙里**（→ 洞轴取 `RootBarrierLintel` 本地 z 轴）、**每段都要夹具守卫断言**、`ai_enabled` 关→开会**重建 AI 实例**（旧引用 `previously freed`）、**鼠背对猫时永不 `FLEE`**、**夹具草丛体量要自带可见网格**、**洞口通视很挑机位**）。**生产代码零改动**（验证型任务：三条规则实测全为真）。 |
+| 2026-10-24 | **T027 完成**。新增 §2.23 按玩家物种布置测试生态命令（96 条断言 ×3 + 两预设导出与字节记录 + 包内复验 96 条 + `-- t027` 两帧 + 六条实测坑：**导出包里资源是 `.res`/`.remap`**（按扩展名过滤会静默变空）、**`_ready` 阶段导航未 iteration**（组件自己 pending 重试）、**摆位前先关 NPC 巡游/朝向**、**判据别只看末帧**、**可玩默认放新场景以零改动既有夹具**、**异种植入的朝向**）。新增 `EcologySpawner` 组件与 `ecology_entry.tscn` 可玩入口。 |

@@ -131,6 +131,9 @@ func _initialize() -> void:
 	# T026：藏身与掩体（草丛里不可见 / 洞口外等待）。只在显式传 `-- t026` 时执行。
 	if OS.get_cmdline_user_args().has("t026"):
 		await _capture_t026_frames(lab)
+	# T027：按玩家物种布置测试生态（猫玩家→鼠 NPC / 鼠玩家→猫 NPC）。只在显式传 `-- t027` 时执行。
+	if OS.get_cmdline_user_args().has("t027"):
+		await _capture_t027_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -1748,3 +1751,110 @@ func _t026_hole_marker() -> Node3D:
 		if n is Node3D and n.has_meta("kind") and String(n.get_meta("kind")) == "mouse_hole":
 			return n as Node3D
 	return null
+# ---------------------------------------------------------------------------
+# T027：按玩家物种布置测试生态（猫玩家→鼠 NPC / 鼠玩家→猫 NPC）
+
+const T027_ENTRY := "res://scenes/debug/ecology_entry.tscn"
+
+
+## 两帧（宽景 3/4 机位把"玩家 + 最近的那只 NPC"放进同一画面；HUD 的 `eco:` 行也在画面上）：
+## ① `t027_cat_player`：玩家=猫 → 场上**只有鼠 NPC**（可捕）；
+## ② `t027_mouse_player`：玩家=鼠 → 场上**只有猫 NPC**（要躲，且出生在它视野外）。
+## 判据：结尾 `CAP|t027|done` 且两张 `save_result=0 (OK)`。
+func _capture_t027_frames(lab: Node) -> void:
+	print("CAP|t027|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+	var packed: PackedScene = load(T027_ENTRY)
+	if packed == null:
+		print("CAP|t027|ERROR|entry load failed")
+		return
+	var entry: Node3D = packed.instantiate() as Node3D
+	root.add_child(entry)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	for i in SETTLE_FRAMES:
+		await process_frame
+	var eco: EcologySpawner = entry.get("ecology") as EcologySpawner
+	var player: AnimalBody = entry.get("player") as AnimalBody
+	var cat_cfg: SpeciesConfig = entry.get("cat_config") as SpeciesConfig
+	var mouse_cfg: SpeciesConfig = entry.get("mouse_config") as SpeciesConfig
+	if eco == null or player == null or cat_cfg == null or mouse_cfg == null:
+		print("CAP|t027|ERROR|ecology/player/config missing")
+		return
+	await _t027_shot(entry, eco, player, "t027_cat_player", "player_to_prey")
+	entry.call("switch_species", mouse_cfg.species_id)
+	for i in SETTLE_FRAMES:
+		await process_frame
+	eco = entry.get("ecology") as EcologySpawner
+	player = entry.get("player") as AnimalBody
+	if eco == null or player == null:
+		print("CAP|t027|ERROR|ecology/player missing after species switch")
+		return
+	await _t027_shot(entry, eco, player, "t027_mouse_player", "npc_to_player")
+	print("CAP|t027|done")
+
+
+## 一帧：打印客观计数/出生距离，再把玩家与最近的一只 NPC 一起取景。
+func _t027_shot(entry: Node3D, eco: EcologySpawner, player: AnimalBody, tag: String, stage: String) -> void:
+	var cat_cfg: SpeciesConfig = entry.get("cat_config") as SpeciesConfig
+	var mouse_cfg: SpeciesConfig = entry.get("mouse_config") as SpeciesConfig
+	var npc: AnimalBody = null
+	var nearest: float = INF
+	for b in eco.npc_bodies():
+		var d := b.global_position.distance_to(player.global_position)
+		if d < nearest:
+			nearest = d
+			npc = b
+	var species := "<none>"
+	var state := "<none>"
+	if npc != null:
+		if npc.species_config != null:
+			species = String(npc.species_config.species_id)
+		if npc.ai != null:
+			state = String(npc.ai.state_id())
+	var rep := eco.spawn_report()
+	print("CAP|t027|%s|player=%s|npcs=%d|of_cat=%d|of_mouse=%d|min_dist=%.2f|safe_min=%.1f/%.1f|nearest=%s|nearest_d=%.2f|nearest_state=%s|skipped=%d" % [
+		tag, String(eco.player_species_id()), eco.npc_count(),
+		eco.npc_count_of(cat_cfg.species_id), eco.npc_count_of(mouse_cfg.species_id),
+		eco.min_spawn_distance_actual(), eco.min_spawn_distance, eco.predator_min_distance,
+		species, nearest, state, (rep.get("skipped", []) as Array).size()
+	])
+	if npc == null:
+		print("CAP|t027|ERROR|no npc to frame for %s" % tag)
+		return
+	# 取景前把两者拉到 ~4 m（**出生距离已由上面的 `min_dist` 如实给出**，不受取景影响）
+	if stage == "player_to_prey":
+		_t027_place(player, npc, 4.0)
+	elif stage == "npc_to_player":
+		var cai := npc.ai as CatAI
+		if cai != null:
+			cai.patrol_enabled = false          # 关巡游：否则它会自己走开、朝向也不受控
+		_t027_place(npc, player, 4.0)
+	for i in 6:
+		await physics_frame
+	var gap: float = player.global_position.distance_to(npc.global_position)
+	var prey_state := "<none>"
+	if npc.ai != null:
+		prey_state = String(npc.ai.state_id())
+	print("CAP|t027|%s|staged_gap=%.2f|npc_state_after_stage=%s" % [tag, gap, prey_state])
+	var mid: Vector3 = (player.global_position + npc.global_position) * 0.5
+	var cam := Camera3D.new()
+	cam.fov = 60.0
+	root.add_child(cam)
+	cam.global_position = mid + Vector3(2.8, 3.4, 2.8)
+	cam.look_at(mid + Vector3(0.0, 0.2, 0.0), Vector3.UP)
+	cam.current = true
+	await _capture_view(tag, cam, 10)
+
+
+## 把 `actor` 放到 `target` 的**当前朝向**正前方 `dist` 米并面朝它（只用于取景）。
+func _t027_place(actor: Node3D, target: Node3D, dist: float) -> void:
+	var to := actor.global_position - target.global_position
+	to.y = 0.0
+	to = to.normalized() if to.length_squared() > 1e-6 else Vector3.FORWARD
+	var pos := target.global_position + to * dist
+	actor.global_position = Vector3(pos.x, target.global_position.y, pos.z)
+	if actor is CharacterBody3D:
+		(actor as CharacterBody3D).velocity = Vector3.ZERO
+	actor.look_at(Vector3(target.global_position.x, actor.global_position.y, target.global_position.z), Vector3.UP)

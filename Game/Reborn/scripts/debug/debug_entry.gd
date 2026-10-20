@@ -85,11 +85,20 @@ const BARRIER_Z_MAX := 19.5
 @export var record_period_sec: float = 0.5
 ## 遗留项 ② 的探针目标点
 @export var probe_target: Vector3 = LEGACY_PROBE_TARGET
+## T027 测试生态开关。**默认关闭**：既有 24 套断言与既有取景分支都实例化 `debug_entry.tscn`，
+## 打开会改变它们的夹具语义（T019 的教训）→ 可玩入口用 `scenes/debug/ecology_entry.tscn`。
+@export var ecology_enabled: bool = false
+## 生态里**非捕食者**物种铺几只（按 `SpeciesConfig.can_attack` 分派，不写物种名）。
+@export var npc_count_per_species: int = 2
+## 生态里**捕食者**物种铺几只。
+@export var predator_npc_count: int = 1
 
 ## 关卡实例（其子节点里放玩家）
 var level: Node3D = null
 ## 当前玩家（`AnimalBody`）
 var player: AnimalBody = null
+## 测试生态组件（T027；`ecology_enabled = false` 时为 null）
+var ecology: EcologySpawner = null
 ## 当前物种 ID（空 = 尚未成型）
 var current_species: StringName = &""
 ## 调试 HUD（`CanvasLayer`，**只在调试入口里**）
@@ -193,6 +202,22 @@ func _build_level() -> void:
 		return
 	level.name = "Level"
 	add_child(level)
+	_build_ecology()
+
+
+## 建测试生态组件（T027）。开关关闭时什么都不做（既有夹具语义不变）。
+func _build_ecology() -> void:
+	ecology = null
+	if not ecology_enabled:
+		return
+	var e := EcologySpawner.new()
+	e.name = "Ecology"
+	e.candidates = _config_pool()
+	e.count_overrides = _npc_count_overrides()
+	level.add_child(e)
+	if not e.ecology_ready.is_connected(_on_ecology_ready):
+		e.ecology_ready.connect(_on_ecology_ready)
+	ecology = e
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +248,7 @@ func restart_round(reason: StringName = &"manual") -> int:
 		level.name = "Level_retired"
 		level.queue_free()
 	level = null
+	ecology = null
 	var wd := get_node_or_null("/root/WorldDirector")
 	if wd != null and is_instance_valid(wd) and wd.has_method("reset_for_new_game"):
 		wd.call("reset_for_new_game")
@@ -320,6 +346,7 @@ func switch_species(species_id: StringName) -> void:
 		_main_mat.albedo_color = SPECIES_COLORS[maxi(0, _config_index(cfg))]
 	_rebuild_path_mesh()
 	_rebuild_collision_mesh()
+	_setup_ecology(cfg)
 	_refresh_hud()
 
 	if not params_logged:
@@ -884,10 +911,78 @@ func hud_text() -> String:
 	lines.append(resource_line())
 	lines.append(ai_line())
 	lines.append(sense_line())
+	lines.append(ecology_line())
 	if player.survival != null and player.survival.is_dead():
 		lines.append("death: 已死亡 —— 按 F6 重开（T022 临时入口；正式轮回属 P4）")
 	lines.append("keys: F1=cat  F2=mouse  F3=collision  F4=path  F5=hud  F6=restart  (WASD/Space/Shift/Ctrl 同正式操作)")
 	return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# 测试生态（T027）
+# ---------------------------------------------------------------------------
+
+## 每物种几只：**按 `can_attack` 分派**（捕食者少、猎物多），不写物种名。
+func _npc_count_overrides() -> Dictionary:
+	var out := {}
+	for cfg in _config_pool():
+		out[cfg.species_id] = predator_npc_count if cfg.can_attack else npc_count_per_species
+	return out
+
+
+## 按当前玩家物种铺生态（换物种时重铺：组件内部先 `clear()`）。开关关闭或组件缺失时不做任何事。
+func _setup_ecology(cfg: SpeciesConfig) -> void:
+	if ecology == null or not is_instance_valid(ecology) or player == null or cfg == null:
+		return
+	ecology.candidates = _config_pool()
+	ecology.count_overrides = _npc_count_overrides()
+	var report := ecology.setup(player, _spawn_position(cfg))
+	print("ECO|requested|player=%s|npcs=%d|min_dist=%.2f|skipped=%d|note=%s" % [
+		String(cfg.species_id), ecology.npc_count(), ecology.min_spawn_distance_actual(),
+		(report.get("skipped", []) as Array).size(), str(report.get("note", ""))
+	])
+
+
+## 生态真正铺好（导航就绪后可能晚一两拍）时打印一次，便于日志核对。
+func _on_ecology_ready(report: Dictionary) -> void:
+	var note := String(report.get("note", ""))
+	if note != "":
+		print("ECO|pending|%s|attempt=%s|player=%s" % [note, str(report.get("attempt", -1)),
+			str(report.get("player_species", ""))])
+		return
+	print("ECO|ready|player=%s|npcs=%d|min_dist=%.2f|spawned=%s|skip_reasons=%s" % [
+		str(report.get("player_species", "")), ecology.npc_count() if ecology != null else -1,
+		ecology.min_spawn_distance_actual() if ecology != null else -1.0,
+		str(report.get("spawned", [])), str(report.get("skip_reasons", {}))
+	])
+func ecology_npc_count() -> int:
+	return ecology.npc_count() if ecology != null and is_instance_valid(ecology) else 0
+
+
+func ecology_report() -> Dictionary:
+	return ecology.spawn_report() if ecology != null and is_instance_valid(ecology) else {}
+
+
+## 生态状态行（调试 HUD）。关闭时明确显示 `off`，避免"看不出有没有生态"。
+func ecology_line() -> String:
+	if ecology == null or not is_instance_valid(ecology):
+		return "eco: off（ecology_enabled=false；可玩入口 scenes/debug/ecology_entry.tscn）"
+	var prey := 0
+	var pred := 0
+	for b in ecology.npc_bodies():
+		if b.species_config == null:
+			continue
+		if b.species_config.can_attack:
+			pred += 1
+		else:
+			prey += 1
+	var rep := ecology.spawn_report()
+	var o := ecology.spawn_origin()
+	return "eco: on  player=%s  npcs=%d（prey=%d pred=%d）  min_dist=%.2f  safe_min=%.1f/%.1f  skipped=%d  origin=(%.1f, %.1f, %.1f)" % [
+		String(ecology.player_species_id()), ecology.npc_count(), prey, pred,
+		ecology.min_spawn_distance_actual(), ecology.min_spawn_distance, ecology.predator_min_distance,
+		(rep.get("skipped", []) as Array).size(), o.x, o.y, o.z
+	]
 
 
 # ---------------------------------------------------------------------------
