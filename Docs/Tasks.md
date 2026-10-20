@@ -53,7 +53,8 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 | T025 | **done（2026-10-22）** | `Docs/Evidence/T025.md`；`Docs/Tasks/T025.md`；`scripts/systems/attack.gd`（新组件 `AttackSettlement`）；`scripts/data/species_config.gd`（`Attack` 组 + 自校验）；`resources/species/cat.tres`/`mouse.tres`；`scripts/characters/animal_body.gd`（`ACT.ATTACKING` + `attack` 组件）；`scripts/ai/cat_ai.gd`（`State.ATTACK` + `attack_enabled`）；`debug_entry.gd`（`attack=` / `atk*`）；`tests/run_t025_attack.gd`；`tool_capture_render.gd -- t025`；`Art/Probes/t025_*.png` | NPC 攻击与玩家受伤：`AttackSettlement` 走 **预警 0.45 s → 伤害帧 35 → 恢复 1.2 s**（真源 `Parameters` 第 69 行）；**伤害帧四查一结算**（目标个体仍在 / 水平距离 ≤ 0.65 + 0.05 / 与**锁定方向**夹角 ≤ 60° / **无遮挡**）——躲开、绕墙、目标已死或被捕获**都无伤**；**遮挡复核刻意不走 `Perception` 的近距豁免**（0.65 m < 0.80 m，否则"绕墙"永远命中）；预警期不掉血、不位移（1 s ≤ 0.15 m）；恢复期内**绝不重复伤害**（同帧连按 10 次只启动 1 次）；伤害走既有 `survival.apply_damage(…, "attack")`，**受伤中断交互且无收益**、`died` 只发一次；鼠 `can_attack=false`（不建组件、AI 永不进 `attack`）；攻击不消耗体力、不扑击（T021 不受影响）；**175/175 ×3** + 包内 174/174；全量回归 **23 套件 2655 条全绿**；包 **Reborn.pck 249,140 B / SelfTest.pck 825,204 B**；**视觉 2 帧已产出**（`t025_telegraph` 抓在预警窗口 `attack_state=telegraphing` / `prey_hp=100`；`t025_hit` 抓在伤害帧后 `hits=1` / `prey_hp=65`）**但判读因 vision 服务 503 记 NOT-VERIFIED** |
 | T026 | **done（2026-10-23）** | `Docs/Evidence/T026.md`；`Docs/Tasks/T026.md`；`tests/run_t026_cover.gd`（96 条）；`tool_capture_render.gd -- t026`；`Art/Probes/t026_*.png` | 老鼠藏身与掩体规则：**三条规则实测全部为真 → 生产代码零改动**（验证型任务）。① **草丛只降低可见性**：`cover_volumes` 4 个全是 `visibility_factor=0.4` 的 `Area3D`（layer 0、**非实体**）；4.5 m 草丛内**看不见** / 开阔看得见，3.0 m 可见、3.9 m 不可见（9.0×0.4=3.6 两侧）；猫/鼠穿草丛 1 s 位移 1.653 / 1.071 m（**不被顶住**）；`AttackSettlement.occluded()` **不把草丛当遮挡**（照样命中 35，真墙对照 true）。② **鼠洞阻止猫进入**（**按层**跨墙路由）：猫**绕墙 34.68 m**（最近洞口 2.000 m）而鼠**直穿 4.00 m**（最近 0.041 m）；`reachable()` 猫 false / 鼠 true；物理推猫**停在 0.703 m**（走过 1.339 m）、鼠**钻到 0.089 m**。③ **躲藏不凭空恢复**：`HIDDEN` 3.95 s 内 hunger/thirst 不上升不回满、health 不恢复、stamina 最大帧增 0.00、衰减 0.1012 vs 探索 0.0990（同量级）。**96/96 ×3** + 包内 **96/96**；全量回归 **24 套 2751 条全绿**；包 **Reborn.pck 249,140 B / SelfTest.pck 849,852 B**；**视觉 2 帧 + vision 判读通过**（① 半透明草丛体量里的鼠 + HUD `seen=false`；② 洞口缝里半个鼠身 + 猫在墙外 `state=alert saw_prey`）。 |
 | T027 | **done（2026-10-24）** | `Docs/Evidence/T027.md`；`Docs/Tasks/T027.md`；`scripts/world/ecology_spawner.gd`（新组件 `EcologySpawner`）；`scenes/debug/ecology_entry.tscn`（可玩入口）；`scripts/debug/debug_entry.gd`（`ecology_enabled` 默认 false + `eco:` HUD 行）；`tests/run_t027_ecology.gd`（96 条）；`tool_capture_render.gd -- t027`；`Art/Probes/t027_*.png` | 按玩家物种布置测试生态：**同一张 `l_courtyard.tscn`** 上按玩家物种铺 NPC —— 猫玩家→**2 只鼠 NPC**（可捕）、鼠玩家→**1 只猫 NPC**（要躲），换物种**先 `clear()` 再重铺**（旧实例全释放、id 无残留）；**玩家不计入 NPC 数量**（`npc_count()` 只数本组件铺出的活跃 NPC，并与关卡 `animal_bodies` 存活数 − 1 交叉核对）；**出生周围无即时攻击** = 距离规则（非捕食者 8.0 m、捕食者 14.0 m，**都大于该物种视距** 6.5 / 9.0）+ 4 s 行为窗口（玩家零伤害、零攻击启动、最近距离 **3.63 m**）；落点用"现有出生标记 + 环上候选"，按**物种自己的导航层**吸附（层 1 最差 0.050 m / 层 2 最差 0.201 m），**不改关卡几何**；集成：鼠 NPC 从 1.51 m 逃到 8.50 m、玩家猫 0.98 m 扑击**捕获**（生态计数 2→1、捕获食物 +1）、猫 NPC 4.00 → **0.57 m** 接近、近距离**真的打到玩家**（100 → 65，一次 35 不秒杀）；**96/96 ×3** + 包内 **96/96**；全量回归 **25 套 2846 条全绿**；包 **Reborn.pck 263,052 B / SelfTest.pck 889,120 B**；**视觉 2 帧 + vision 判读通过**；**顺带修掉 1 个真实导出缺陷**（默认候选按 `.tres` 扩展名过滤 → 包里资源是 `.res`/`.remap` → 包内列表为空） |
-| T028～T063 | pending | 无 | 见 `轮生_Reborn_开发计划_v1.0.md` |
+| T028 | **awaiting-review（2026-10-25）** | `Docs/Evidence/T028.md`；`Docs/Tasks/T028.md`；`tests/tool_t028_walkthrough.gd`（自测走查，4 条硬判据）；`tool_capture_render.gd -- t028`；`Art/Probes/t028_*.png` | 第一轮概念试玩 —— **自测半边完成、真人半边 NOT-RUN**（agent 自测不替代真人）。在可玩入口 `scenes/debug/ecology_entry.tscn` 上把两物种路线各真实走一遍（`player_controlled=false` + 沿**按层导航路径**驱动）：**猫线** 11.18 m 内 0.90 s 看见鼠、**1 次扑击 3.9 s 捕获**（`route_len 10.96 / ratio 0.98`、`prey_states=["explore","alert"]`、`prey_min_gap 1.10 m`、捕获后生态 2→1）；**鼠线** 0.43 s 被猫看见（探针确认是 `alert/saw_prey` 8.92 m **视觉**触发、非初始化 bug）→ **14.1 s 进洞**（`hole_gap 0.24 m`、逃段 `21.39 m / straight 21.12 / ratio 1.01`）、**猫最近只到洞心 6.99 m** 且 12 s 内回 `explore`（`giveups=1`）；两线 `hp 100→100`、存活。**W1~W4 4/4 通过 ×3 次源码 + 包内 4/4**；全量回归 **25 套 2847 条全绿**；包 **Reborn.pck 263,052 B（与 T027 相同 → 生产代码零改动）/ SelfTest.pck 905,604 B**；**视觉 2 帧**（`t028_cat_chase` 210,342 B 判读通过：2 角色 + HUD `eco: player=Cat npcs=2`、`sense: seen=true`；`t028_mouse_hole` 221,923 B 部分确认：墙+缺口+HUD `pos:(26.68,0.12,19.00)`=洞口坐标，**角色辨识 vision 未确认、不编造**）；**暴露 2 个体验问题候选交 T029**：A 鼠 `ALERT` 0.3 s 在猫 `sprint 4.5` 下形同虚设、B 猫 AI 追击**从不 `want_sprint`**（walk 1.8 < 鼠 sprint 3.0 → 追不上） |
+| T029～T063 | pending | 无 | 见 `轮生_Reborn_开发计划_v1.0.md` |
 
 ### T001 判定明细（Godot 版）
 
@@ -83,15 +84,16 @@ pending 未开始；in-progress 正在执行；blocked 有明确前置缺口；a
 E01 的视觉部分**已补验通过**；**E02 本次通过**（`Docs/Evidence/T005.md`）；**E03 已通过**（T006 骨骼往返 65/65）。
 
 ## 选择顺序
-T001 / T002 / T003 / T005 / T006 / T007 / T008 ～ **T027 均已完成**；台阶、导航、调试入口、生存时间入口、交互接口、食物/饮水、正式 HUD、
-**鼠 NPC 状态机**、**感知（视觉 / 听觉 / 逃跑躲藏）**、**猫扑击与捕获结算**、**猫循环回归与打包**、**猫 NPC 巡游与发现**、**猫的追击 / 搜索 / 放弃**、**NPC 攻击与玩家受伤**、**老鼠藏身与掩体规则**、**按玩家物种布置测试生态**已落地。
+T001 / T002 / T003 / T005 / T006 / T007 / T008 ～ **T027 均已完成**，**T028 完成自测半边（awaiting-review）**；台阶、导航、调试入口、生存时间入口、交互接口、食物/饮水、正式 HUD、
+**鼠 NPC 状态机**、**感知（视觉 / 听觉 / 逃跑躲藏）**、**猫扑击与捕获结算**、**猫循环回归与打包**、**猫 NPC 巡游与发现**、**猫的追击 / 搜索 / 放弃**、**NPC 攻击与玩家受伤**、**老鼠藏身与掩体规则**、**按玩家物种布置测试生态**、**第一轮概念试玩的自测走查（两物种各一条真实路线 + 两帧视觉）**已落地。
 （口径变化：T011/T012 是"游戏代码零改动、差异全在配置/关卡/导航数据"；**T013 起开始真的改游戏代码** —— `step_climb` 抬升修复、调试入口、`SurvivalState`/`SurvivalController`、`AnimalBody` 接入、`Interactable`/`InteractionDetector`/`ResourcePoint` 与动作事务、`Perception`/`CaptureSettlement`、`AnimalBody.enum ACT` 扑击状态机、`DebugEntry.restart_round()`、`CatAI`（巡游 → 警戒 → 接近 → **追击 → 搜索 → 攻击**）、`AttackSettlement` 与**导航代理的脚下锚点**；**T026 是"验证型"任务：生产代码零改动**。）
-**P0 阶段门完成**；**P1 完成**（T008～T013）；**P2 完成**（T014～T022）；**P3 进行中**（T023、T024、T025、T026、T027 已 done）→ 下一步 **T028 第一轮概念试玩**。
+**P0 阶段门完成**；**P1 完成**（T008～T013）；**P2 完成**（T014～T022）；**P3 进行中**（T023、T024、T025、T026、T027 已 done；**T028 自测半边完成、真人半边 NOT-RUN → awaiting-review**）→ 下一步 **T029 调整路线与参数**。
 
 下一步可执行（按建议优先级）：
-1. **T028（第一轮概念试玩）**（4～8h，前置 T027 **已满足**）：找 2～3 位未参与设计的试玩者，或先做自测录像；**观察两种物种的路线变化**。
-   **试玩入口用可玩场景 `scenes/debug/ecology_entry.tscn`**（生态默认只在这里开着：猫玩家→2 只鼠 NPC / 鼠玩家→1 只猫 NPC；F1/F2 换物种自动重铺、F6 重开）。
-   先写 `Docs/Tasks/T028.md`，记录**观察到的行为**（不口头指挥每一步），并区分"自测录像"与"真实玩家"的证据强度（无外部玩家时只能记 awaiting-review）。
+1. **T029（调整路线与参数）**（2～4h，前置 T028 **已满足**）：针对 T028 暴露的**一个最大体验问题**调参并复测、更新 `Docs/Parameters.md`。
+   T028 已给两个候选（`Docs/Evidence/T028.md` §6）：**A** 鼠的 `ALERT` 停留 0.3 s 在猫 `sprint 4.5` 下形同虚设（`prey_states` 只到 `alert` 就被扑到，1 次扑击捕获）；
+   **B** 猫 AI 追击**从不 `want_sprint`**（全程 `walk 1.8` < 鼠 `sprint 3.0`，`cat_min_to_player=6.76 m` 就放弃）。**选一条改、改完复跑同一自测走查**。
+   **T028 的 U01 真人半边仍 NOT-RUN**：2～3 位外部试玩者的最小请求在 `Docs/Tasks/T028.md` §7 与 `Docs/Evidence/T028.md` §10，负责人安排后才能动。
    T027 §7 待定：**正式启动链**（`main.tscn` 仍是占位，正式出生/选物种属 T030）、**区域 NPC 数量账本属 T035**、
    **NPC 出生点正式布置**（本轮只用现有标记 + 环上候选，**未改关卡几何**）、**猫 : 鼠 NPC 数量配比 1 : 2** 是否最终设计（T029 按试玩结果调）。
    顺带带上待定：**猫跨 0.50 屏障是否加 `NavigationLink3D`**（T013 §9）、**跳跃是否消耗体力**（T015 §9）、
@@ -113,7 +115,7 @@ T001 / T002 / T003 / T005 / T006 / T007 / T008 ～ **T027 均已完成**；台�
 ② 骨骼动画**原地、无根运动**；导入会让极值削减约 1–2%（见 T006 证据 §3.2）。
 
 **T006 已解除，不再阻塞**：骨骼链往返已被实测证明，正式骨骼资产可以开始（但仍属 P6，需按阶段门排期）。
-T028 若只有自测，则 awaiting-review，不冒充真实玩家验证。
+T028 已按此执行：**awaiting-review**（自测 4/4 通过、U01 真人半边 NOT-RUN），**不冒充真实玩家验证**；后续任何"体验通过"都必须来自真人试玩。
 
 P4 前先阅读 TechnicalDesign 数据契约，T036 是契约实现检查与持久化准备，不是首次想数据结构。
 

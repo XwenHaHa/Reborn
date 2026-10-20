@@ -134,6 +134,9 @@ func _initialize() -> void:
 	# T027：按玩家物种布置测试生态（猫玩家→鼠 NPC / 鼠玩家→猫 NPC）。只在显式传 `-- t027` 时执行。
 	if OS.get_cmdline_user_args().has("t027"):
 		await _capture_t027_frames(lab)
+	# T028：第一轮概念试玩的两帧（猫追鼠 / 鼠在洞、猫在洞外）。只在显式传 `-- t028` 时执行。
+	if OS.get_cmdline_user_args().has("t028"):
+		await _capture_t028_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -1858,3 +1861,132 @@ func _t027_place(actor: Node3D, target: Node3D, dist: float) -> void:
 	if actor is CharacterBody3D:
 		(actor as CharacterBody3D).velocity = Vector3.ZERO
 	actor.look_at(Vector3(target.global_position.x, actor.global_position.y, target.global_position.z), Vector3.UP)
+
+
+## T028：第一轮概念试玩的两帧（**取景是摆位后的画面**，客观量在 `tool_t028_walkthrough.gd` 的 `WALK|` 日志里）
+## ① `t028_cat_chase`：猫玩家在鼠 NPC 背后 3 m 追上去（鼠 AI 实测只进到 `alert` 就被扑到）；
+## ② `t028_mouse_hole`：鼠玩家贴在洞口（`hole_gap ≤ 0.30`），猫 NPC 站在洞外 3 m。
+## 判据：`CAP|t028|done` + 两张 `save_result=0 (OK)`。只在显式传 `-- t028` 时执行。
+func _capture_t028_frames(lab: Node) -> void:
+	print("CAP|t028|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+	var packed: PackedScene = load(T027_ENTRY)
+	if packed == null:
+		print("CAP|t028|ERROR|entry load failed")
+		return
+	var entry: Node3D = packed.instantiate() as Node3D
+	root.add_child(entry)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	for i in SETTLE_FRAMES:
+		await process_frame
+	var eco: EcologySpawner = entry.get("ecology") as EcologySpawner
+	var player: AnimalBody = entry.get("player") as AnimalBody
+	var cat_cfg: SpeciesConfig = entry.get("cat_config") as SpeciesConfig
+	var mouse_cfg: SpeciesConfig = entry.get("mouse_config") as SpeciesConfig
+	if eco == null or player == null or cat_cfg == null or mouse_cfg == null:
+		print("CAP|t028|ERROR|ecology/player/config missing")
+		return
+	# ---- ① 猫玩家追鼠 NPC ----
+	var prey: AnimalBody = null
+	var nearest: float = INF
+	for b in eco.npc_bodies():
+		var d := b.global_position.distance_to(player.global_position)
+		if d < nearest:
+			nearest = d
+			prey = b
+	if prey == null:
+		print("CAP|t028|ERROR|no prey npc")
+		return
+	_t028_place_behind(player, prey, 3.0)
+	player.player_controlled = false              # 不走 Input，靠 move_intent 前进
+	var prey_states: Array[String] = []
+	for i in 45:
+		await physics_frame
+		player.move_intent = Vector2(0.0, -1.0)    # 本地前向 = 已 look_at(prey)
+		if prey.ai != null:
+			var st := String(prey.ai.state_id())
+			if not prey_states.has(st):
+				prey_states.append(st)
+	player.move_intent = Vector2.ZERO
+	print("CAP|t028|chase|player=Cat|prey=%s|gap=%.2f|prey_states=%s|npcs=%d" % [
+		String(prey.species_config.species_id), player.global_position.distance_to(prey.global_position),
+		str(prey_states), eco.npc_count()])
+	await _t028_frame(player, prey, "t028_cat_chase")
+	# ---- ② 鼠玩家在洞口、猫 NPC 在洞外 ----
+	entry.call("switch_species", mouse_cfg.species_id)
+	for i in SETTLE_FRAMES:
+		await process_frame
+	eco = entry.get("ecology") as EcologySpawner
+	player = entry.get("player") as AnimalBody
+	var hole := _t028_hole_marker()
+	var pred := _t028_predator(eco)
+	if player == null or hole == null or pred == null:
+		print("CAP|t028|ERROR|mouse stage missing player/hole/predator")
+		return
+	var hp: Vector3 = hole.global_position
+	_t028_put(player, Vector3(hp.x + 0.18, hp.y, hp.z))
+	player.player_controlled = false
+	if pred.ai is CatAI:
+		(pred.ai as CatAI).patrol_enabled = false   # 关巡游，否则它会自己走开
+	_t028_put(pred, Vector3(hp.x, pred.global_position.y, hp.z - 3.0))   # 墙沿 x 横贯、洞沿 z 穿过 → 猫放在相机这侧的墙前（z-3），才不会被墙挡
+	pred.look_at(Vector3(hp.x, pred.global_position.y, hp.z), Vector3.UP)
+	for i in 40:
+		await physics_frame
+		player.move_intent = Vector2.ZERO
+	print("CAP|t028|hole|player=Mouse|hole_gap=%.2f|pred=%s|pred_d=%.2f|pred_state=%s|npcs=%d" % [
+		player.global_position.distance_to(hp), String(pred.species_config.species_id),
+		pred.global_position.distance_to(hp),
+		String(pred.ai.state_id()) if pred.ai != null else "<none>", eco.npc_count()])
+	await _t028_frame(player, pred, "t028_mouse_hole")
+	print("CAP|t028|done")
+## 一帧：把 a 与 b 放进同一画面。机位取**垂直于 a→b 连线的侧向**（固定斜 45° 偏移在洞口处会被
+## `RootBarrier*` 挡住，2026-10-25 实测：`t028_mouse_hole` 只拍到鼠、洞口与猫全在画外），
+## 距离按两者间距缩放，保证两端都在视锥内。`side_sign` 用来避开墙侧。
+func _t028_frame(a: Node3D, b: Node3D, tag: String, side_sign: float = 1.0) -> void:
+	var mid: Vector3 = (a.global_position + b.global_position) * 0.5
+	var axis: Vector3 = b.global_position - a.global_position
+	axis.y = 0.0
+	axis = axis.normalized() if axis.length_squared() > 1e-6 else Vector3.FORWARD
+	var side: Vector3 = axis.cross(Vector3.UP).normalized() * side_sign
+	var gap: float = a.global_position.distance_to(b.global_position)
+	var dist: float = clampf(gap * 2.2, 3.0, 9.0)
+	var cam := Camera3D.new()
+	cam.fov = 60.0
+	root.add_child(cam)
+	cam.global_position = mid + side * dist + Vector3(0.0, dist * 0.8, 0.0)
+	cam.look_at(mid + Vector3(0.0, 0.2, 0.0), Vector3.UP)
+	cam.current = true
+	print("CAP|t028|%s|cam_side=%.1f|cam_dist=%.2f|gap=%.2f" % [tag, side_sign, dist, gap])
+	await _capture_view(tag, cam, 10)
+func _t028_put(node: Node3D, pos: Vector3) -> void:
+	node.global_position = pos
+	if node is CharacterBody3D:
+		(node as CharacterBody3D).velocity = Vector3.ZERO
+
+
+## 把 actor 放到 target 的**背后** dist 米并面朝它（只用于取景）。
+func _t028_place_behind(actor: Node3D, target: Node3D, dist: float) -> void:
+	var fwd: Vector3 = -target.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length_squared() > 1e-6 else Vector3.FORWARD
+	var pos: Vector3 = target.global_position - fwd * dist
+	_t028_put(actor, Vector3(pos.x, target.global_position.y, pos.z))
+	actor.look_at(Vector3(target.global_position.x, actor.global_position.y, target.global_position.z), Vector3.UP)
+
+
+func _t028_hole_marker() -> Node3D:
+	for n in get_nodes_in_group(&"hide_spots"):
+		if n is Node3D and n.has_meta("kind") and String(n.get_meta("kind")) == "mouse_hole":
+			return n as Node3D
+	return null
+
+
+func _t028_predator(eco: EcologySpawner) -> AnimalBody:
+	if eco == null:
+		return null
+	for b in eco.npc_bodies():
+		if b.species_config != null and b.species_config.can_attack:
+			return b
+	return null

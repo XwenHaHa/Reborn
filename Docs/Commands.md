@@ -810,6 +810,56 @@ $out = 'E:\Reborn\Builds\P0-Win64'
 - **可玩默认放新场景更便宜**：`ecology_enabled = true` 只写在**新场景** `scenes/debug/ecology_entry.tscn`，
   既有 `debug_entry.tscn` 保持默认 false → 12 个既有套件 / 7 个取景分支**零改动**（比"改默认值再逐个修夹具"划算得多）。
 - **异种植入的朝向也要管**：E4 里鼠 NPC 在 `explore` 中背对玩家 → 永不 `FLEE`；把玩家放到**它朝向的正前方 1.5 m** 后立刻逃开（1.51 → 8.50 m）。
+
+## 2.24 T028 第一轮概念试玩的自测走查（VERIFIED — 2026-10-25 实测）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+# 0) 语法（新脚本没有 class_name，不需要 --import）
+& $g --headless --path $p --check-only --script 'res://tests/tool_t028_walkthrough.gd'    # 0
+& $g --headless --path $p --check-only --script 'res://tests/tool_capture_render.gd'      # 0
+
+# 1) 自测走查（跑 3 次）：RESULT|PASS，checks=4 failures=0
+& $g --headless --path $p --script 'res://tests/tool_t028_walkthrough.gd' --quit-after 300000
+#   → WALK|boot|requested=Cat|player=Cat|npcs=2|eco_ready=true
+#   → WALK|cat|npc=2|spawn_gap=11.18|detect_s=0.90|pounces=1|catch_s=3.92|route_len=10.96|straight=11.18|ratio=0.98|prey_states=["explore","alert"]|prey_min_gap=1.10|hp=100.0->100.0|npcs_after=1|caught=true|alive=true
+#   → WALK|mouse|spotted_s=0.43|enter_hole_s=14.17|hole_gap=0.24|route=21.82(probe=0.43+escape=21.39)|straight_escape=21.12|ratio_escape=1.01|cat_min_to_hole=6.99|cat_min_to_player=6.76|cat_states=["explore"]|states_before=["explore","alert"]|giveups=1|hp=100.0->100.0|alive=true
+
+# 2) 全量回归 25 套（T002~T027）：checks=2847 failures=0
+
+# 3) 导出两预设（T028 生产代码零改动 → Reborn.pck 与 T027 同字节）
+& $g --headless --path $p --export-release "Windows Desktop"          "$out\Reborn.exe"            # Reborn.pck 263,052 B
+& $g --headless --path $p --export-debug   "Windows Desktop SelfTest" "$out\RebornSelfTest.exe"    # SelfTest.pck 905,604 B
+
+# 4) 包内复验
+& $g --headless --main-pack "$out\RebornSelfTest.pck" --script 'res://tests/tool_t028_walkthrough.gd' --quit-after 300000   # 4/4 PASS
+
+# 5) 视觉两帧（**不能加 --headless**；同步跑；约 40 s）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 3000 -- t028
+#   → CAP|t028|chase|player=Cat|prey=Mouse|gap=1.83|prey_states=["explore","alert"]|npcs=2
+#   → CAP|t028|hole|player=Mouse|hole_gap=0.18|pred=Cat|pred_d=3.01|pred_state=explore|npcs=1
+#   → 两张 save_result=0 (OK) → CAP|t028|done
+
+# 6) 读图判读（逐字读 HUD 最可靠；角色辨识不可靠）
+node "E:\claude-vision-skill\vision.js" "E:\Reborn\Art\Probes\t028_cat_chase.png" "<问题>"
+```
+
+### 本任务踩到的坑（**会污染证据，不只是测试**）
+- **驱动玩家必须先关 `player_controlled`**：`AnimalBody._read_input()` 在 `player_controlled = true` 时每帧把 `move_intent` 覆盖成 `Input.get_vector(...)`（headless 恒为 0），
+  直写 `move_intent` 会被吃掉；关掉后"`look_at(下一路点)` + `move_intent = (0,-1)`"才真的走。
+- **`look_at` 只在"没有 AI"的身体上可靠**：玩家关掉 `player_controlled` 后没有 AI，朝向不会被覆盖（NPC 则会被 `patrol_moving` / `explore` 改掉朝向）。
+- **取景机位别用固定斜偏移**：`mid + (2.8,3.4,2.8)` 这种在 `RootBarrier*` 附近会被墙挡住（实测只拍到鼠、洞口与猫全在画外）。
+  用**垂直于 a→b 连线的侧向机位**，距离按间距缩放（`clampf(gap*2.2, 3.0, 9.0)`、高度 `dist*0.8`）。
+- **洞口的方向要先量清楚**：`RootBarrierWest(18.19,·,19)` / `East(31.31,·,19)` / `Lintel(26.5,·,19)` 都在 `z=19`、x 各不同 →
+  墙**沿 x 横贯**、洞**沿 z 穿过**。把"洞外的猫"放到 `hp.z ± 3` 会**塞进墙里**（画面里直接消失）；要放到相机这一侧的墙前（`hp.z - 3`）。
+- **探针别把方法当属性**：`WorldDirector.noise_emitted` 是**方法**，`int(_wd.get("noise_emitted"))` 抛 `Invalid call. Nonexistent 'int' constructor` → 整段跑挂、只剩 boot 那行。
+- **生态落点每局不同**：同一入口两次运行，猫 NPC 出生距离 14.47 m（T027）vs 10.11 m（T028）→ 带"某局距离"的断言要留余量；
+  也别把"某局 0.43 s 被发现"当成猫的发现能力（本轮是**两者相向接近**的结果）。
+- **别把 `state_id()` 的首次出现当"AI 坏了"**：`spotted_s=0.43` 看着像初始化就 alert，探针一打才知道是真视觉触发（`alert/saw_prey` @8.92 m ≈ `vision_range 9.0`）。**先加状态原因采样，再下结论**。
+- **vision 的小目标辨识不可靠**：鼠胶囊 `r=0.06 × h=0.18` 在远机位就是几个像素，同一张图三次判读给出 0/1/3 个角色 → **只把 HUD 逐字读出当硬证据**，角色辨识记未确认。
 ## 3. Blender（VERIFIED）
 
 
@@ -1120,3 +1170,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-22 | **T025 完成**。新增 §2.21 NPC 攻击与玩家受伤命令（175 条断言 ×3 + 两预设导出与字节记录 + 包内复验 174 条 + `-- t025` 两帧 + 七条实测坑：**`ACT` 枚举只能追加**、**"锁定方向"要先结算再清零**、**攻击遮挡复核不能借感知（近距豁免）**、**断言里别重复调被测函数 / lambda 按值捕获**、**夹具隐藏点必须在竞技场内（否则摔死）**、**`ResourcePoint.new()` 没有碰撞体**、**后台 Start-Process 取景无输出 → 同步跑**）；T023/T024 的夹具改为"关掉攻击"；两帧截图已产出，**判读因 vision 服务 503 记 NOT-VERIFIED**。 |
 | 2026-10-23 | **T026 完成**。新增 §2.22 老鼠藏身与掩体规则命令（96 条断言 ×3 + 两预设导出与字节记录 + 包内复验 96 条 + `-- t026` 两帧 + 七条实测坑：**`map_get_closest_point` 层盲**（猫鼠共用一张世界地图 RID → 必须用带层的 `map_get_path`）、**"朝出生点"来向与墙平行会把身体摆进墙里**（→ 洞轴取 `RootBarrierLintel` 本地 z 轴）、**每段都要夹具守卫断言**、`ai_enabled` 关→开会**重建 AI 实例**（旧引用 `previously freed`）、**鼠背对猫时永不 `FLEE`**、**夹具草丛体量要自带可见网格**、**洞口通视很挑机位**）。**生产代码零改动**（验证型任务：三条规则实测全为真）。 |
 | 2026-10-24 | **T027 完成**。新增 §2.23 按玩家物种布置测试生态命令（96 条断言 ×3 + 两预设导出与字节记录 + 包内复验 96 条 + `-- t027` 两帧 + 六条实测坑：**导出包里资源是 `.res`/`.remap`**（按扩展名过滤会静默变空）、**`_ready` 阶段导航未 iteration**（组件自己 pending 重试）、**摆位前先关 NPC 巡游/朝向**、**判据别只看末帧**、**可玩默认放新场景以零改动既有夹具**、**异种植入的朝向**）。新增 `EcologySpawner` 组件与 `ecology_entry.tscn` 可玩入口。 |
+| 2026-10-25 | **T028 完成自测半边（awaiting-review）**。新增 §2.24 第一轮概念试玩的自测走查命令（走查工具 4/4 硬判据 ×3 + 包内 4/4 + 两预设导出与字节记录 + `-- t028` 两帧 + vision 判读口径）；§2.24 补 **8 条实测坑**（`player_controlled` 会吃掉 `move_intent`、`look_at` 只在无 AI 时可靠、固定斜机位会被 `RootBarrier*` 挡、洞的穿行方向是 ±z、探针别把方法当属性、生态落点每局不同、别把首次 `alert` 当 bug 先采样 `state_reason()`、vision 的小目标辨识不可靠）；§9 记 **U01 真人半边仍 NOT-RUN** |
