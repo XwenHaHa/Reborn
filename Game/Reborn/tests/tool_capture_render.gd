@@ -128,6 +128,9 @@ func _initialize() -> void:
 	# T025：NPC 攻击与玩家受伤（预警中 / 命中后）。只在显式传 `-- t025` 时执行。
 	if OS.get_cmdline_user_args().has("t025"):
 		await _capture_t025_frames(lab)
+	# T026：藏身与掩体（草丛里不可见 / 洞口外等待）。只在显式传 `-- t026` 时执行。
+	if OS.get_cmdline_user_args().has("t026"):
+		await _capture_t026_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -1574,3 +1577,174 @@ func _capture_t025_frames(lab: Node) -> void:
 	else:
 		print("CAP|t025|ERROR|no hit（hit=%s）" % str(hit))
 	print("CAP|t025|done")
+# ---------------------------------------------------------------------------
+# T026：老鼠藏身与掩体规则（草丛只降可见性 / 鼠洞阻止猫进入）
+
+const T026_ENTRY := "res://scenes/debug/debug_entry.tscn"
+const T026_BODY := "res://scenes/characters/animal_body.tscn"
+const T026_MOUSE := "res://resources/species/mouse.tres"
+
+
+## 两帧（都用**自带第三人称相机**；HUD 是 CanvasLayer，仍会出现在画面上）：
+## ① `t026_cover`：鼠站在**草丛体量**里、猫在 4.5 m 外（> 9.0 × 0.4 = 3.6）→ CAP 行给 `cover_factor/visible` 客观值；
+## ② `t026_hole`：鼠在洞腔里、猫贴在墙外 → CAP 行给两边到洞心的距离与状态。
+## 判据：结尾 `CAP|t026|done` 且两张 `save_result=0 (OK)`。
+func _capture_t026_frames(lab: Node) -> void:
+	print("CAP|t026|start")
+	lab.queue_free()
+	await process_frame
+	await process_frame
+	var packed: PackedScene = load(T026_ENTRY)
+	if packed == null:
+		print("CAP|t026|ERROR|entry load failed")
+		return
+	var entry: Node3D = packed.instantiate() as Node3D
+	root.add_child(entry)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	for i in SETTLE_FRAMES:
+		await process_frame
+	var player: AnimalBody = entry.get("player") as AnimalBody
+	var level: Node3D = entry.get("level") as Node3D
+	if player == null or level == null:
+		print("CAP|t026|ERROR|player/level missing")
+		return
+	var mouse_cfg := load(T026_MOUSE) as SpeciesConfig
+	var body_packed := load(T026_BODY) as PackedScene
+	if mouse_cfg == null or body_packed == null:
+		print("CAP|t026|ERROR|mouse config/body missing")
+		return
+	player.ai_enabled = true
+	var ai := player.ai as CatAI
+	if ai == null:
+		print("CAP|t026|ERROR|CatAI missing")
+		return
+	ai.patrol_enabled = false
+	ai.attack_enabled = false
+	var fwd := -player.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length_squared() > 1e-8 else Vector3.FORWARD
+	var right := player.global_transform.basis.x
+	right.y = 0.0
+	right = right.normalized() if right.length_squared() > 1e-8 else Vector3.RIGHT
+	var mouse := body_packed.instantiate() as AnimalBody
+	mouse.species_config = mouse_cfg
+	mouse.player_controlled = false
+	mouse.ai_enabled = false
+	var grass_at := player.global_position + fwd * 4.5
+	var cover := _t026_cover_volume(level, Vector3(grass_at.x, 0.75, grass_at.z), Vector3(2.4, 1.5, 2.4), 0.4)
+	mouse.position = Vector3(grass_at.x, 0.10, grass_at.z)
+	level.add_child(mouse)
+	for i in 12:
+		await physics_frame
+	var cf := player.perception.cover_factor_at(mouse.global_position)
+	var seen := player.perception.is_threat_visible()
+	print("CAP|t026|cover|dist=%.2f|cover_factor=%.2f|vision_range=%.2f|eff_range=%.2f|visible=%s|cover_fixture=%s|cat_state=%s|cat_reason=%s" % [
+		player.global_position.distance_to(mouse.global_position), cf, player.species_config.vision_range,
+		player.species_config.vision_range * cf, str(seen), str(cover != null),
+		str(ai.state_id()), str(ai.state_reason())])
+	var cam0 := Camera3D.new()
+	cam0.fov = 60.0
+	root.add_child(cam0)
+	cam0.global_position = player.global_position - fwd * 2.2 + right * 1.6 + Vector3(0.0, 1.5, 0.0)
+	cam0.look_at(mouse.global_position + Vector3(0.0, 0.15, 0.0), Vector3.UP)
+	cam0.current = true
+	await _capture_view("t026_cover", cam0, 6)
+	var hole := _t026_hole_marker()
+	if hole == null:
+		print("CAP|t026|ERROR|hole marker missing")
+		return
+	var hole_point: Vector3 = hole.global_position
+	var normal := _t026_wall_normal(level)
+	var mouse_in := hole_point + normal * 0.25
+	mouse.ai_enabled = false
+	mouse.global_position = Vector3(mouse_in.x, 0.10, mouse_in.z)
+	var side := normal.cross(Vector3.UP)
+	side = side.normalized() if side.length_squared() > 1e-8 else Vector3.RIGHT
+	var cat_out := hole_point + normal * 0.95 - side * 0.30
+	player.global_position = Vector3(cat_out.x, 0.25, cat_out.z)
+	await physics_frame
+	player.look_at(Vector3(hole_point.x, player.global_position.y, hole_point.z), Vector3.UP)
+	await physics_frame
+	mouse.look_at(Vector3(player.global_position.x, mouse.global_position.y, player.global_position.z), Vector3.UP)
+	for i in 4:
+		await physics_frame
+	mouse.ai_enabled = true
+	for i in 2:
+		await physics_frame
+	var m_ai := mouse.ai as MouseAI
+	var hid := false
+	var t0 := _t021_world_time()
+	while _t021_world_time() - t0 < 4.0:
+		await physics_frame
+		if m_ai != null and m_ai.state_id() == &"hidden":
+			hid = true
+			break
+	var cat_d := player.global_position.distance_to(hole_point)
+	var mouse_d := mouse.global_position.distance_to(hole_point)
+	print("CAP|t026|hole|cat_to_hole=%.3f|mouse_to_hole=%.3f|radius=%.2f|hid=%s|mouse_state=%s|hidden_n=%d|cat_state=%s|cat_reason=%s|gap=%.2f" % [
+		cat_d, mouse_d, float(hole.get_meta("radius", -1.0)), str(hid),
+		str(m_ai.state_id()) if m_ai != null else "<null>", m_ai.hidden_count() if m_ai != null else -1,
+		str(ai.state_id()), str(ai.state_reason()), player.global_position.distance_to(mouse.global_position)])
+	var cam1 := Camera3D.new()
+	cam1.fov = 55.0
+	root.add_child(cam1)
+	# 低机位 + 离轴 0.70 m：从猫旁边看进洞口缝里的鼠（洞腔 0.24 宽 × 0.30 高 → 轴向约 ±13° 内可见）
+	cam1.global_position = hole_point + normal * 2.4 + side * 0.70 + Vector3(0.0, 0.55, 0.0)
+	cam1.look_at(hole_point + Vector3(0.0, 0.15, 0.0), Vector3.UP)
+	cam1.current = true
+	await _capture_view("t026_hole", cam1, 6)
+	print("CAP|t026|done")
+
+
+## 造一个"草丛体量"（与关卡 `cover_volumes` 同构：`Area3D` + layer 0 + `visibility_factor`，非实体）
+func _t026_cover_volume(parent: Node, pos: Vector3, size: Vector3, factor: float) -> Area3D:
+	var area := Area3D.new()
+	area.name = "T026CoverFixture"
+	area.collision_layer = 0
+	area.collision_mask = 0
+	area.monitoring = false
+	area.monitorable = false
+	area.position = pos
+	area.set_meta("visibility_factor", factor)
+	area.set_meta("role", "cover")
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	cs.shape = box
+	area.add_child(cs)
+	var mesh := MeshInstance3D.new()
+	mesh.name = "FixtureVisual"
+	var bm := BoxMesh.new()
+	bm.size = size
+	mesh.mesh = bm
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.25, 0.80, 0.30, 0.30)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.material_override = mat
+	area.add_child(mesh)
+	area.add_to_group(&"cover_volumes")
+	parent.add_child(area)
+	return area
+
+
+## 洞轴 = 墙法线：关卡 RootBarrier 墙（group `nav_source_courtyard`，名字含 `Lintel`）的本地 z 轴
+func _t026_wall_normal(level: Node) -> Vector3:
+	var stack: Array[Node] = [level]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is Node3D and n.is_in_group(&"nav_source_courtyard") and String(n.name).contains("Lintel"):
+			var axis := (n as Node3D).global_transform.basis.z
+			axis.y = 0.0
+			if axis.length_squared() > 1e-8:
+				return axis.normalized()
+		for c in n.get_children():
+			stack.append(c)
+	return Vector3(0.0, 0.0, 1.0)
+
+
+func _t026_hole_marker() -> Node3D:
+	for n in get_nodes_in_group(&"hide_spots"):
+		if n is Node3D and n.has_meta("kind") and String(n.get_meta("kind")) == "mouse_hole":
+			return n as Node3D
+	return null

@@ -704,6 +704,64 @@ $out = 'E:\Reborn\Builds\P0-Win64'
   （实测 88.85 m/s → 直接摔死），后续断言会以完全无关的理由失败。
 - **`ResourcePoint.new()` 没有碰撞体**：交互检测找不到它；要用 `resource_point.tscn` 实例。
 - **后台 `Start-Process` 取景这次全程无输出**（log/err 都 0 字节、进程立刻结束）→ 改用**同步执行**一次成功。
+
+
+## 2.22 T026 老鼠藏身与掩体规则（VERIFIED — 2026-10-23 实测）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$p = 'E:\Reborn\Game\Reborn'
+$out = 'E:\Reborn\Builds\P0-Win64'
+
+# 0) 语法（本任务**只改测试**：生产代码零改动）
+& $g --headless --path $p --check-only --script 'res://tests/run_t026_cover.gd'              # 0
+& $g --headless --path $p --check-only --script 'res://tests/tool_capture_render.gd'         # 0
+
+# 1) 可失败状态（第一次跑）：exit=1、checks=64、failures=3 + `previously freed` 刷屏
+#    → 逐项定位后**全是夹具/断言缺陷**（见下"坑"），不是实现缺口
+
+# 2) 断言套件 ×3（核对 SUMMARY|checks=96|failures=0）
+& $g --headless --path $p --script 'res://tests/run_t026_cover.gd' --quit-after 300000        # 96/0 ×3
+
+# 3) 全量回归 24 套（T002…T026，合计 2751 条）：全绿、零脚本错误
+
+# 4) 导出两预设
+& $g --headless --path $p --export-release "Windows Desktop"          "$out\Reborn.exe"           # 0 → Reborn.pck 249,140 B
+& $g --headless --path $p --export-debug   "Windows Desktop SelfTest" "$out\RebornSelfTest.exe"   # 0 → SelfTest.pck 849,852 B
+
+# 5) 包内复验（只能用编辑器二进制 + --main-pack）
+& $g --headless --main-pack "$out\RebornSelfTest.pck" --script 'res://tests/run_t026_cover.gd' --quit-after 300000   # 96/0
+
+# 6) 视觉两帧（**不能加 --headless**；同步跑）
+& $g --path $p --script 'res://tests/tool_capture_render.gd' --quit-after 2000 -- t026
+#   → CAP|t026|cover|dist=4.50|cover_factor=0.40|eff_range=3.60|visible=false
+#   → CAP|t026|hole|cat_to_hole=1.025|mouse_to_hole=0.266|radius=0.30|hid=true|cat_state=alert|cat_reason=saw_prey
+#   → 两张 save_result=0 (OK) → CAP|t026|done
+
+# 7) 只读核对 Godot API（**不改工程**）：官方类文档 dump 到 scratch 再查签名
+& $g --headless --doctool "$env:PI_SCRATCH_DIR\godot_docs"
+Select-String -Path "$env:PI_SCRATCH_DIR\godot_docs\doc\classes\NavigationServer3D.xml" -Pattern 'map_get_closest_point'
+#   → 只有 `(map, to_point)`：**没有导航层参数**（层盲）
+```
+
+### 本任务踩到的坑（**会污染别的测试**）
+
+- **`NavigationServer3D.map_get_closest_point(map, p)` 层盲**（4.7.2 无层参数）：猫/鼠**共用同一张世界地图 RID** →
+  对猫查询会拿到**鼠标层**洞面上的点（实测 0.040 m）；判"猫能不能进洞"必须用**带层**的 `map_get_path(..., true, layer)`。
+  `AnimalAI.reachable()` 的判据① 同样层盲：它只会造成**假否**（判据② 带层，故"真 ⟹ 真能到"仍成立）。
+- **"朝出生点"的来向可能与墙平行**：`_approach_dir = normalize(猫出生点 − 洞口)` 会把猫/鼠**插进 `RootBarrierWest` 墙体**，
+  表现是"推了 1.5 s 只挪 1 mm"——于是"猫没进洞"变成**空断言**。
+  正确做法：洞轴取关卡墙 `RootBarrierLintel` 的**本地 z 轴**（`_wall_normal()`），并按物种站立高度摆位（`_push_start()`）。
+- **每个物理/行为段都要有"夹具守卫断言"**：C5/C6 加"真的走过 ≥ 0.50 m"、E 加"猫真的追过 ≥ 1.00 m + 鼠真的躲过"。
+  守卫失败远比"空断言通过"有用（T025 的墙内摆放、T026 首轮 C5 都是这么被抓出来的）。
+- **`ai_enabled` 关→开会重建 AI 实例**：旧引用立刻变 `previously freed`，lambda 每帧抛错并让整段退化成"没跑到"
+  （实测刷了 3694 行错误）。重开后要**重新取** `body.ai`，并用 `is_instance_valid()` 守卫。
+- **鼠"背对"猫时感知（视锥）看不见威胁 → 永不 `FLEE`**：摆位后必须让鼠**面朝**猫（`look_at`），
+  再加前置断言 `perception.is_threat_visible() == true`，否则整段都是空断言。
+- **夹具造的草丛体量要自带可见网格**：`Area3D` 只有碰撞形状时画面里**什么都看不到**，
+  视觉帧会被判成"没有角色在草丛里"；给夹具盒加半透明绿 `BoxMesh` 才有有效判读。
+- **洞口缝只有 0.24×0.30，「通视」很挑机位**：要看进洞里，机位得低（y ≈ 0.55）、离轴 ≈ 0.7 m，
+  并把猫**侧移 0.3 m** 让开视线；否则画面里只有"猫对着墙"。
 ## 3. Blender（VERIFIED）
 
 
@@ -1012,3 +1070,4 @@ Godot 4.7 中该选项为 `No=0 / Debug Only=1 / Debug and Release=2`。
 | 2026-10-20 | **T023 完成**。新增 §2.19 猫 NPC 巡游与发现命令（177 条断言 + 两预设导出与字节记录 + 包内复验 175 条 + `-- t023` 两帧 + 六条实测坑：**导航代理必须挂脚下（`NavigationAgent3D` 位置取自父节点，挂中心会让高个子物种零位移）**；"朝目标"兜底只在**有路径**时生效，否则不可达会被走成可达；几何段必须关 AI；遮挡测试要注意近距豁免与"沿墙绕开"；到点要清 `patrol_target_id`；环上巡游的 `ring_*` 是方向索引会重复）。 |
 | 2026-10-21 | **T024 完成**。新增 §2.20 追击、搜索和放弃命令（134 条断言 ×3 + 两预设导出与字节记录 + 包内复验 133 条 + `-- t024` 两帧 + 五条实测坑：**`ai_enabled` 不是暂停开关（关掉会释放、再打开会重建 AI 实例，旧引用失效甚至崩）**、**瞬时 `state_reason()` 同帧会被覆盖 → 触发原因要用转移账断言**、**实心墙造遮挡会同时挡路（失败链会早于 5 s 超时）**、**"隐藏"的猎物必须在视锥与视距之外**、**窗口捕获会收到真实输入（`pounce` = 鼠标左键）**）；T023 的 2 条断言升级为"失视 → `SEARCH`"。 |
 | 2026-10-22 | **T025 完成**。新增 §2.21 NPC 攻击与玩家受伤命令（175 条断言 ×3 + 两预设导出与字节记录 + 包内复验 174 条 + `-- t025` 两帧 + 七条实测坑：**`ACT` 枚举只能追加**、**"锁定方向"要先结算再清零**、**攻击遮挡复核不能借感知（近距豁免）**、**断言里别重复调被测函数 / lambda 按值捕获**、**夹具隐藏点必须在竞技场内（否则摔死）**、**`ResourcePoint.new()` 没有碰撞体**、**后台 Start-Process 取景无输出 → 同步跑**）；T023/T024 的夹具改为"关掉攻击"；两帧截图已产出，**判读因 vision 服务 503 记 NOT-VERIFIED**。 |
+| 2026-10-23 | **T026 完成**。新增 §2.22 老鼠藏身与掩体规则命令（96 条断言 ×3 + 两预设导出与字节记录 + 包内复验 96 条 + `-- t026` 两帧 + 七条实测坑：**`map_get_closest_point` 层盲**（猫鼠共用一张世界地图 RID → 必须用带层的 `map_get_path`）、**"朝出生点"来向与墙平行会把身体摆进墙里**（→ 洞轴取 `RootBarrierLintel` 本地 z 轴）、**每段都要夹具守卫断言**、`ai_enabled` 关→开会**重建 AI 实例**（旧引用 `previously freed`）、**鼠背对猫时永不 `FLEE`**、**夹具草丛体量要自带可见网格**、**洞口通视很挑机位**）。**生产代码零改动**（验证型任务：三条规则实测全为真）。 |
