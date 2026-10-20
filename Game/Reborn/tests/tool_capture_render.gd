@@ -140,6 +140,9 @@ func _initialize() -> void:
 	# T029：追击冲刺一帧（猫 NPC 打开冲刺追鼠玩家）。只在显式传 `-- t029` 时执行。
 	if OS.get_cmdline_user_args().has("t029"):
 		await _capture_t029_frames(lab)
+	# T030：生命周期两帧（存活 / 结算→选物种）。只在显式传 `-- t030` 时执行。
+	if OS.get_cmdline_user_args().has("t030"):
+		await _capture_t030_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -2054,3 +2057,91 @@ func _capture_t029_frames(lab: Node) -> void:
 		String(pred.ai.state_reason()) if pred.ai != null and pred.ai.has_method("state_reason") else "-"])
 	await _t028_frame(player, pred, "t029_chase")
 	print("CAP|t029|done")
+
+
+# ---------------------------------------------------------------------------
+# T030 生命周期（存活 / 结算→选物种）
+# ---------------------------------------------------------------------------
+
+const T030_MAIN := "res://scenes/core/main.tscn"
+const T030_MOUSE := "res://resources/species/mouse.tres"
+const T030_OVERVIEW_POS := Vector3(26.5, 11.0, 31.0)
+const T030_OVERVIEW_LOOK := Vector3(26.5, 0.0, 19.0)
+
+
+func _t030_overview_camera() -> Camera3D:
+	var cam := Camera3D.new()
+	cam.name = "T030OverviewCamera"
+	cam.fov = 50.0
+	cam.near = 0.05
+	cam.far = 200.0
+	root.add_child(cam)
+	cam.global_position = T030_OVERVIEW_POS
+	cam.look_at(T030_OVERVIEW_LOOK, Vector3.UP)
+	cam.current = true
+	return cam
+
+
+## 正式入口的"选物种 → 存活 → 结算"三帧视觉证据（状态文字 + 是否留下尸体）。
+func _capture_t030_frames(lab: Node) -> void:
+	print("CAP|t030|start")
+	lab.visible = false
+	var packed: PackedScene = load(T030_MAIN)
+	if packed == null:
+		print("CAP|t030|ERROR|main.tscn load failed")
+		return
+	var main: Node = packed.instantiate()
+	root.add_child(main)
+	for i in 12:
+		await process_frame
+	var entry := main as MainEntry
+	if entry == null:
+		print("CAP|t030|ERROR|main.tscn 根节点不是 MainEntry")
+		main.queue_free()
+		return
+
+	var cam := _t030_overview_camera()
+	print("CAP|t030|state=%s|status=%s" % [entry.lifecycle_state_name(), entry.status_text()])
+	await _capture_view("t030_select", cam, 12)
+
+	var cfg := load(T030_MOUSE) as SpeciesConfig
+	if cfg == null:
+		print("CAP|t030|ERROR|mouse 配置缺失")
+		main.queue_free()
+		return
+	var ok := entry.select_species(cfg.species_id)
+	for i in 12:
+		await process_frame
+	print("CAP|t030|spawn_ok=%s|state=%s|life=%s|player=%s" % [
+		str(ok), entry.lifecycle_state_name(), entry.current_life_id(),
+		str(entry.player != null)
+	])
+	var player_cam := root.get_viewport().get_camera_3d()
+	if player_cam != null:
+		await _capture_view("t030_alive", player_cam, 12)
+	else:
+		print("CAP|t030|ERROR|玩家相机缺失")
+
+	# 推进世界时间再致死，保证档案里的"存活时长"非零
+	var wd := root.get_node_or_null("WorldDirector")
+	if wd != null:
+		wd.call("set_world_time", float(wd.get("world_time")) + 3.0)
+	if entry.player != null and is_instance_valid(entry.player):
+		entry.player.survival.apply_damage(9999.0, &"capture_demo")
+	for i in 12:
+		await process_frame
+	print("CAP|t030|after_death|state=%s|archive=%d|status=%s" % [
+		entry.lifecycle_state_name(), entry.archive_count(), entry.status_text()
+	])
+	var rec := entry.last_record()
+	if not rec.is_empty():
+		print("CAP|t030|record|%s|species=%s|duration=%.2f|end=%s" % [
+			String(rec.get("life_id", "")), String(rec.get("species_id", "")),
+			float(rec.get("duration", -1.0)), String(rec.get("end_reason", ""))
+		])
+	cam.current = true
+	await _capture_view("t030_settled", cam, 12)
+	main.queue_free()
+	for i in 4:
+		await process_frame
+	print("CAP|t030|done")
