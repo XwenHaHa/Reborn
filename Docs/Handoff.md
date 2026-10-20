@@ -157,7 +157,10 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **单位**：Godot 用**米**，`Parameters.md` 是**厘米** → **÷100**。
   `CapsuleShape3D.height` 是**含两端半球的总高**（Cat：`radius=0.16, height=0.48`）。
 - **键码**：手写 `project.godot` 要写裸数字，**必须实测核对**（Esc=4194305、Shift=4194325、Ctrl=4194326）。
-- **Git 推送**必须走代理 `127.0.0.1:7897`（直连 github.com 超时），**未写入全局配置**。
+- **Git 推送**必须走代理 `127.0.0.1:7897`（直连 github.com 超时），**未写入全局配置**；
+  2026-10-27 已在**仓库本地**配好 `http.proxy` / `https.proxy` = `http://127.0.0.1:7897`，
+  并设 `lfs.https://github.com/XwenHaHa/Reborn.git/info/lfs.locksverify=false`
+  —— **不设这一条 `git push` 会先卡在 LFS 锁校验超时**（远端 LFS locking API 经本机代理不可达，本仓库也没用锁）。
 - **视觉工具可用**：`E:\claude-vision-skill\vision.js`（先用已知答案图 `Art/Probes/vision_probe_red_blue.png` 自检）：
   `node E:\claude-vision-skill\vision.js <图片> "<中文问题>"`。
   T025 期间曾返回 **API 503 `auth_unavailable`**（当时记 NOT-VERIFIED）；**T026 期间已恢复**（两帧判读通过）。
@@ -240,8 +243,8 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 | 事项 | 说明 |
 |---|---|
-| **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T010 → `8140d6f`，T011 → `1f71f46`，T012 → `2968909`，T013 → `89ac039`，T014 → `b6351d9`，T015 → `79f2bbd`，T016 → `692fe9a`，T017 → `ab6225e`，T018 → `a2070bc`，T019 → `5bfb1c7`，T020 → `38be427`，T021 → `c36fff2`，T022 → `5b922be`，T023 → `899444c`，T024 → `cd66a9f`，T025 → `80b7eba`，T026 → `2769811`，T027 → `3ae16b9`，T028 → `d8374b3`，**T029 → `36d5944`**）；当前 `main` 比 `origin/main` **ahead 以 `git rev-list --count origin/main..main` 为准（T029 的 feat 提交与其文档修补提交），未推送** |
-| **Git 推送 / 发布** | 仍需确认。推送要经本机代理 `127.0.0.1:7897`（`Docs/Commands.md` §4.1），推送前先确认远端无他人提交 |
+| **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T010 → `8140d6f`，T011 → `1f71f46`，T012 → `2968909`，T013 → `89ac039`，T014 → `b6351d9`，T015 → `79f2bbd`，T016 → `692fe9a`，T017 → `ab6225e`，T018 → `a2070bc`，T019 → `5bfb1c7`，T020 → `38be427`，T021 → `c36fff2`，T022 → `5b922be`，T023 → `899444c`，T024 → `cd66a9f`，T025 → `80b7eba`，T026 → `2769811`，T027 → `3ae16b9`，T028 → `d8374b3`，**T029 → `36d5944`**）；当前 `main` 比 `origin/main` **ahead 以 `git rev-list --count origin/main..main` 为准（当时累计 50 个提交未推送，含 T029 / T030）；**已于 2026-10-27 推送成功：`origin/main` = `8da9eeb`，ahead=0 / behind=0，LFS 54/54 对象（10 MB）已上传** |
+| **Git 推送 / 发布** | **推送于 2026-10-27 已打通并执行**（`origin/main` = `8da9eeb`）。原因与修法：① 直连 github.com 超时 → 需代理 `127.0.0.1:7897`；② 远端 LFS locking API 经该代理不可达 → 必须关掉锁校验。两项都已写在**仓库本地配置**（不动全局），见"关键环境事实"。**对外发布（新构建给别人）仍需负责人确认** |
 | 是否发布新构建 | `Builds/P0-Win64/` 已按 T029 改动**重新导出两个预设并再复验**：发布包 `Reborn.pck` **263,436 B**（+384 = 两个生产脚本改动）、自检包 `RebornSelfTest.pck` **921,704 B**（包内 T002 18/18、T019 72/72、T020 164/164、T023 178/178、T024 136/136、T025 174/174、T026 96/96、T027 96/96、T028 走查 4/4、**T029 39/39**）；**发布动作本身仍需负责人确认**（发布节奏未定） |
 | 真实按键输入验证方式 | 需受审查的输入自动化工具（**需授权**），或真人操作录像。**不要盲发按键** |
 | 相机轴语义 D1 / 蹲姿高度 D2 | 见上方"关键事实"：D1 已按竖直偏移实现并断言锁定；D2 需并入 `Parameters.md` 正式起测值 |
@@ -265,7 +268,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 - ❌ **一次严重操作失误（已恢复）**：曾用 `Get-Content | -replace | Set-Content` 改 `tool_capture_render.gd`，
   把整文件编码/行尾改坏（`228 insertions / 297 deletions`）→ 立刻 `git checkout --` 恢复并改用 Edit 重做（最终 diff 只有 62 行新增）。
 - **已按任务提交 Git**（T005~T009 → `562fba4` / `0a7442b` / `bcc65be` / `44eb062`；提交策略 `965120a`；T010 → `8140d6f`；T011 → `1f71f46`；T012 → `2968909`；T013 → `89ac039`；T014 → `b6351d9`；T015 → `79f2bbd`；T016 → `692fe9a`；T017 → `ab6225e`；T018 → `a2070bc`；T019 → `5bfb1c7`；T020 → `38be427`；T021 → `c36fff2`；T022 → `5b922be`；T023 → `899444c`；T024 → `cd66a9f`；T025 → `80b7eba`；T026 → `2769811`；T027 → `3ae16b9`；T028 → `d8374b3`）；
-  **未推送**（推送需另行授权）。
+  **已推送**（2026-10-27：`origin/main` = `8da9eeb`，含此前累计的 50 个提交 + 本文件修补；LFS 54/54 对象已上传）。
 - 运行过的受限程序：Godot **非 headless** 渲染捕获（创建窗口并短暂捕获鼠标，工具立即放开）。
 - 只读查询过 `E:\claude-vision-skill\vision.js`（读图判读）；用 `--doctool` 把官方类文档 dump 到 `$env:PI_SCRATCH_DIR`（**不改工程**）核对 API 签名。
 - **未做真实按键注入**（禁止盲发按键）；输入验证仍是合成输入。
