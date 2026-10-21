@@ -70,3 +70,22 @@ Sketchfab 模型**全部未下载**（需登录）；它们只在 `reference_man
 | `poly.pizza` / `opengameart.org` | 可达但本轮未检索 → 后续补充来源 |
 | `fab.com` | 仅出现在某候选描述的外链，未访问 |
 | Sketchfab 上"Cat [Murdered: Soul Suspect]" | 作品名指向商业游戏角色，疑似提取物 → **不列入候选** |
+
+## 6. 本轮通过 Sketchfab 已登录会话下载的模型（**参考用，不入库**）
+
+下载方式：浏览器会话里的 **API token**（仅用于 `/v3/models/<uid>/download` 取签名直链，签名 5 分钟过期），
+模型文件落在 `references/_downloads/`，该目录已在 `.gitignore` 中排除（体积 20+ MB，且没必要随仓库分发）。
+重新获取依据：下面每行的来源 URL + 许可 + 文件大小/哈希前缀。
+
+| 文件（本地，未入库） | 字节 | sha256 前缀 | 来源页 | 作者 | 许可 | 署名义务 |
+|---|---|---|---|---|---|---|
+| `references/_downloads/cat_fripouille/source.zip` → `src/source/frip_F_export.fbx`（722,780 B）+ `src/textures/*.png` | 8,241,910 | `27f98f89016b848b` | https://sketchfab.com/models/0ab14bf98e754f8d90fe1bf1c84ca66c | guillaume.bolis | CC BY 4.0 | **必须署名**（若采用） |
+| `references/_downloads/mouse_arribadaclub/model.glb` | 1,998,084 | `c12025b55588c303` | https://sketchfab.com/models/b05c5a51278645d99d40debb8d6ff6bd | arribadaclub | CC BY 4.0 | **必须署名**（若采用） |
+| `references/_downloads/stump_callum_arb/model.glb` | 4,510,304 | `b65feaa7f83ef65d` | https://sketchfab.com/models/bb383af9741d4dd48dbccde3b7bf8b1e | callumARBInnovators | CC BY 4.0 | **必须署名**（若采用） |
+| `references/_downloads/wall_stefan_wr/model.glb` | 3,019,772 | `a82b06a4e457fa02` | https://sketchfab.com/models/0788f8b362a6463fa08ad75273c530ea | stefan_wr | CC BY 4.0 | **必须署名**（若采用） |
+
+补充：
+- 四个文件的**字节数与 API `download` 端点的 `size` 完全一致**（逐个核对），可用作完整性证据。
+- 真实网格检查结果见 `references/reference_measurements.json` 与 `Docs/ART_ASSET_AUDIT.md` §6。
+- 未取得：`mouse_charliecatling`（403/400）、`cat_bigcat_gbarzu`（未下）—— 见 measurements 的 `not_obtained`。
+- **令牌未写入任何文件、日志或提交**；本轮只在本机浏览器上下文内使用。

@@ -284,9 +284,16 @@ $proj = 'E:\Reborn\Game\Reborn'
   `references/reference_manifest.json`（5 类资产 / 16 个候选，带 URL/作者/许可/面数/是否已下载）、
   `Docs/ART_ASSET_SPEC.md`（逐资产规格 + 预算 + 评分 ≥85）、`Docs/ART_ASSET_AUDIT.md`（现状审计）、
   `Docs/THIRD_PARTY_ASSETS.md`（第三方登记 + 署名义务）、`Docs/ART_ASSET_CHANGELOG.md`。
-- **能力实测**：联网可用；**Poly Haven 匿名直链可下载**（`boulder_01` CC0 glTF 1K 已下载到
-  `references/environment/boulder/candidates/`，5 个文件字节数与 API 一致）；
-  **Sketchfab 匿名 API 只能读元数据，下载需登录** → 13 个 Sketchfab 候选**未下载**（`reference_pending`）。
+- **能力实测（更新）**：联网可用；Poly Haven 匿名直链可下载（`boulder_01` CC0 glTF 1K 已下载，字节数与 API 一致）；
+  **Sketchfab 可用"已登录浏览器会话 + API token"取签名直链下载**（会话 cookie 不能直接调 API，401）。
+  本轮实际下载并校验 4 个候选：`cat_fripouille`(FBX+4 贴图)、`mouse_arribadaclub`(glb)、`stump_callum_arb`(glb)、
+  `wall_stefan_wr`(glb)，全部落在 `references/_downloads/`（已 gitignore）。**令牌未落盘、未入日志、未提交**。
+- **真实网格实测**（`references/reference_measurements.json`，Blender 3.3.1 导入读回）：
+  猫 **8,376 tris / 33 骨 / 0 动作 / 3 材质槽 / 尺度非米（15.86 单位，需 ≈0.0315 缩放）/ 最长轴 X 需转向**；
+  鼠 **10,000 tris / 1 槽 / 3×1024² / 无骨骼 / 真实尺度 0.068×0.138×0.061 m**；
+  树桩 **39,122 tris（超预算 2.6×）/ 腔体净空 ≈0.238×0.173 m（未达 0.24×0.30）**；
+  石墙 **2,000 tris / 2 槽 / 7 个独立模块 / 尺度像 cm**。四个文件的 faces 与 API 完全一致。
+- **未取得**：`mouse_charliecatling`（403/400，唯一带 3 段动画的鼠）、`cat_bigcat_gbarzu`（唯一带 2 段动画的猫，未下）。
 - **选型建议（未确认）**：猫→`cat_fripouille`（8.4k 写实无骨骼）或 `cat_bigcat_gbarzu`（58.6k 带 2 段动画）；
   鼠→`mouse_charliecatling`（6.2k 带 3 段动画，**许可为 Free Standard 需核对**）否则 `mouse_arribadaclub`（CC-BY 10k）；
   洞口→`stump_callum_arb`（39k 带洞，需减面+量净空）；巨石→`boulder_01`（CC0，需减面 + 12.7 m→1.2 m 缩放）；

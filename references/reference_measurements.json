@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "updated": "2026-10-21",
+  "method": "Blender 3.3.1 无头 CLI 导入 → 读回真实网格（tri/vert/材质/贴图/骨骼/动作/世界包围盒）；脚本为一次性检查，未保存 blend、未修改源文件",
+  "script": "%PI_SCRATCH_DIR%/inspect_refs.py（临时脚本，未入库）",
+  "files": [
+    {
+      "asset_id": "CAT_BODY_001",
+      "candidate_id": "cat_fripouille",
+      "file": "references/_downloads/cat_fripouille/src/source/frip_F_export.fbx（722,780 B，sha256 9e784f0aea19f913…）",
+      "source_zip": "8,241,910 B，sha256 27f98f89016b848b…",
+      "import_ok": true,
+      "objects": 4,
+      "meshes": 3,
+      "tris": 8376,
+      "verts": 4264,
+      "api_faces_match": true,
+      "materials": ["SHD_eye", "SHD_frip", "whiskers"],
+      "material_slots": 3,
+      "textures_imported": 0,
+      "textures_on_disk": [
+        "textures/SHD_frip_Base_Color.tga.png (2,854,923 B)",
+        "textures/SHD_frip_Mixed_AO.tga.png (771,596 B)",
+        "textures/SHD_frip_Normal_DirectX.tga.png (3,576,620 B)",
+        "textures/eye_3.tga.png (315,277 B)"
+      ],
+      "armature": true,
+      "bones": 33,
+      "actions": 0,
+      "bbox_min": [-8.83, -5.263, -0.316],
+      "bbox_max": [7.029, 4.909, 8.09],
+      "dims": [15.859, 10.172, 8.406],
+      "longest_axis": "X",
+      "findings": [
+        "**带骨骼**（33 骨）→ 满足 T047 的绑定前提；但**没有任何动作**（actions=0），需要自建 Idle/Walk/Run/AttackCue",
+        "面数 8,376 = Sketchfab 页标注一致（API faces 8376）→ 元数据可信",
+        "3 个材质槽（SHD_frip / SHD_eye / whiskers）超过项目 ≤2 槽规则 → 需合并（whiskers 可并入 eye 或直接去掉）",
+        "贴图**未随 FBX 导入**（相对路径 ../textures），但 4 张 PBR 贴图在磁盘上（BaseColor 2.85 MB / Normal DirectX / AO / eye）→ 导入时手动指路即可",
+        "尺度不是米：最长轴 15.86 单位（真实猫体长 ~0.5 m）→ **必须归一化缩放**（≈0.0315）",
+        "最长轴是 **X** → 朝向不符合项目约定（Blender 面朝 +Y）→ 需旋转 -90° 或 +90° 并实测验证"
+      ],
+      "verdict": "可用作**猫的正式基础模型候选**（带骨骼、面数在预算下限、有 PBR 贴图）；阻塞项=负责人确认 CC-BY + 归一化/朝向/材质合并的工作量"
+    },
+    {
+      "asset_id": "MOUSE_BODY_001",
+      "candidate_id": "mouse_arribadaclub",
+      "file": "references/_downloads/mouse_arribadaclub/model.glb（1,998,084 B，sha256 c12025b55588c303…）",
+      "import_ok": true,
+      "objects": 5,
+      "meshes": 1,
+      "tris": 10000,
+      "verts": 6870,
+      "api_faces_match": true,
+      "materials": ["material_0"],
+      "material_slots": 1,
+      "textures": 3,
+      "texture_size": "1024x1024",
+      "armature": false,
+      "bones": 0,
+      "actions": 0,
+      "bbox_min": [-0.033, -0.092, -0.018],
+      "bbox_max": [0.035, 0.045, 0.043],
+      "dims": [0.068, 0.138, 0.061],
+      "longest_axis": "Y",
+      "findings": [
+        "**真实尺度**：0.068 × 0.138 × 0.061 m（体长 13.8 cm）≈ 家鼠实际尺寸 → 无需缩放",
+        "1 材质槽 + 3×1024² 贴图 → 完全符合项目槽位/贴图预算",
+        "**无骨骼、无动画** → P6 T050/T051/T052 需要完整绑定与三段动画",
+        "最长轴 Y（前后）→ 朝向接近项目约定（面朝 ±Y），需实测正负"
+      ],
+      "verdict": "可用作**鼠的正式基础模型候选**（尺寸与材质都合格）；阻塞项=负责人确认 CC-BY + 接受重新绑定/自建动画的工作量"
+    },
+    {
+      "asset_id": "ENV_ROOT_HOLE_001",
+      "candidate_id": "stump_callum_arb",
+      "file": "references/_downloads/stump_callum_arb/model.glb（4,510,304 B，sha256 b65feaa7f83ef65d…）",
+      "import_ok": true,
+      "meshes": 1,
+      "tris": 39122,
+      "verts": 26797,
+      "api_faces_match": true,
+      "materials": ["poly_0"],
+      "material_slots": 1,
+      "textures": 2,
+      "texture_size": "1024x1024",
+      "armature": false,
+      "bbox_min": [-0.981, -0.932, -0.651],
+      "bbox_max": [1.147, 1.734, 0.554],
+      "dims": [2.128, 2.666, 1.205],
+      "longest_axis": "Y",
+      "clearance_probe": {
+        "note": "从包围盒中心（及其 ±Y 偏移）沿 ±X/±Y/±Z 打射线，记录到第一个命中面的距离；-1 = 该方向无遮挡（敞开）",
+        "dy0.00": {"+X": 0.079, "-X": 0.159, "+Y": 0.135, "-Y": 0.038, "+Z": 0.018},
+        "dy+0.15": {"+X": -1, "-X": -1, "+Y": -1, "-Y": 0.265, "+Z": -1},
+        "dy-0.15": {"+X": 0.296, "-X": 0.259, "+Y": 0.362, "-Y": 0.355, "+Z": -1}
+      },
+      "findings": [
+        "**确实有空腔**（dy=+0.15 平面四向无遮挡 → 该高度穿通）",
+        "内部净空（bbox 中心高度处）≈ X 0.079+0.159 = **0.238 m**、Y 0.135+0.038 = **0.173 m** → **未达鼠洞要求 0.24 × 0.30 m**（Y 方向偏窄），且这还不是真实洞口轴线",
+        "面数 39,122 超洞口预算（3k–15k）约 2.6 倍 → 需减面",
+        "真实尺寸 2.13 × 2.67 × 1.21 m：作为“溪边树桩/树根”偏大，需缩放到关卡门楣尺度"
+      ],
+      "verdict": "**可用**但需要三件事：减面到 ≤15k、按目标洞口净空放大/局部改形、确定与脚下落位的贴地方式；若不愿改形，则改为“自建洞口 + 参考它的树皮质感”"
+    },
+    {
+      "asset_id": "ENV_FENCE_MODULE_001",
+      "candidate_id": "wall_stefan_wr",
+      "file": "references/_downloads/wall_stefan_wr/model.glb（3,019,772 B，sha256 a82b06a4e457fa02…）",
+      "import_ok": true,
+      "objects": 17,
+      "meshes": 7,
+      "tris": 2000,
+      "verts": 1346,
+      "api_faces_match": true,
+      "materials": ["stone_wall_low", "stone_wall_low.001"],
+      "material_slots": 2,
+      "textures": 4,
+      "texture_size": "1024x1024",
+      "armature": false,
+      "bbox_min": [-132.712, -109.779, -0.823],
+      "bbox_max": [275.012, 48.754, 199.789],
+      "dims": [407.724, 158.533, 200.611],
+      "longest_axis": "X",
+      "findings": [
+        "**确实是模块化**：7 个独立网格件（作者自述“modular stone wall piece”吻合）",
+        "面数 2,000 在预算（500–4k/模块）内；2 材质槽 + 4×1024² 贴图，符合规则",
+        "尺度像厘米：4.08 × 1.59 × 2.01 单位 → 若按 cm 则 ≈4 m 长墙段，需 ÷100 或按模块宽 2–4 m 归一化",
+        "17 个对象里含空物体/父级，导入 Godot 时需整理层级（只留网格件）"
+      ],
+      "verdict": "**可直接作为围栏/矮墙基础模块**（面数与模块化都合格）；阻塞项=确认 CC-BY + 确定模块尺寸归一化与拼接方式"
+    }
+  ],
+  "not_obtained": [
+    {
+      "candidate_id": "mouse_charliecatling",
+      "reason": "Sketchfab 签名下载两次失败（403 过期 / 400 被 S3 拒绝）",
+      "impact": "该候选是唯一自带 3 段动画的鼠模型；本轮改用 mouse_arribadaclub（CC-BY、真实尺度、无骨骼）作为鼠的参考",
+      "next": "可重试：新取签名后立即下载，或用 gltf 格式（体积更小）"
+    },
+    {
+      "candidate_id": "cat_bigcat_gbarzu",
+      "reason": "本轮未下载（26.5 MB source / 需减面才有用）",
+      "impact": "它是唯一自带 2 段动画的猫模型；若负责人要求“带动画起步”，需要补下",
+      "next": "同上"
+    }
+  ],
+  "notes": [
+    "所有数字都来自 Blender 导入后的真实读回，不是页面标注的复述；标 api_faces_match=true 的表示与 Sketchfab API 的 faces 完全一致。",
+    "清空场景用的是 bpy.ops.wm.read_factory_settings(use_empty=True)，每个文件独立导入，互不污染。",
+    "没有修改任何下载到的原始文件。"
+  ]
+}

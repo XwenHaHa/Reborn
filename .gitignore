@@ -91,3 +91,7 @@ _commitmsg*.txt
 # Python 语法检查产物（py_compile）
 __pycache__/
 *.pyc
+
+# Reference Lock：第三方原始下载（体积大、按 manifest 的来源+sha256 可重新获取）
+references/_downloads/
+

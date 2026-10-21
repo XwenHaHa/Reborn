@@ -46,3 +46,21 @@
 
 - 半透明绿盒子 → 2040 tris 真实草叶，双面、零碰撞；3 轮返工。
 - 证据：`Docs/Tasks/ART01.md`、`Docs/Evidence/ART01.md`。
+
+---
+
+## 2026-10-21 · Reference Lock 第 1 轮（续）：实际下载 + 真实网格检查
+
+**变更类型**：参考资产取得与测量（**仍未改动任何正式游戏资产**）
+
+- 使用**负责人已登录的浏览器会话**的 API token 取得 Sketchfab 签名直链，实际下载并校验了 4 个候选：
+  `cat_fripouille`（FBX + 4 张 PBR 贴图）、`mouse_arribadaclub`（glb）、`stump_callum_arb`（glb）、`wall_stefan_wr`（glb）。
+  加上此前 Poly Haven `boulder_01`（CC0 glTF 1K），五类资产**每类都有一份可离线检查的文件**。
+- 用 Blender 3.3.1 逐个导入读回真实网格（`references/reference_measurements.json`）：
+  四个 Sketchfab 文件的 `faces` 与 API 完全一致；猫**带 33 骨但 0 动作**；鼠/桩/墙**无骨骼**；
+  猫与墙的**尺度不是米**、需要归一化；洞口腔体实测 ≈0.238×0.173 m，**未达 0.24×0.30 m 要求**。
+- 未取得：`mouse_charliecatling`（403/400）、`cat_bigcat_gbarzu`（未下）。已在 manifest/measurements 里如实记录。
+- `references/_downloads/`（第三方原始下载，20+ MB）加入 `.gitignore`；来源 URL + 许可 + 大小/哈希前缀已登记在
+  `Docs/THIRD_PARTY_ASSETS.md` §6。
+
+**为什么**：`modeling4.md` §三要求"不要因为渲染图好看就直接选用，必须检查真实网格"；这一步把选型从"看截图"变成"看数据"。
