@@ -1,501 +1,770 @@
 {
-  "schema_version": 1,
-  "project": "Reborn",
-  "updated": "2026-10-21",
-  "updated_by": "agent (Reference Lock round 1)",
-  "policy": {
-    "state_flow": ["reference_pending", "reference_confirmed", "modeling", "review", "approved"],
-    "hard_rules": [
-      "参考未 confirmed 前不得开展正式建模",
-      "references/** 只作参考（reference_only），不得直接进入 Game/Reborn/",
-      "批准的参考为只读，变更必须写入 Docs/ART_ASSET_CHANGELOG.md",
-      "approved 只能由负责人确认，agent 不得自行置位",
-      "禁止编造 URL/作者/许可/面数/下载状态"
-    ],
-    "download_verified": {
-      "polyhaven": true,
-      "polyhaven_note": "匿名 API + dl.polyhaven.org 直链可下载，字节数与 API 的 size 一致（已校验）",
-      "sketchfab": false,
-      "sketchfab_note": "匿名 API 可读元数据（isDownloadable=true），但 archives 为空；下载需登录账号，本会话无凭据 → 未下载任何 Sketchfab 模型"
-    }
-  },
-  "assets": [
-    {
-      "asset_id": "CAT_BODY_001",
-      "category": "character",
-      "state": "modeling",
-      "owner_decision": "2026-10-21 负责人指定：猫用 cat_fripouille",
-      "chosen_candidate": "cat_fripouille",
-      "output_asset": {
-        "glb": "Art/Exports/Cat/SM_Cat_002.glb（7,074,364 B，sha256 5a4ce32f9fcb1f04…）",
-        "godot_asset": "Game/Reborn/assets/characters/cat/sm_cat_002.glb（逐字节相同）+ .import",
-        "generator": "Tools/Blender/art04_cat_from_ref.py",
-        "tris": 8376,
-        "material_slots": 2,
-        "bones": 33,
-        "godot_aabb_size": [0.304614, 0.310051, 0.542281],
-        "grounded_min_y": 0.00175,
-        "facing": "-Z（Godot 前方；Blender 里为 +Y）",
-        "godot_wired": true,
-        "wired_at": "resources/species/cat.tres → ExtResource(3_vis) = sm_cat_002.glb",
-        "verified": "run_art02_cat.gd 46/46 PASS；游戏内同机位截图 art02_ingame_after_v2.png（正面朝向、四脚落地）",
-        "note": "骨骼已带入但无动画；Idle/Walk/Run/AttackCue 属 P6 T048/T049"
-      },
-      "spec": "Docs/ART_ASSET_SPEC.md#41",
-      "current_ingame_asset": {
-        "file": "Game/Reborn/assets/characters/cat/sm_cat_001.glb",
-        "version": "V008",
-        "tris": 9568,
-        "material_slots": 2,
-        "texture": "2048x2048 albedo",
-        "rigged": false,
-        "status": "in_use_not_approved"
-      },
-      "candidates": [
-        {
-          "candidate_id": "cat_fripouille",
-          "title": "3d modelling my cat: Fripouille",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/0ab14bf98e754f8d90fe1bf1c84ca66c",
-          "api_uri": "https://api.sketchfab.com/v3/models/0ab14bf98e754f8d90fe1bf1c84ca66c",
-          "author": "guillaume.bolis",
-          "license": {
-            "label": "CC Attribution",
-            "full_name": "Creative Commons Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 8376,
-          "vertices": 4264,
-          "animations": 0,
-          "is_downloadable": true,
-          "downloaded": true,
-          "downloaded_variant": "source zip（FBX + 4 张 PBR 贴图）",
-          "local_path": "references/_downloads/cat_fripouille/src/source/frip_F_export.fbx",
-          "local_zip": "references/_downloads/cat_fripouille/source.zip (8,241,910 B, sha256 27f98f89016b848b…)",
-          "measured": "见 references/reference_measurements.json → CAT_fripouille",
-          "download_blocker": null,
-          "reference_image": "references/characters/cat/candidates/cat_fripouille_thumb.jpg",
-          "reference_image_sha256_prefix": "c8e104d802aecab3",
-          "verified_fields": ["title", "author", "license", "faces", "vertices", "animations", "is_downloadable", "thumbnail"],
-          "unverified_fields": ["真实网格拓扑", "UV", "骨骼/权重", "朝向", "真实尺寸", "下载格式"],
-          "assessment": "写实家猫、单件、无骨骼；面数 8,376 落在猫预算下限附近（新预算 15k–40k，需增加结构面）。无动画 → P6 T047 需重新绑骨。",
-          "recommendation": "primary_if_no_rigged_alternative"
-        },
-        {
-          "candidate_id": "cat_bigcat_gbarzu",
-          "title": "Modified big cat - animated",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/e2fe596cf22c4bb9b78fb979a2697c7c",
-          "author": "gbarzu",
-          "license": {
-            "label": "CC Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 58650,
-          "animations": 2,
-          "is_downloadable": true,
-          "downloaded": false,
-          "download_blocker": "Sketchfab 需登录",
-          "reference_image": "references/characters/cat/candidates/cat_bigcat_gbarzu_thumb.jpg",
-          "reference_image_sha256_prefix": "220eb20434767811",
-          "verified_fields": ["title", "author", "license", "faces", "animations", "is_downloadable", "thumbnail"],
-          "unverified_fields": ["实际物种比例（描述为虚构大型猫）", "骨骼命名", "拓扑质量", "下载格式"],
-          "assessment": "自带 2 段动画，但面数 58,650 超出猫预算上限（40k）需减面；形体系虚构大型猫，比例需大改。",
-          "recommendation": "alternate"
-        },
-        {
-          "candidate_id": "cat_scan_sleeping",
-          "title": "Sleeping Cat On The Bed 1 - 3D scan",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/ae07a741be6944e8ba5e2657069d3aaf",
-          "author": "albetan2012",
-          "license": {
-            "label": "CC Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 31139,
-          "animations": 0,
-          "is_downloadable": true,
-          "downloaded": false,
-          "reference_image": "references/characters/cat/candidates/cat_scan_sleeping_thumb.jpg",
-          "reference_image_sha256_prefix": "18e6a95d88261d18",
-          "verified_fields": ["title", "author", "license", "faces", "is_downloadable", "thumbnail"],
-          "assessment": "LiDAR 扫描（Polycam），睡姿、无骨骼、扫描拓扑（三角面汤）。只能作为**毛发/比例参考图**，不可作为玩法模型。",
-          "recommendation": "reference_only"
-        },
-        {
-          "candidate_id": "cat_toon_omabuarts",
-          "title": "Toon Cat FREE",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/b2bd1ee7858444bda366110a2d960386",
-          "author": "omabuarts",
-          "license": {
-            "label": "CC Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 2636,
-          "animations": 1,
-          "is_downloadable": true,
-          "downloaded": false,
-          "reference_image": "references/characters/cat/candidates/cat_toon_omabuarts_thumb.jpg",
-          "reference_image_sha256_prefix": "b111d16ca3c9c77b",
-          "verified_fields": ["title", "author", "license", "faces", "animations", "is_downloadable", "thumbnail"],
-          "assessment": "卡通风格，与 ART_STYLE_GUIDE（写实偏风格化）不符；面数 2,636 低于预算。",
-          "recommendation": "rejected_style_mismatch"
-        }
-      ],
-      "notes": [
-        "另一个检索结果 'Cat [Murdered: Soul Suspect]'（uid 836312de…, 7,372 面, CC-BY, 作者 mark2580）**不列入候选**：作品名指向商业游戏角色，存在游戏提取物风险，页面标注的 CC-BY 不能覆盖原作版权。"
-      ],
-      "open_questions": ["是否授权登录 Sketchfab 下载", "是否接受 CC-BY 署名", "走自带骨骼还是重新绑骨"]
-    },
-    {
-      "asset_id": "MOUSE_BODY_001",
-      "category": "character",
-      "state": "reference_confirmed",
-      "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 mouse_arribadaclub",
-      "chosen_candidate": "mouse_arribadaclub",
-      "spec": "Docs/ART_ASSET_SPEC.md#42",
-      "current_ingame_asset": {
-        "file": "Game/Reborn/scenes/characters/animal_body.tscn (CapsuleMesh r=0.06 h=0.18)",
-        "version": "none",
-        "rigged": false,
-        "status": "placeholder"
-      },
-      "candidates": [
-        {
-          "candidate_id": "mouse_charliecatling",
-          "title": "Mouse",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/bf516bd5a93341b194976f6f391d1e30",
-          "author": "charliecatling",
-          "license": {
-            "label": "Free Standard",
-            "slug": "free-st",
-            "url": "https://sketchfab.com/licenses",
-            "requirements": "Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works"
-          },
-          "faces": 6218,
-          "animations": 3,
-          "is_downloadable": true,
-          "downloaded": false,
-          "download_attempt": "两次尝试：glb 9,725,812 B；第一次 403（签名过期），第二次 400（请求被 S3 拒绝，原因未定位）→ 本轮**未取得**",
-          "reference_image": "references/characters/mouse/candidates/mouse_charliecatling_thumb.jpg",
-          "reference_image_sha256_prefix": "f377dab6da0de6f4",
-          "verified_fields": ["title", "author", "license_label", "license_requirements", "faces", "animations", "is_downloadable", "thumbnail"],
-          "unverified_fields": ["Free Standard 的完整条款（是否限制随游戏分发/再分发）", "网格/骨骼质量", "下载格式"],
-          "assessment": "**唯一带 3 段动画的鼠候选**，面数 6,218 在预算内。许可为 Sketchfab Free Standard（非 CC）→ 必须人工核对条款后才能确认。",
-          "recommendation": "primary_pending_license_review"
-        },
-        {
-          "candidate_id": "mouse_arribadaclub",
-          "title": "Rato Doméstico / House Mouse",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/b05c5a51278645d99d40debb8d6ff6bd",
-          "author": "arribadaclub",
-          "license": {
-            "label": "CC Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 10000,
-          "animations": 0,
-          "is_downloadable": true,
-          "downloaded": true,
-          "downloaded_variant": "glb（2.0 MB，1 材质 + 3×1024² 贴图）",
-          "local_path": "references/_downloads/mouse_arribadaclub/model.glb",
-          "measured": "见 references/reference_measurements.json → MOUSE_arribadaclub",
-          "reference_image": "references/characters/mouse/candidates/mouse_arribadaclub_thumb.jpg",
-          "reference_image_sha256_prefix": "fe49ccdd2ec3f1b1",
-          "verified_fields": ["title", "author", "license", "faces", "is_downloadable", "thumbnail"],
-          "assessment": "博物馆标本（MUHNAC）相关的写实家鼠，CC-BY 无争议；无骨骼，需重新绑骨。",
-          "recommendation": "alternate_license_clean"
-        },
-        {
-          "candidate_id": "rat_rhcreations",
-          "title": "Rat",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/847629266c0f442da74fb132f46f3baf",
-          "author": "rhcreations",
-          "license": {
-            "label": "CC Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 23060,
-          "animations": 1,
-          "is_downloadable": true,
-          "downloaded": false,
-          "reference_image": "references/characters/mouse/candidates/rat_rhcreations_thumb.jpg",
-          "reference_image_sha256_prefix": "5187857690970d8f",
-          "verified_fields": ["title", "author", "license", "faces", "animations", "is_downloadable", "thumbnail"],
-          "assessment": "大鼠（rat）形态，CC-BY、带 1 段动画；面数 23,060 略超鼠预算（5k–20k）。大鼠比例比小鼠更粗壮，需改形。",
-          "recommendation": "alternate"
-        },
-        {
-          "candidate_id": "mouse_studioochi_demo",
-          "title": "Mouse - Free Demo",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/c301d0cd9b4941d6a0d61c576c66ef36",
-          "author": "studioochi",
-          "license": {
-            "label": "CC Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 7872,
-          "animations": 0,
-          "is_downloadable": true,
-          "downloaded": false,
-          "reference_image": "references/characters/mouse/candidates/mouse_studioochi_demo_thumb.jpg",
-          "reference_image_sha256_prefix": "74d59fa8cab87039",
-          "verified_fields": ["title", "author", "license", "faces", "is_downloadable", "thumbnail"],
-          "assessment": "厂商演示件（'Demo animal for testing'），面数 7,872 在预算内；无动画。可用于形体参考或作为轻量基底。",
-          "recommendation": "alternate"
-        }
-      ],
-      "open_questions": ["Free Standard 是否允许随游戏分发", "是否需要带骨骼（T051）"]
-    },
-    {
-      "asset_id": "ENV_ROOT_HOLE_001",
-      "category": "environment",
-      "state": "reference_confirmed",
-      "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 stump_callum_arb（需减面 + 改洞口净空）",
-      "chosen_candidate": "stump_callum_arb",
-      "spec": "Docs/ART_ASSET_SPEC.md#43",
-      "critical_requirement": "洞内可通行截面 >= 0.24 x 0.30 m，且洞口不得切断导航面",
-      "current_ingame_asset": {
-        "file": "Game/Reborn/scenes/maps/l_courtyard.tscn (RootBarrierWest/East/Lintel, 3x BoxMesh)",
-        "version": "greybox",
-        "status": "placeholder_no_actual_hole_geometry"
-      },
-      "candidates": [
-        {
-          "candidate_id": "stump_callum_arb",
-          "title": "Hollow and Decaying Tree Stump",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/bb383af9741d4dd48dbccde3b7bf8b1e",
-          "author": "callumARBInnovators",
-          "license": {
-            "label": "CC Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 39122,
-          "animations": 0,
-          "is_downloadable": true,
-          "downloaded": true,
-          "downloaded_variant": "glb（4.5 MB，1 材质 + 2×1024² 贴图）",
-          "local_path": "references/_downloads/stump_callum_arb/model.glb",
-          "measured": "见 references/reference_measurements.json → STUMP_callum_arb",
-          "reference_image": "references/environment/root_hole/candidates/stump_callum_arb_thumb.jpg",
-          "reference_image_sha256_prefix": "2d8f759b970fbb52",
-          "verified_fields": ["title", "author", "license", "faces", "is_downloadable", "thumbnail"],
-          "unverified_fields": ["洞口净空实际尺寸", "拓扑（摄影测量密度）", "是否适合做可通行通道"],
-          "assessment": "摄影测量腐木树桩、带空洞；面数 39,122 超预算（3k–15k）需减面；洞内净空未知，**必须下载后测量**。",
-          "recommendation": "primary_pending_geometry_check"
-        },
-        {
-          "candidate_id": "stump_b_nealie",
-          "title": "Big Hollow Tree Stump 2",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/af9fcaf4228e419fa60ebe647ca3f155",
-          "author": "b_nealie",
-          "license": {
-            "label": "CC Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 397785,
-          "animations": 0,
-          "is_downloadable": true,
-          "downloaded": false,
-          "assessment": "3D Zephyr 扫描，面数 397,785，过重；仅作造型参考。",
-          "recommendation": "reference_only"
-        },
-        {
-          "candidate_id": "dead_tree_trunk_02",
-          "title": "Dead Tree Trunk 02",
-          "source_site": "Poly Haven",
-          "source_url": "https://polyhaven.com/a/dead_tree_trunk_02",
-          "author": "Jenelle van Heerden (photography), Rico Cilliers (processing)",
-          "license": {
-            "label": "CC0",
-            "url": "https://polyhaven.com/license",
-            "requirements": "CC0 1.0 Universal - public domain dedication, no attribution required"
-          },
-          "faces": 155864,
-          "is_downloadable": true,
-          "downloaded": false,
-          "reference_image": "references/environment/root_hole/candidates/dead_tree_trunk_02_thumb.jpg",
-          "verified_fields": ["title", "author", "license", "polycount", "thumbnail"],
-          "assessment": "**无洞口**的倒木，只能当基座 + 我们自建洞口；面数 155,864 过重。",
-          "recommendation": "reference_only_base"
-        }
-      ],
-      "open_questions": ["是否接受\"扫描件减面 + 局部重做洞口\"的工作量", "洞口净空由资产决定还是由关卡常量决定"]
-    },
-    {
-      "asset_id": "ENV_BOULDER_001",
-      "category": "environment",
-      "state": "reference_confirmed",
-      "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 boulder_01（CC0）",
-      "chosen_candidate": "boulder_01",
-      "spec": "Docs/ART_ASSET_SPEC.md#44",
-      "current_ingame_asset": {
-        "file": "Game/Reborn/scenes/maps/l_courtyard.tscn (CreekBoulder, BoxMesh 1.2x1.2x1.2)",
-        "version": "greybox",
-        "status": "placeholder"
-      },
-      "candidates": [
-        {
-          "candidate_id": "boulder_01",
-          "title": "Boulder 01",
-          "source_site": "Poly Haven",
-          "source_url": "https://polyhaven.com/a/boulder_01",
-          "api_info": "https://api.polyhaven.com/info/boulder_01",
-          "author": "Rico Cilliers",
-          "license": {
-            "label": "CC0",
-            "url": "https://polyhaven.com/license",
-            "requirements": "CC0 1.0 Universal - public domain dedication, no attribution required"
-          },
-          "polycount": 123976,
-          "dimensions_units_m": [1272.6830840110779, 1830.7338953018188, 1003.8918256759644],
-          "lod_available": true,
-          "texture_resolutions": ["1k", "2k", "4k", "8k"],
-          "downloaded": true,
-          "downloaded_variant": "gltf / 1k textures",
-          "local_path": "references/environment/boulder/candidates/boulder_01_polyhaven_gltf_1k/",
-          "downloaded_files": [
-            {"path": "boulder_01.gltf", "bytes": 2773, "sha256_prefix": "51487934db898b4c"},
-            {"path": "boulder_01.bin", "bytes": 2938808, "size_matches_api": true},
-            {"path": "textures/boulder_01_diff_1k.jpg", "bytes": 987467, "size_matches_api": true},
-            {"path": "textures/boulder_01_nor_gl_1k.jpg", "bytes": 1183552, "size_matches_api": true},
-            {"path": "textures/boulder_01_arm_1k.jpg", "bytes": 659386, "size_matches_api": true}
-          ],
-          "reference_image": "references/environment/boulder/candidates/boulder_01_thumb.jpg",
-          "verified_fields": ["title", "author", "license", "polycount", "dimensions", "lod", "texture_resolutions", "download"],
-          "unverified_fields": ["减面到 1k-8k 后的形态保持", "1.2 m 缩放后的贴图比例"],
-          "assessment": "写实 CC0 巨石，**已下载可离线检查**。但真实尺寸 ≈12.7 m 宽（API 原值），比目标 1.2 m 大约 10 倍；面数 123,976 远超 1k–8k 预算 → 必须减面 + 缩放，或另寻小岩石。",
-          "recommendation": "primary_with_decimation_and_scale_decision"
-        },
-        {
-          "candidate_id": "coast_rocks_01",
-          "title": "Coast Rocks 01",
-          "source_site": "Poly Haven",
-          "source_url": "https://polyhaven.com/a/coast_rocks_01",
-          "author": "Rob Tuytel, Rico Cilliers",
-          "license": {"label": "CC0", "url": "https://polyhaven.com/license"},
-          "polycount": 1274876,
-          "dimensions_units_m": [59507.67707824707, 42520.090103149414, 3290.156841278076],
-          "downloaded": false,
-          "reference_image": "references/environment/boulder/candidates/coast_rocks_01_thumb.jpg",
-          "assessment": "海岸岩群，1,274,876 面、60 m 级 → 只作造型参考。",
-          "recommendation": "reference_only"
-        }
-      ],
-      "open_questions": ["是否接受 boulder_01 缩放 0.09x 使用", "是否允许用 decimate 减到 8k 以内"]
-    },
-    {
-      "asset_id": "ENV_FENCE_MODULE_001",
-      "category": "environment",
-      "state": "reference_confirmed",
-      "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 wall_stefan_wr（7 个模块）",
-      "chosen_candidate": "wall_stefan_wr",
-      "spec": "Docs/ART_ASSET_SPEC.md#45",
-      "current_ingame_asset": {
-        "file": "Game/Reborn/scenes/maps/l_courtyard.tscn (FenceNorth/South/West/East + ShelterWall*, BoxMesh)",
-        "version": "greybox",
-        "status": "placeholder"
-      },
-      "candidates": [
-        {
-          "candidate_id": "wall_stefan_wr",
-          "title": "Stone wall",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/0788f8b362a6463fa08ad75273c530ea",
-          "author": "stefan_wr",
-          "license": {
-            "label": "CC Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 2000,
-          "animations": 0,
-          "is_downloadable": true,
-          "downloaded": true,
-          "downloaded_variant": "glb（3.0 MB，**7 个可拆模块**，2 材质 + 4×1024² 贴图）",
-          "local_path": "references/_downloads/wall_stefan_wr/model.glb",
-          "measured": "见 references/reference_measurements.json → WALL_stefan_wr",
-          "reference_image": "references/environment/fence/candidates/wall_stefan_wr_thumb.jpg",
-          "reference_image_sha256_prefix": "c0001fef4dbdf408",
-          "verified_fields": ["title", "author", "license", "faces", "is_downloadable", "thumbnail"],
-          "description_quote": "I made this modular stone wall piece for a game environment I'm working on.",
-          "assessment": "作者自述为**模块化石墙件**，面数 2,000 在预算（500–4k）中间。石头材质与溪岸/庭院风格一致。",
-          "recommendation": "primary"
-        },
-        {
-          "candidate_id": "fence_yadrogames_pack",
-          "title": "Fences | Concretes | Metal | Desert | Old | Pack",
-          "source_site": "Sketchfab",
-          "source_url": "https://sketchfab.com/models/0cbf546419cf499cbabfee3af0916215",
-          "author": "yadrogames",
-          "license": {
-            "label": "CC Attribution",
-            "slug": "by",
-            "url": "http://creativecommons.org/licenses/by/4.0/",
-            "requirements": "Author must be credited. Commercial use is allowed."
-          },
-          "faces": 2476,
-          "animations": 0,
-          "is_downloadable": true,
-          "downloaded": false,
-          "reference_image": "references/environment/fence/candidates/fence_yadrogames_pack_thumb.jpg",
-          "reference_image_sha256_prefix": "d79b640bcd1707a4",
-          "verified_fields": ["title", "author", "license", "faces", "is_downloadable", "thumbnail"],
-          "assessment": "打包件（多段围栏），面数 2,476；是否真正模块化/可平铺需下载核对。风格偏荒漠/金属，与庭院自然风格有偏差。",
-          "recommendation": "alternate"
-        },
-        {
-          "candidate_id": "kenney_nature_kit",
-          "title": "Nature Kit",
-          "source_site": "Kenney",
-          "source_url": "https://kenney.nl/assets/nature-kit",
-          "author": "Kenney",
-          "license": {
-            "label": "CC0",
-            "url": "https://kenney.nl/assets/nature-kit",
-            "requirements": "页面标注 'CC0 licensed!' 与 'License CC0'（实测抓取）"
-          },
-          "asset_count_reported": "330 assets",
-          "is_downloadable": true,
-          "downloaded": false,
-          "verified_fields": ["title", "license_statement", "asset_count_from_page"],
-          "assessment": "CC0 且体量大，但为**低多边形卡通**风格，与写实基线不符；围栏条目需下载后核对。",
-          "recommendation": "backup_style_mismatch"
-        }
-      ],
-      "open_questions": ["围栏走木/石/金属哪种", "是否需要端头/转角模块"]
-    }
+ "schema_version": 1,
+ "project": "Reborn",
+ "updated": "2026-10-21",
+ "updated_by": "agent (Reference Lock round 1)",
+ "policy": {
+  "state_flow": [
+   "reference_pending",
+   "reference_confirmed",
+   "modeling",
+   "review",
+   "approved"
   ],
-  "not_used_sources": [
-    {"site": "blendkit.io", "reason": "仅做了可达性探测（HTTP 200），未检索授权条款，本轮不作为候选来源"},
-    {"site": "poly.pizza / opengameart.org", "reason": "可达但本轮未检索；后续可作为 CC0/CC-BY 补充来源"},
-    {"site": "fab.com", "reason": "出现在某候选描述的外链（charliecatling 的 Fab 上架），未访问，不作结论"}
-  ]
+  "hard_rules": [
+   "参考未 confirmed 前不得开展正式建模",
+   "references/** 只作参考（reference_only），不得直接进入 Game/Reborn/",
+   "批准的参考为只读，变更必须写入 Docs/ART_ASSET_CHANGELOG.md",
+   "approved 只能由负责人确认，agent 不得自行置位",
+   "禁止编造 URL/作者/许可/面数/下载状态"
+  ],
+  "download_verified": {
+   "polyhaven": true,
+   "polyhaven_note": "匿名 API + dl.polyhaven.org 直链可下载，字节数与 API 的 size 一致（已校验）",
+   "sketchfab": false,
+   "sketchfab_note": "匿名 API 可读元数据（isDownloadable=true），但 archives 为空；下载需登录账号，本会话无凭据 → 未下载任何 Sketchfab 模型"
+  }
+ },
+ "assets": [
+  {
+   "asset_id": "CAT_BODY_001",
+   "category": "character",
+   "state": "modeling",
+   "owner_decision": "2026-10-21 负责人指定：猫用 cat_fripouille",
+   "chosen_candidate": "cat_fripouille",
+   "output_asset": {
+    "glb": "Art/Exports/Cat/SM_Cat_002.glb（7,074,364 B，sha256 5a4ce32f9fcb1f04…）",
+    "godot_asset": "Game/Reborn/assets/characters/cat/sm_cat_002.glb（逐字节相同）+ .import",
+    "generator": "Tools/Blender/art04_cat_from_ref.py",
+    "tris": 8376,
+    "material_slots": 2,
+    "bones": 33,
+    "godot_aabb_size": [
+     0.304614,
+     0.310051,
+     0.542281
+    ],
+    "grounded_min_y": 0.00175,
+    "facing": "-Z（Godot 前方；Blender 里为 +Y）",
+    "godot_wired": true,
+    "wired_at": "resources/species/cat.tres → ExtResource(3_vis) = sm_cat_002.glb",
+    "verified": "run_art02_cat.gd 46/46 PASS；游戏内同机位截图 art02_ingame_after_v2.png（正面朝向、四脚落地）",
+    "note": "骨骼已带入但无动画；Idle/Walk/Run/AttackCue 属 P6 T048/T049"
+   },
+   "spec": "Docs/ART_ASSET_SPEC.md#41",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/characters/cat/sm_cat_001.glb",
+    "version": "V008",
+    "tris": 9568,
+    "material_slots": 2,
+    "texture": "2048x2048 albedo",
+    "rigged": false,
+    "status": "in_use_not_approved"
+   },
+   "candidates": [
+    {
+     "candidate_id": "cat_fripouille",
+     "title": "3d modelling my cat: Fripouille",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/0ab14bf98e754f8d90fe1bf1c84ca66c",
+     "api_uri": "https://api.sketchfab.com/v3/models/0ab14bf98e754f8d90fe1bf1c84ca66c",
+     "author": "guillaume.bolis",
+     "license": {
+      "label": "CC Attribution",
+      "full_name": "Creative Commons Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 8376,
+     "vertices": 4264,
+     "animations": 0,
+     "is_downloadable": true,
+     "downloaded": true,
+     "downloaded_variant": "source zip（FBX + 4 张 PBR 贴图）",
+     "local_path": "references/_downloads/cat_fripouille/src/source/frip_F_export.fbx",
+     "local_zip": "references/_downloads/cat_fripouille/source.zip (8,241,910 B, sha256 27f98f89016b848b…)",
+     "measured": "见 references/reference_measurements.json → CAT_fripouille",
+     "download_blocker": null,
+     "reference_image": "references/characters/cat/candidates/cat_fripouille_thumb.jpg",
+     "reference_image_sha256_prefix": "c8e104d802aecab3",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "faces",
+      "vertices",
+      "animations",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "unverified_fields": [
+      "真实网格拓扑",
+      "UV",
+      "骨骼/权重",
+      "朝向",
+      "真实尺寸",
+      "下载格式"
+     ],
+     "assessment": "写实家猫、单件、无骨骼；面数 8,376 落在猫预算下限附近（新预算 15k–40k，需增加结构面）。无动画 → P6 T047 需重新绑骨。",
+     "recommendation": "primary_if_no_rigged_alternative"
+    },
+    {
+     "candidate_id": "cat_bigcat_gbarzu",
+     "title": "Modified big cat - animated",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/e2fe596cf22c4bb9b78fb979a2697c7c",
+     "author": "gbarzu",
+     "license": {
+      "label": "CC Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 58650,
+     "animations": 2,
+     "is_downloadable": true,
+     "downloaded": false,
+     "download_blocker": "Sketchfab 需登录",
+     "reference_image": "references/characters/cat/candidates/cat_bigcat_gbarzu_thumb.jpg",
+     "reference_image_sha256_prefix": "220eb20434767811",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "faces",
+      "animations",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "unverified_fields": [
+      "实际物种比例（描述为虚构大型猫）",
+      "骨骼命名",
+      "拓扑质量",
+      "下载格式"
+     ],
+     "assessment": "自带 2 段动画，但面数 58,650 超出猫预算上限（40k）需减面；形体系虚构大型猫，比例需大改。",
+     "recommendation": "alternate"
+    },
+    {
+     "candidate_id": "cat_scan_sleeping",
+     "title": "Sleeping Cat On The Bed 1 - 3D scan",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/ae07a741be6944e8ba5e2657069d3aaf",
+     "author": "albetan2012",
+     "license": {
+      "label": "CC Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 31139,
+     "animations": 0,
+     "is_downloadable": true,
+     "downloaded": false,
+     "reference_image": "references/characters/cat/candidates/cat_scan_sleeping_thumb.jpg",
+     "reference_image_sha256_prefix": "18e6a95d88261d18",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "faces",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "assessment": "LiDAR 扫描（Polycam），睡姿、无骨骼、扫描拓扑（三角面汤）。只能作为**毛发/比例参考图**，不可作为玩法模型。",
+     "recommendation": "reference_only"
+    },
+    {
+     "candidate_id": "cat_toon_omabuarts",
+     "title": "Toon Cat FREE",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/b2bd1ee7858444bda366110a2d960386",
+     "author": "omabuarts",
+     "license": {
+      "label": "CC Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 2636,
+     "animations": 1,
+     "is_downloadable": true,
+     "downloaded": false,
+     "reference_image": "references/characters/cat/candidates/cat_toon_omabuarts_thumb.jpg",
+     "reference_image_sha256_prefix": "b111d16ca3c9c77b",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "faces",
+      "animations",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "assessment": "卡通风格，与 ART_STYLE_GUIDE（写实偏风格化）不符；面数 2,636 低于预算。",
+     "recommendation": "rejected_style_mismatch"
+    }
+   ],
+   "notes": [
+    "另一个检索结果 'Cat [Murdered: Soul Suspect]'（uid 836312de…, 7,372 面, CC-BY, 作者 mark2580）**不列入候选**：作品名指向商业游戏角色，存在游戏提取物风险，页面标注的 CC-BY 不能覆盖原作版权。"
+   ],
+   "open_questions": [
+    "是否授权登录 Sketchfab 下载",
+    "是否接受 CC-BY 署名",
+    "走自带骨骼还是重新绑骨"
+   ]
+  },
+  {
+   "asset_id": "MOUSE_BODY_001",
+   "category": "character",
+   "state": "reference_confirmed",
+   "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 mouse_arribadaclub。 2026-10-21 负责人改选 C：弃用 Free Standard + NoAI 的 mouse_charliecatling，只找 CC0/CC-BY 带骨骼的鼠。",
+   "chosen_candidate": "mouse_arribadaclub",
+   "spec": "Docs/ART_ASSET_SPEC.md#42",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/scenes/characters/animal_body.tscn (CapsuleMesh r=0.06 h=0.18)",
+    "version": "none",
+    "rigged": false,
+    "status": "placeholder"
+   },
+   "candidates": [
+    {
+     "candidate_id": "mouse_charliecatling",
+     "title": "Mouse",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/bf516bd5a93341b194976f6f391d1e30",
+     "author": "charliecatling",
+     "license": {
+      "label": "Free Standard",
+      "slug": "free-st",
+      "url": "https://sketchfab.com/licenses",
+      "requirements": "Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works"
+     },
+     "faces": 6218,
+     "animations": 3,
+     "is_downloadable": true,
+     "downloaded": false,
+     "download_attempt": "两次尝试：glb 9,725,812 B；第一次 403（签名过期），第二次 400（请求被 S3 拒绝，原因未定位）→ 本轮**未取得**",
+     "reference_image": "references/characters/mouse/candidates/mouse_charliecatling_thumb.jpg",
+     "reference_image_sha256_prefix": "f377dab6da0de6f4",
+     "verified_fields": [
+      "title",
+      "author",
+      "license_label",
+      "license_requirements",
+      "faces",
+      "animations",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "unverified_fields": [
+      "Free Standard 的完整条款（是否限制随游戏分发/再分发）",
+      "网格/骨骼质量",
+      "下载格式"
+     ],
+     "assessment": "**唯一带 3 段动画的鼠候选**，面数 6,218 在预算内。许可为 Sketchfab Free Standard（非 CC）→ 必须人工核对条款后才能确认。",
+     "recommendation": "primary_pending_license_review"
+    },
+    {
+     "candidate_id": "mouse_arribadaclub",
+     "title": "Rato Doméstico / House Mouse",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/b05c5a51278645d99d40debb8d6ff6bd",
+     "author": "arribadaclub",
+     "license": {
+      "label": "CC Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 10000,
+     "animations": 0,
+     "is_downloadable": true,
+     "downloaded": true,
+     "downloaded_variant": "glb（2.0 MB，1 材质 + 3×1024² 贴图）",
+     "local_path": "references/_downloads/mouse_arribadaclub/model.glb",
+     "measured": "见 references/reference_measurements.json → MOUSE_arribadaclub",
+     "reference_image": "references/characters/mouse/candidates/mouse_arribadaclub_thumb.jpg",
+     "reference_image_sha256_prefix": "fe49ccdd2ec3f1b1",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "faces",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "assessment": "博物馆标本（MUHNAC）相关的写实家鼠，CC-BY 无争议；无骨骼，需重新绑骨。",
+     "recommendation": "alternate_license_clean"
+    },
+    {
+     "candidate_id": "rat_rhcreations",
+     "title": "Rat",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/847629266c0f442da74fb132f46f3baf",
+     "author": "rhcreations",
+     "license": {
+      "label": "CC Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 23060,
+     "animations": 1,
+     "is_downloadable": true,
+     "downloaded": false,
+     "reference_image": "references/characters/mouse/candidates/rat_rhcreations_thumb.jpg",
+     "reference_image_sha256_prefix": "5187857690970d8f",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "faces",
+      "animations",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "assessment": "大鼠（rat）形态，CC-BY、带 1 段动画；面数 23,060 略超鼠预算（5k–20k）。大鼠比例比小鼠更粗壮，需改形。",
+     "recommendation": "alternate"
+    },
+    {
+     "candidate_id": "mouse_studioochi_demo",
+     "title": "Mouse - Free Demo",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/c301d0cd9b4941d6a0d61c576c66ef36",
+     "author": "studioochi",
+     "license": {
+      "label": "CC Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 7872,
+     "animations": 0,
+     "is_downloadable": true,
+     "downloaded": false,
+     "reference_image": "references/characters/mouse/candidates/mouse_studioochi_demo_thumb.jpg",
+     "reference_image_sha256_prefix": "74d59fa8cab87039",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "faces",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "assessment": "厂商演示件（'Demo animal for testing'），面数 7,872 在预算内；无动画。可用于形体参考或作为轻量基底。",
+     "recommendation": "alternate"
+    },
+    {
+     "candidate_id": "mouse_cc_mehrus_rat",
+     "title": "Rat",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/3d-models/none-978e06562faa4c95b842d451ed23338c",
+     "author": "Mehrus",
+     "license": {
+      "label": "CC Attribution",
+      "requirements": "CC-BY：允许再分发与修改，必须署名作者与来源（可入库）"
+     },
+     "faces": 3602,
+     "animations": 4,
+     "is_downloadable": true,
+     "downloaded": false,
+     "download_attempt": "2026-10-21 换源候选（原 mouse_charliecatling 为 Free Standard + NoAI，负责人改选 C）；尚未下载",
+     "reference_image": "references/characters/mouse/candidates/mouse_cc_mehrus_rat_thumb.jpg",
+     "reference_image_sha256_prefix": "ad490bbd521a58b6",
+     "verified_fields": [
+      "title",
+      "author",
+      "license_label",
+      "faces",
+      "animations",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "unverified_fields": [
+      "是否真的带骨骼（API 未返回 isRigged）",
+      "4 段动画的具体内容",
+      "UV / 贴图",
+      "真实尺寸",
+      "网格拓扑与朝向"
+     ],
+     "assessment": "褐色大鼠（作者自述 Brown Rat / Rattus norvegicus、slightly stylized）：3,602 faces 在预算内，**4 段动画**；体态厚实、头部较钝 → 是鼠类但不是家鼠剪影",
+     "recommendation": "primary_candidate_pending_mesh_check"
+    },
+    {
+     "candidate_id": "mouse_cc_artise1_rat",
+     "title": "Rat",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/3d-models/none-5deb007a05a946d28ce6403616f9629b",
+     "author": "Artise1",
+     "license": {
+      "label": "CC Attribution",
+      "requirements": "CC-BY：允许再分发与修改，必须署名作者与来源（可入库）"
+     },
+     "faces": 1892,
+     "animations": 4,
+     "is_downloadable": true,
+     "downloaded": false,
+     "download_attempt": "2026-10-21 换源候选（原 mouse_charliecatling 为 Free Standard + NoAI，负责人改选 C）；尚未下载",
+     "reference_image": "references/characters/mouse/candidates/mouse_cc_artise1_rat_thumb.jpg",
+     "reference_image_sha256_prefix": "a6bc95ada659b575",
+     "verified_fields": [
+      "title",
+      "author",
+      "license_label",
+      "faces",
+      "animations",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "unverified_fields": [
+      "是否真的带骨骼（API 未返回 isRigged）",
+      "4 段动画的具体内容",
+      "UV / 贴图",
+      "真实尺寸",
+      "网格拓扑与朝向"
+     ],
+     "assessment": "低面白鼠（1,892 faces，作者自述为学生项目做的敌人）：**4 段动画**；外形干净但偏塑料玩具感，与现有写实猫差距更大",
+     "recommendation": "fallback_candidate"
+    }
+   ],
+   "open_questions": [
+    "Free Standard 是否允许随游戏分发",
+    "是否需要带骨骼（T051）"
+   ]
+  },
+  {
+   "asset_id": "ENV_ROOT_HOLE_001",
+   "category": "environment",
+   "state": "reference_confirmed",
+   "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 stump_callum_arb（需减面 + 改洞口净空）",
+   "chosen_candidate": "stump_callum_arb",
+   "spec": "Docs/ART_ASSET_SPEC.md#43",
+   "critical_requirement": "洞内可通行截面 >= 0.24 x 0.30 m，且洞口不得切断导航面",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/scenes/maps/l_courtyard.tscn (RootBarrierWest/East/Lintel, 3x BoxMesh)",
+    "version": "greybox",
+    "status": "placeholder_no_actual_hole_geometry"
+   },
+   "candidates": [
+    {
+     "candidate_id": "stump_callum_arb",
+     "title": "Hollow and Decaying Tree Stump",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/bb383af9741d4dd48dbccde3b7bf8b1e",
+     "author": "callumARBInnovators",
+     "license": {
+      "label": "CC Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 39122,
+     "animations": 0,
+     "is_downloadable": true,
+     "downloaded": true,
+     "downloaded_variant": "glb（4.5 MB，1 材质 + 2×1024² 贴图）",
+     "local_path": "references/_downloads/stump_callum_arb/model.glb",
+     "measured": "见 references/reference_measurements.json → STUMP_callum_arb",
+     "reference_image": "references/environment/root_hole/candidates/stump_callum_arb_thumb.jpg",
+     "reference_image_sha256_prefix": "2d8f759b970fbb52",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "faces",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "unverified_fields": [
+      "洞口净空实际尺寸",
+      "拓扑（摄影测量密度）",
+      "是否适合做可通行通道"
+     ],
+     "assessment": "摄影测量腐木树桩、带空洞；面数 39,122 超预算（3k–15k）需减面；洞内净空未知，**必须下载后测量**。",
+     "recommendation": "primary_pending_geometry_check"
+    },
+    {
+     "candidate_id": "stump_b_nealie",
+     "title": "Big Hollow Tree Stump 2",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/af9fcaf4228e419fa60ebe647ca3f155",
+     "author": "b_nealie",
+     "license": {
+      "label": "CC Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 397785,
+     "animations": 0,
+     "is_downloadable": true,
+     "downloaded": false,
+     "assessment": "3D Zephyr 扫描，面数 397,785，过重；仅作造型参考。",
+     "recommendation": "reference_only"
+    },
+    {
+     "candidate_id": "dead_tree_trunk_02",
+     "title": "Dead Tree Trunk 02",
+     "source_site": "Poly Haven",
+     "source_url": "https://polyhaven.com/a/dead_tree_trunk_02",
+     "author": "Jenelle van Heerden (photography), Rico Cilliers (processing)",
+     "license": {
+      "label": "CC0",
+      "url": "https://polyhaven.com/license",
+      "requirements": "CC0 1.0 Universal - public domain dedication, no attribution required"
+     },
+     "faces": 155864,
+     "is_downloadable": true,
+     "downloaded": false,
+     "reference_image": "references/environment/root_hole/candidates/dead_tree_trunk_02_thumb.jpg",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "polycount",
+      "thumbnail"
+     ],
+     "assessment": "**无洞口**的倒木，只能当基座 + 我们自建洞口；面数 155,864 过重。",
+     "recommendation": "reference_only_base"
+    }
+   ],
+   "open_questions": [
+    "是否接受\"扫描件减面 + 局部重做洞口\"的工作量",
+    "洞口净空由资产决定还是由关卡常量决定"
+   ]
+  },
+  {
+   "asset_id": "ENV_BOULDER_001",
+   "category": "environment",
+   "state": "reference_confirmed",
+   "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 boulder_01（CC0）",
+   "chosen_candidate": "boulder_01",
+   "spec": "Docs/ART_ASSET_SPEC.md#44",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/scenes/maps/l_courtyard.tscn (CreekBoulder, BoxMesh 1.2x1.2x1.2)",
+    "version": "greybox",
+    "status": "placeholder"
+   },
+   "candidates": [
+    {
+     "candidate_id": "boulder_01",
+     "title": "Boulder 01",
+     "source_site": "Poly Haven",
+     "source_url": "https://polyhaven.com/a/boulder_01",
+     "api_info": "https://api.polyhaven.com/info/boulder_01",
+     "author": "Rico Cilliers",
+     "license": {
+      "label": "CC0",
+      "url": "https://polyhaven.com/license",
+      "requirements": "CC0 1.0 Universal - public domain dedication, no attribution required"
+     },
+     "polycount": 123976,
+     "dimensions_units_m": [
+      1272.6830840110779,
+      1830.7338953018188,
+      1003.8918256759644
+     ],
+     "lod_available": true,
+     "texture_resolutions": [
+      "1k",
+      "2k",
+      "4k",
+      "8k"
+     ],
+     "downloaded": true,
+     "downloaded_variant": "gltf / 1k textures",
+     "local_path": "references/environment/boulder/candidates/boulder_01_polyhaven_gltf_1k/",
+     "downloaded_files": [
+      {
+       "path": "boulder_01.gltf",
+       "bytes": 2773,
+       "sha256_prefix": "51487934db898b4c"
+      },
+      {
+       "path": "boulder_01.bin",
+       "bytes": 2938808,
+       "size_matches_api": true
+      },
+      {
+       "path": "textures/boulder_01_diff_1k.jpg",
+       "bytes": 987467,
+       "size_matches_api": true
+      },
+      {
+       "path": "textures/boulder_01_nor_gl_1k.jpg",
+       "bytes": 1183552,
+       "size_matches_api": true
+      },
+      {
+       "path": "textures/boulder_01_arm_1k.jpg",
+       "bytes": 659386,
+       "size_matches_api": true
+      }
+     ],
+     "reference_image": "references/environment/boulder/candidates/boulder_01_thumb.jpg",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "polycount",
+      "dimensions",
+      "lod",
+      "texture_resolutions",
+      "download"
+     ],
+     "unverified_fields": [
+      "减面到 1k-8k 后的形态保持",
+      "1.2 m 缩放后的贴图比例"
+     ],
+     "assessment": "写实 CC0 巨石，**已下载可离线检查**。但真实尺寸 ≈12.7 m 宽（API 原值），比目标 1.2 m 大约 10 倍；面数 123,976 远超 1k–8k 预算 → 必须减面 + 缩放，或另寻小岩石。",
+     "recommendation": "primary_with_decimation_and_scale_decision"
+    },
+    {
+     "candidate_id": "coast_rocks_01",
+     "title": "Coast Rocks 01",
+     "source_site": "Poly Haven",
+     "source_url": "https://polyhaven.com/a/coast_rocks_01",
+     "author": "Rob Tuytel, Rico Cilliers",
+     "license": {
+      "label": "CC0",
+      "url": "https://polyhaven.com/license"
+     },
+     "polycount": 1274876,
+     "dimensions_units_m": [
+      59507.67707824707,
+      42520.090103149414,
+      3290.156841278076
+     ],
+     "downloaded": false,
+     "reference_image": "references/environment/boulder/candidates/coast_rocks_01_thumb.jpg",
+     "assessment": "海岸岩群，1,274,876 面、60 m 级 → 只作造型参考。",
+     "recommendation": "reference_only"
+    }
+   ],
+   "open_questions": [
+    "是否接受 boulder_01 缩放 0.09x 使用",
+    "是否允许用 decimate 减到 8k 以内"
+   ]
+  },
+  {
+   "asset_id": "ENV_FENCE_MODULE_001",
+   "category": "environment",
+   "state": "reference_confirmed",
+   "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 wall_stefan_wr（7 个模块）",
+   "chosen_candidate": "wall_stefan_wr",
+   "spec": "Docs/ART_ASSET_SPEC.md#45",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/scenes/maps/l_courtyard.tscn (FenceNorth/South/West/East + ShelterWall*, BoxMesh)",
+    "version": "greybox",
+    "status": "placeholder"
+   },
+   "candidates": [
+    {
+     "candidate_id": "wall_stefan_wr",
+     "title": "Stone wall",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/0788f8b362a6463fa08ad75273c530ea",
+     "author": "stefan_wr",
+     "license": {
+      "label": "CC Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 2000,
+     "animations": 0,
+     "is_downloadable": true,
+     "downloaded": true,
+     "downloaded_variant": "glb（3.0 MB，**7 个可拆模块**，2 材质 + 4×1024² 贴图）",
+     "local_path": "references/_downloads/wall_stefan_wr/model.glb",
+     "measured": "见 references/reference_measurements.json → WALL_stefan_wr",
+     "reference_image": "references/environment/fence/candidates/wall_stefan_wr_thumb.jpg",
+     "reference_image_sha256_prefix": "c0001fef4dbdf408",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "faces",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "description_quote": "I made this modular stone wall piece for a game environment I'm working on.",
+     "assessment": "作者自述为**模块化石墙件**，面数 2,000 在预算（500–4k）中间。石头材质与溪岸/庭院风格一致。",
+     "recommendation": "primary"
+    },
+    {
+     "candidate_id": "fence_yadrogames_pack",
+     "title": "Fences | Concretes | Metal | Desert | Old | Pack",
+     "source_site": "Sketchfab",
+     "source_url": "https://sketchfab.com/models/0cbf546419cf499cbabfee3af0916215",
+     "author": "yadrogames",
+     "license": {
+      "label": "CC Attribution",
+      "slug": "by",
+      "url": "http://creativecommons.org/licenses/by/4.0/",
+      "requirements": "Author must be credited. Commercial use is allowed."
+     },
+     "faces": 2476,
+     "animations": 0,
+     "is_downloadable": true,
+     "downloaded": false,
+     "reference_image": "references/environment/fence/candidates/fence_yadrogames_pack_thumb.jpg",
+     "reference_image_sha256_prefix": "d79b640bcd1707a4",
+     "verified_fields": [
+      "title",
+      "author",
+      "license",
+      "faces",
+      "is_downloadable",
+      "thumbnail"
+     ],
+     "assessment": "打包件（多段围栏），面数 2,476；是否真正模块化/可平铺需下载核对。风格偏荒漠/金属，与庭院自然风格有偏差。",
+     "recommendation": "alternate"
+    },
+    {
+     "candidate_id": "kenney_nature_kit",
+     "title": "Nature Kit",
+     "source_site": "Kenney",
+     "source_url": "https://kenney.nl/assets/nature-kit",
+     "author": "Kenney",
+     "license": {
+      "label": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "requirements": "页面标注 'CC0 licensed!' 与 'License CC0'（实测抓取）"
+     },
+     "asset_count_reported": "330 assets",
+     "is_downloadable": true,
+     "downloaded": false,
+     "verified_fields": [
+      "title",
+      "license_statement",
+      "asset_count_from_page"
+     ],
+     "assessment": "CC0 且体量大，但为**低多边形卡通**风格，与写实基线不符；围栏条目需下载后核对。",
+     "recommendation": "backup_style_mismatch"
+    }
+   ],
+   "open_questions": [
+    "围栏走木/石/金属哪种",
+    "是否需要端头/转角模块"
+   ]
+  }
+ ],
+ "not_used_sources": [
+  {
+   "site": "blendkit.io",
+   "reason": "仅做了可达性探测（HTTP 200），未检索授权条款，本轮不作为候选来源"
+  },
+  {
+   "site": "poly.pizza / opengameart.org",
+   "reason": "可达但本轮未检索；后续可作为 CC0/CC-BY 补充来源"
+  },
+  {
+   "site": "fab.com",
+   "reason": "出现在某候选描述的外链（charliecatling 的 Fab 上架），未访问，不作结论"
+  }
+ ]
 }
