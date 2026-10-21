@@ -206,7 +206,13 @@ func _s2_mouse_layer() -> void:
 	_assert("mouse_tree_hole_path_not_detour", "≤ 直距 9 m + 3 m", "%.2f m" % hole_len, hole_len <= 12.0)
 	print("MEASURE|mouse_tree_hole|points=%d|length=%.2f|crosses_hole=%s" % [hole.size(), hole_len, str(crosses)])
 
-	var bank := _query(Vector3(BANK_X, QUERY_Y, BANK_Z_MAX + 2.0), Vector3(BANK_X, QUERY_Y, BANK_Z_MIN - 2.0), LAYER_MOUSE)
+	# ART05 实测：单段 A→B 查询在两条**近乎等长**的路线之间会随导航面重烤后的多边形顺序翻转
+	# （穿缝 12.00 m vs 绕岸墙 B 东端 12.1x m）。接入巨石后真实翻到了绕行侧 —— 但缝本身仍可穿
+	# （缝内航点 (−31.73, 10) 与南北两侧逐腿都连通）。能力断言不应依赖全局 tie-break，
+	# 所以改成**经缝内航点逐腿查询**。
+	var bank := _query_via(Vector3(BANK_X, QUERY_Y, BANK_Z_MAX + 2.0),
+		Vector3(BANK_X, QUERY_Y, (BANK_Z_MIN + BANK_Z_MAX) * 0.5),
+		Vector3(BANK_X, QUERY_Y, BANK_Z_MIN - 2.0), LAYER_MOUSE)
 	var bank_len := _path_length(bank)
 	var bank_crosses := _crosses_x_gap(bank, BANK_X, BANK_GAP_HALF_W + EPS, BANK_Z_MIN, BANK_Z_MAX)
 	_assert("mouse_creek_gap_path_exists", "> 0 点", "%d 点" % bank.size(), bank.size() > 0)
@@ -420,6 +426,16 @@ func _path_length(path: PackedVector3Array) -> float:
 		total += path[i - 1].distance_to(path[i])
 	return total
 
+## 分段查询：A→M→B 两腿拼接（去掉重复的接点）。用于"必须经过某处"的**能力**断言。
+func _query_via(a: Vector3, m: Vector3, b: Vector3, layer: int) -> PackedVector3Array:
+	var p1 := _query(a, m, layer)
+	var p2 := _query(m, b, layer)
+	if p1.is_empty() or p2.is_empty():
+		return PackedVector3Array()
+	var out := p1.duplicate()
+	for i in range(1, p2.size()):
+		out.append(p2[i])
+	return out
 
 ## 路径是否在 (x_center ± half_w, z∈[z0,z1]) 这段"通道"里穿过
 func _crosses_x_gap(path: PackedVector3Array, x_center: float, half_w: float, z0: float, z1: float) -> bool:

@@ -103,6 +103,12 @@ const BUSH_ASSET := "res://assets/environment/sm_bush_001.glb"
 const BUSH_YAWS := [0.0, 63.0, 141.0]      # 三处朝向不同，避免"复制粘贴感"
 const BUSH_SCALES := [1.00, 0.94, 1.06]
 
+## ART03-②：溪边巨石的正式视觉（Poly Haven boulder_01，CC0，减面到 7,500 tris）。
+## 实测（tool_dump_scene_tree.gd）：AABB 1.268556 × 1.004233 × 1.829183，min_y = 0（资产原点在脚底）。
+## 碰撞仍是 Godot 侧的 BoxShape3D（`Docs/ART_ASSET_SPEC.md` §3：.glb 只带视觉）。
+const BOULDER_ASSET := "res://assets/environment/sm_boulder_001.glb"
+const BOULDER_SIZE := Vector3(1.268556, 1.004233, 1.829183)
+
 const ROUTE_SHORT_START := Vector3(2.0, GROUND_TOP, 2.0)
 const ROUTE_SHORT_END := Vector3(2.0, GROUND_TOP, -22.0)
 
@@ -338,8 +344,9 @@ func _add_creek_structures(parent: Node3D) -> void:
 	_mk_box(parent, "CreekBankWallB", Vector3(BANK_WALL_THICK, BANK_WALL_HEIGHT, BANK_WALL_LEN),
 		Vector3(BANK_WALL_A_CENTER_X + BANK_WALL_THICK + BANK_GAP, cy, BANK_Z_CENTER),
 		Vector3.ZERO, bank_col)
-	_mk_box(parent, "CreekBoulder", Vector3(1.2, 1.2, 1.2), Vector3(-14.0, GROUND_TOP + 0.6, 8.0),
-		Vector3.ZERO, Color(0.40, 0.42, 0.44))
+	# 朝向固定 0°：`_box()` 从 body 的 position/size 推世界 AABB，**不读旋转**，
+	# 一旦给 body 加 yaw，测试读到的包围盒就会比真实碰撞小。要转就把 AABB 一起算。
+	_mk_boulder(parent, "CreekBoulder", Vector3(-14.0, GROUND_TOP, 8.0), 0.0)
 	_mk_data_area(parent, "CreekReedCover", COVER_SIZE, Vector3(-28.0, 1.5, 10.0), "cover_volumes",
 		{"visibility_factor": COVER_FACTOR, "role": "cover"})
 	# ART01 审计发现的真实缺陷：这处掩体**原来没有任何视觉**（实测 CreekReedCoverMesh = MISSING，
@@ -502,6 +509,54 @@ func _mk_cover_bush(parent: Node3D, nm: String, ground_pos: Vector3, yaw_deg: fl
 	print("TOOL|cover_visual|%s|asset=%s|pos=(%.2f, %.2f, %.2f)|yaw=%.1f|scale=%.2f" % [
 		nm, BUSH_ASSET, ground_pos.x, ground_pos.y, ground_pos.z, yaw_deg, scale_mul])
 
+## ART03-②：溪边巨石 —— StaticBody3D + 子节点 `Shape`（BoxShape3D 匹配视觉外包盒）+ glb 实例作视觉。
+## glb 原点在脚底，所以实例下沉半个高度，视觉与碰撞盒同心；资产缺失时退回灰色盒子。
+func _mk_boulder(parent: Node3D, nm: String, ground_pos: Vector3, yaw_deg: float) -> StaticBody3D:
+	var sb := StaticBody3D.new()
+	sb.name = nm
+	sb.collision_layer = 1
+	sb.collision_mask = 0
+	sb.position = ground_pos + Vector3(0.0, BOULDER_SIZE.y * 0.5, 0.0)
+	sb.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
+	parent.add_child(sb)
+	sb.owner = parent
+
+	var cs := CollisionShape3D.new()
+	cs.name = "Shape"
+	var box := BoxShape3D.new()
+	box.size = BOULDER_SIZE
+	cs.shape = box
+	sb.add_child(cs)
+	cs.owner = parent
+
+	var ps: PackedScene = null
+	if ResourceLoader.exists(BOULDER_ASSET):
+		ps = load(BOULDER_ASSET) as PackedScene
+	if ps == null:
+		var mi := MeshInstance3D.new()
+		mi.name = "Mesh"
+		var mesh := BoxMesh.new()
+		mesh.size = BOULDER_SIZE
+		mi.mesh = mesh
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.40, 0.42, 0.44)
+		mat.roughness = 0.9
+		mi.material_override = mat
+		sb.add_child(mi)
+		mi.owner = parent
+		print("TOOL|creek_boulder|%s|FALLBACK_BOX|asset_missing=%s" % [nm, BOULDER_ASSET])
+		return sb
+
+	var vis: Node3D = ps.instantiate() as Node3D
+	vis.name = "Mesh"
+	vis.position = Vector3(0.0, -BOULDER_SIZE.y * 0.5, 0.0)
+	sb.add_child(vis)
+	vis.owner = parent          # 不设 owner → pack() 会丢掉这个节点
+	print("TOOL|creek_boulder|%s|asset=%s|size=(%.3f, %.3f, %.3f)|pos=(%.2f, %.2f, %.2f)|yaw=%.1f" % [
+		nm, BOULDER_ASSET, BOULDER_SIZE.x, BOULDER_SIZE.y, BOULDER_SIZE.z,
+		ground_pos.x, ground_pos.y, ground_pos.z, yaw_deg])
+	return sb
+
 
 func _mk_marker(parent: Node3D, nm: String, pos: Vector3, group: String, meta: Dictionary) -> Marker3D:
 	var m := Marker3D.new()
@@ -641,6 +696,21 @@ func _verify() -> void:
 	if _check("creek_cover_visual_exists", creek_vis != null):
 		_check("creek_cover_visual_is_asset", creek_vis.scene_file_path == BUSH_ASSET)
 		_check("creek_cover_visual_no_collision", _count_collision_shapes(creek_vis) == 0)
+
+	# ART03-②：溪边巨石换正式资产 —— 视觉来自 .glb，碰撞仍是 Godot 侧 BoxShape3D
+	var boulder := _box(scene, "CreekBoulder")
+	if _check("creek_boulder_box_ok", not boulder.is_empty()):
+		var b_size: Vector3 = boulder["size"]
+		_check("creek_boulder_collision_matches_asset",
+			absf(b_size.x - BOULDER_SIZE.x) < 1e-4 and absf(b_size.y - BOULDER_SIZE.y) < 1e-4
+			and absf(b_size.z - BOULDER_SIZE.z) < 1e-4)
+		_check("creek_boulder_rests_on_ground", absf(float(boulder["bottom"]) - GROUND_TOP) < 1e-4)
+		var b_vis := scene.get_node_or_null("CreekBoulder/Mesh") as Node3D
+		if _check("creek_boulder_visual_exists", b_vis != null):
+			_check("creek_boulder_visual_is_asset", b_vis.scene_file_path == BOULDER_ASSET)
+			# glb 原点在脚底 → 实例必须下沉半个包围盒高，否则视觉会整块浮在碰撞盒上方
+			_check("creek_boulder_visual_sunk", absf(b_vis.position.y + BOULDER_SIZE.y * 0.5) < 1e-4)
+			_check("creek_boulder_visual_no_collision", _count_collision_shapes(b_vis) == 0)
 
 	for c in COVERS:
 		var area := scene.get_node_or_null(c["node"]) as Area3D

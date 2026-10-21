@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-10-21 · ART03-② 溪边巨石换成真实岩石（`boulder_01`）
+
+**变更类型**：**正式关卡资产替换**（灰盒 → 参考基础模型），玩法几何契约不变。
+
+- 源：Poly Haven `boulder_01`（**CC0**，glTF 1K），实测 66,122 tris / **1.2721 × 1.8303 × 1.0038 m（米制）** / 1 材质槽 / 3×1K 贴图。
+- 处理：焊接（`remove_doubles 1e-5`，67,042→33,063 顶点）→ 单轮 Collapse 减面到 **7,500 tris**（预算 1k–8k）→ 原点归一到脚底中心。
+- 接入：`tool_make_courtyard.gd` 新增 `_mk_boulder()`，替换 `CreekBoulder` 的 1.2³ BoxMesh；**视觉来自 .glb，碰撞仍是 Godot 侧 `BoxShape3D`**（尺寸 = 视觉 AABB）；**不缩放**。
+- 为什么换：`modeling4.md` 要求"先选对基础模型"；巨石是**非关键环境静物**，风险最低，先把"参考件 → 合规资产 → 接入 → 回归"闭环跑通，再碰围栏/洞口/鼠。
+- 顺带修掉的真缺陷：① glTF 接缝拆点导致 Collapse 减面卡在 26,147（先焊接解决）；② T012 溪缝断言依赖导航 tie-break（改为经缝内航点逐腿查询）。
+- 视觉状态：`generated + 4 机位实机图`，**未 approved**（负责人判读）。证据：`Docs/Tasks/ART03_BOULDER.md`、`Docs/Evidence/ART03_BOULDER.md`。
+
+---
+
 ## 2026-10-21 · Reference Lock 第 1 轮（本轮）
 
 **变更类型**：流程与参考库（**未改动任何正式游戏资产**）

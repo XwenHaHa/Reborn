@@ -78,13 +78,13 @@
 | 7 | 鼠 Idle/Move/Flee | T052 | ⬜ 未开始 |
 | 8 | 草丛掩体 `ENV_BUSH_001` | T053 | ✅ **已建模**（未 approved） |
 | 9 | 树根屏障 + 鼠洞（含通行净空） `ENV_ROOT_HOLE_001` | T053 | ⬜ BoxMesh 拼的，洞口无几何 |
-| 10 | 溪边巨石 `ENV_BOULDER_001` | T053 | ⬜ 1.2³ BoxMesh |
+| 10 | 溪边巨石 `ENV_BOULDER_001` | T053 | ✅ **已建模并接入**（7,500 tris / 1 槽；未 approved） |
 | 11 | 矮墙/围栏 `ENV_FENCE_MODULE_001` | T053 | ⬜ BoxMesh |
 | 12 | 庇护棚 / 地面 / 土墩 / 碎片 / 溪岸 | T053 延伸 | ⬜ BoxMesh |
 | 13 | 食物（肉/种子）、水源交互物 | 玩法需要 | ⬜ `BoxMesh` + 纯色 |
 | 14 | 环境材质与贴图（石/土/木/草） | T053/T060 | ⬜ 纯色，无贴图 |
 
-**结论**：需要建模的对象里 **只有 2 件已完成建模**（猫、草丛），其余 12 类仍是灰盒或不存在。
+**结论**：需要建模的对象里 **只有 3 件已完成建模**（猫、草丛、巨石），其余 11 类仍是灰盒或不存在。
 其中 **猫/鼠/洞口/巨石/围栏** 这 5 类是本轮 Reference Lock 要选型的对象。
 
 ## 5. 本轮能力限制（不得假装已做）
@@ -109,8 +109,8 @@
 
 四个文件的 `faces` 与 Sketchfab API 返回的 `faceCount` **逐一相同** → 该来源的元数据可信，可用于选型判断。
 
-补充：巨石 `boulder_01`（Poly Haven CC0）已下载 glTF 1K；其 123,976 面与 ~12.7 m 尺寸来自 API 的 `polycount`/`dimensions`，
-**尚未做减面与缩放验证**（下一步）。
+补充：巨石 `boulder_01`（Poly Haven CC0）**已下载、已实测、已处理并接入关卡**（见 §9）：
+源 66,122 面 / **1.2721 × 1.8303 × 1.0038 m（米制，无需缩放）**，减面到 7,500 后替换 `CreekBoulder` 的 1.2³ BoxMesh。
 
 ## 7. 本轮结论（供负责人 5 分钟内决策）
 
@@ -118,7 +118,7 @@
 2. **鼠**：`mouse_arribadaclub` 尺寸/材质完美但**没骨骼**；若你要求"带动画起步"，需要补下 `mouse_charliecatling`（本轮下载失败）。
 3. **洞口**：`stump_callum_arb` 的腔体偏窄，**要么放大改形，要么只借它的树皮质感自建洞口**。
 4. **围栏**：`wall_stefan_wr` 直接可用（模块化 + 2000 面）。
-5. **巨石**：CC0 但要减面 + 缩到 1.2 m（12.7 m → 0.09×）。
+5. **巨石**：CC0，**实测 1.27 m 米制（不是 12.7 m）**，只需减面 66,122 → 7,500；已完成并接入（见 §9）。
 
 ## 8. 负责人决策后的第一件产物：猫（cat_fripouille → 合规资产）
 
@@ -144,3 +144,26 @@ glb|path=Art/Exports/Cat/SM_Cat_002.glb|bytes=7,075,276|sha256=bb01371788c837d6�
 **视觉判读状态**：`vision.js` 两次调用均失败（502 上游错误 → 503 `auth_unavailable`），
 按项目规则**记录为 NOT-VERIFIED**，不编造判读结论；图已生成，可由负责人直接查看。
 
+
+## 9. 巨石 `boulder_01` → 合规资产（**已接入关卡**）
+
+`Tools/Blender/art05_boulder_001.py` → `Art/Exports/Environment/SM_Boulder_001.glb`（3,048,844 B，
+sha256 `dc9a00e4…288c`）→ `Game/Reborn/assets/environment/sm_boulder_001.glb`，
+由 `tool_make_courtyard.gd` 的 `_mk_boulder()` 替换 `CreekBoulder` 的 1.2³ BoxMesh。
+详见 `Docs/Tasks/ART03_BOULDER.md` / `Docs/Evidence/ART03_BOULDER.md`。
+
+| 项 | 源件实测 | 交付 |
+|---|---|---|
+| 三角形 | 66,122 | **7,500**（预算 1k–8k） |
+| 尺度 | **1.2721 × 1.8303 × 1.0038 m** | 1.2686 × 1.8292 × 1.0042（**未缩放**） |
+| 材质槽 | 1 | 1（metallic 0） |
+| 贴图 | 3 × 1K | 3 × 1K 内嵌 |
+| 原点 | — | 脚底中心（Godot `aabb_pos.y = 0`，实例下沉 −0.502117） |
+| 碰撞 | — | `.glb` 无碰撞；Godot 侧 `BoxShape3D` = 视觉 AABB（1 个 shape） |
+
+**⚠ 更正**：§5 补充段与 §7 第 5 条曾写"123,976 面 / ~12.7 m，要缩到 1.2 m（0.09×）"，
+那是 Sketchfab API 元数据（本资产其实来自 Poly Haven）。**Blender 实测 66,122 面、1.27 m，米制**，
+**不需要缩放**，只需减面。已按实测处理。
+
+**视觉状态**：`generated + 4 机位实机图`（`Art/Probes/art05_level_boulder_*.png`），**等负责人判读**，
+不写 approved。`vision.js` 本机不可用（502/503），视觉自查用直接读 PNG。
