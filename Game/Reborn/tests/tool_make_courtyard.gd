@@ -109,6 +109,15 @@ const BUSH_SCALES := [1.00, 0.94, 1.06]
 const BOULDER_ASSET := "res://assets/environment/sm_boulder_001.glb"
 const BOULDER_SIZE := Vector3(1.268556, 1.004233, 1.829183)
 
+## ART03-③：石墙/围栏模块（Sketchfab `wall_stefan_wr`，CC-BY，取其最高的 `wall_stone` 件）。
+## 实测（Godot 读回）：3.680367 × 3.000000 × 0.302739（长 × 高 × 厚），1,244 tris，
+## 1 材质（roughness 0.85、metallic 0），原点在脚印中心 + 底面 y=0。
+## 石块之间有真实通孔 → 生成器在墙体内侧再放一块深色衬板（`Backing`）遮缝，避免看穿边界。
+const FENCE_ASSET := "res://assets/environment/sm_fence_module_001.glb"
+const FENCE_MODULE_LEN := 3.680367
+const FENCE_MODULE_H := 3.000000
+const FENCE_MODULE_THICK := 0.302739
+
 const ROUTE_SHORT_START := Vector3(2.0, GROUND_TOP, 2.0)
 const ROUTE_SHORT_END := Vector3(2.0, GROUND_TOP, -22.0)
 
@@ -166,14 +175,14 @@ func _add_fences(parent: Node3D) -> void:
 	var y: float = GROUND_TOP + FENCE_HEIGHT * 0.5
 	var col := Color(0.46, 0.41, 0.34)
 	# 内侧面分别贴在可玩矩形的四条边上
-	_mk_box(parent, "FenceNorth", Vector3(len_x + FENCE_THICK, FENCE_HEIGHT, FENCE_THICK),
-		Vector3(0.0, y, PLAY_MAX_Z + FENCE_THICK * 0.5), Vector3.ZERO, col)
-	_mk_box(parent, "FenceSouth", Vector3(len_x + FENCE_THICK, FENCE_HEIGHT, FENCE_THICK),
-		Vector3(0.0, y, PLAY_MIN_Z - FENCE_THICK * 0.5), Vector3.ZERO, col)
-	_mk_box(parent, "FenceWest", Vector3(FENCE_THICK, FENCE_HEIGHT, len_z + FENCE_THICK),
-		Vector3(PLAY_MIN_X - FENCE_THICK * 0.5, y, mid_z), Vector3.ZERO, col)
-	_mk_box(parent, "FenceEast", Vector3(FENCE_THICK, FENCE_HEIGHT, len_z + FENCE_THICK),
-		Vector3(PLAY_MAX_X + FENCE_THICK * 0.5, y, mid_z), Vector3.ZERO, col)
+	_mk_clad_wall(parent, "FenceNorth", Vector3(len_x + FENCE_THICK, FENCE_HEIGHT, FENCE_THICK),
+		Vector3(0.0, y, PLAY_MAX_Z + FENCE_THICK * 0.5), col, 0.35)
+	_mk_clad_wall(parent, "FenceSouth", Vector3(len_x + FENCE_THICK, FENCE_HEIGHT, FENCE_THICK),
+		Vector3(0.0, y, PLAY_MIN_Z - FENCE_THICK * 0.5), col, 0.35)
+	_mk_clad_wall(parent, "FenceWest", Vector3(FENCE_THICK, FENCE_HEIGHT, len_z + FENCE_THICK),
+		Vector3(PLAY_MIN_X - FENCE_THICK * 0.5, y, mid_z), col, 0.35)
+	_mk_clad_wall(parent, "FenceEast", Vector3(FENCE_THICK, FENCE_HEIGHT, len_z + FENCE_THICK),
+		Vector3(PLAY_MAX_X + FENCE_THICK * 0.5, y, mid_z), col, 0.35)
 	print("TOOL|Fences|play=%s|height=%.2f" % [
 		[PLAY_MIN_X, PLAY_MAX_X, PLAY_MIN_Z, PLAY_MAX_Z], FENCE_HEIGHT
 	])
@@ -242,12 +251,12 @@ func _add_courtyard_structures(parent: Node3D) -> void:
 	var cz: float = (SHELTER_Z_MIN + SHELTER_Z_MAX) * 0.5
 	var wall_y: float = GROUND_TOP + SHELTER_WALL_H * 0.5
 	# 三面墙（东侧留门）+ 顶；内部净空 1.6 m
-	_mk_box(parent, "ShelterWallWest", Vector3(FENCE_THICK, SHELTER_WALL_H, len_z),
-		Vector3(SHELTER_X_MIN + FENCE_THICK * 0.5, wall_y, cz), Vector3.ZERO, col)
-	_mk_box(parent, "ShelterWallNorth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
-		Vector3(cx, wall_y, SHELTER_Z_MAX - FENCE_THICK * 0.5), Vector3.ZERO, col)
-	_mk_box(parent, "ShelterWallSouth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
-		Vector3(cx, wall_y, SHELTER_Z_MIN + FENCE_THICK * 0.5), Vector3.ZERO, col)
+	_mk_clad_wall(parent, "ShelterWallWest", Vector3(FENCE_THICK, SHELTER_WALL_H, len_z),
+		Vector3(SHELTER_X_MIN + FENCE_THICK * 0.5, wall_y, cz), col)
+	_mk_clad_wall(parent, "ShelterWallNorth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
+		Vector3(cx, wall_y, SHELTER_Z_MAX - FENCE_THICK * 0.5), col)
+	_mk_clad_wall(parent, "ShelterWallSouth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
+		Vector3(cx, wall_y, SHELTER_Z_MIN + FENCE_THICK * 0.5), col)
 	_mk_box(parent, "ShelterRoof", Vector3(len_x + 0.4, 0.2, len_z + 0.2),
 		Vector3(cx, GROUND_TOP + SHELTER_WALL_H + 0.1, cz), Vector3.ZERO, col)
 
@@ -392,6 +401,16 @@ func _add_light_and_env(parent: Node3D) -> void:
 	light.shadow_enabled = true
 	parent.add_child(light)
 	light.owner = parent
+	# ART03-③ 实测缺陷：北墙内表面朝 −Z，与主光方向同向 → 整面**近乎全黑**，3 m 石墙读不出材质。
+	# 补一盏**不投影**的填充光（朝下 + Z），只抬背光面，不改主光阴影方向。
+	var fill := DirectionalLight3D.new()
+	fill.name = "SkyFill"
+	fill.basis = Basis.looking_at(Vector3(0.0, -0.55, 0.85))
+	fill.light_energy = 0.45
+	fill.shadow_enabled = false
+	parent.add_child(fill)
+	fill.owner = parent
+
 
 	var sky_mat := ProceduralSkyMaterial.new()
 	var sky := Sky.new()
@@ -557,6 +576,90 @@ func _mk_boulder(parent: Node3D, nm: String, ground_pos: Vector3, yaw_deg: float
 		ground_pos.x, ground_pos.y, ground_pos.z, yaw_deg])
 	return sb
 
+## ART03-③：石墙视觉 —— StaticBody3D + `Shape`（BoxShape3D 尺寸 = 原来 `_mk_box` 的尺寸，玩法不变）
+## + `Backing` 深色衬板（遮住石块间真实通孔）+ `Tiles` 下按模块长平铺的 glb 实例。
+## 模块按段高**等比**缩放（围栏 3.0 m → 1.0×；庇护棚 1.6 m → 0.533×），保持石块比例不变。
+func _mk_clad_wall(parent: Node3D, nm: String, size: Vector3, pos: Vector3, color: Color,
+		bleed: float = 0.0) -> StaticBody3D:
+	var sb := StaticBody3D.new()
+	sb.name = nm
+	sb.collision_layer = 1
+	sb.collision_mask = 0
+	sb.position = pos
+	parent.add_child(sb)
+	sb.owner = parent
+
+	var cs := CollisionShape3D.new()
+	cs.name = "Shape"
+	var box := BoxShape3D.new()
+	box.size = size
+	cs.shape = box
+	sb.add_child(cs)
+	cs.owner = parent
+
+	var ps: PackedScene = null
+	if ResourceLoader.exists(FENCE_ASSET):
+		ps = load(FENCE_ASSET) as PackedScene
+	if ps == null:
+		var mi := MeshInstance3D.new()
+		mi.name = "Mesh"
+		var mesh := BoxMesh.new()
+		mesh.size = size
+		mi.mesh = mesh
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = color
+		mat.roughness = 0.9
+		mi.material_override = mat
+		sb.add_child(mi)
+		mi.owner = parent
+		print("TOOL|wall_visual|%s|FALLBACK_BOX|asset_missing=%s" % [nm, FENCE_ASSET])
+		return sb
+
+	# 衬板：厚度 0.08，贴在墙体中心；石块包在它两侧，缝隙里看到的是深色内壁而不是"看穿"
+	var backing := MeshInstance3D.new()
+	backing.name = "Backing"
+	var bm := BoxMesh.new()
+	var along_x := size.x >= size.z
+	bm.size = Vector3(size.x * 0.995, size.y * 0.995, 0.08) if along_x \
+		else Vector3(0.08, size.y * 0.995, size.z * 0.995)
+	backing.mesh = bm
+	var bmat := StandardMaterial3D.new()
+	bmat.albedo_color = Color(0.22, 0.21, 0.20)
+	bmat.roughness = 0.95
+	backing.material_override = bmat
+	backing.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sb.add_child(backing)
+	backing.owner = parent
+
+	# 平铺：段高决定等比缩放。**相邻模块必须重叠约 20%** —— 实测按模块长 1:1 排布时，
+	# 模块两端的不规则缺口会露出大片衬板（第一版实机图里是明显的黑色板面）。
+	var k: float = size.y / FENCE_MODULE_H
+	var mod_len: float = FENCE_MODULE_LEN * k
+	var long_len: float = (size.x if along_x else size.z) + bleed
+	var n: int = maxi(1, int(ceil(long_len / (mod_len * 0.80))))
+	var spacing: float = long_len / float(n)
+	var tiles := Node3D.new()
+	tiles.name = "Tiles"
+	sb.add_child(tiles)
+	tiles.owner = parent
+	for i in n:
+		var inst: Node3D = ps.instantiate() as Node3D
+		inst.name = "Tile%d" % i
+		inst.scale = Vector3(k, k, k)
+		# 模块原点在脚印中心 + 底面；父节点在墙体中心 → 下沉半个格高
+		var off: float = -long_len * 0.5 + spacing * (float(i) + 0.5)
+		if along_x:
+			inst.position = Vector3(off, -size.y * 0.5, 0.0)
+			inst.rotation_degrees = Vector3(0.0, 180.0 if i % 2 == 1 else 0.0, 0.0)
+		else:
+			inst.position = Vector3(0.0, -size.y * 0.5, off)
+			inst.rotation_degrees = Vector3(0.0, 90.0 + (180.0 if i % 2 == 1 else 0.0), 0.0)
+		tiles.add_child(inst)
+		inst.owner = parent
+	print("TOOL|wall_visual|%s|asset=%s|size=(%.3f, %.3f, %.3f)|tiles=%d|spacing=%.3f|k=%.3f" % [
+		nm, FENCE_ASSET, size.x, size.y, size.z, n, spacing, k])
+	return sb
+
 
 func _mk_marker(parent: Node3D, nm: String, pos: Vector3, group: String, meta: Dictionary) -> Marker3D:
 	var m := Marker3D.new()
@@ -594,6 +697,41 @@ func _verify() -> void:
 	_check("fence_east_inner_face", absf(float(_box(scene, "FenceEast").get("min_x", 0.0)) - PLAY_MAX_X) < GEO_EPS)
 	for f in ["FenceNorth", "FenceSouth", "FenceWest", "FenceEast"]:
 		_check("%s_tall_enough" % f.to_lower(), float(_box(scene, f).get("top", 0.0)) - GROUND_TOP >= 1.0)
+
+	# ART03-③：围栏/庇护棚墙的视觉换成石墙模块（碰撞盒尺寸不变 → 上面的几何断言全部照旧）
+	for f in ["FenceNorth", "FenceSouth", "FenceWest", "FenceEast"]:
+		var fid: String = str(f).to_lower()
+		var tiles_root := scene.get_node_or_null("%s/Tiles" % f) as Node3D
+		if not _check("%s_wall_tiles_exist" % fid, tiles_root != null):
+			continue
+		_check("%s_wall_tiles_not_empty" % fid, tiles_root.get_child_count() > 0)
+		var first := tiles_root.get_child(0) as Node3D
+		_check("%s_wall_tiles_is_asset" % fid, first != null and first.scene_file_path == FENCE_ASSET)
+		_check("%s_wall_tiles_no_collision" % fid, _count_collision_shapes(tiles_root) == 0)
+		var bx := _box(scene, f)
+		var bsize: Vector3 = bx.get("size", Vector3.ZERO)
+		var long_len: float = maxf(bsize.x, bsize.z)
+		var n: int = tiles_root.get_child_count()
+		var spacing: float = long_len / float(n)
+		_check("%s_wall_tiles_cover_run" % fid,
+			spacing > 0.0 and spacing <= FENCE_MODULE_LEN + 1e-4)
+		# 每块模块底边必须落在这一段墙的底面上（下沉 −size.y/2）
+		_check("%s_wall_tiles_sunk" % fid,
+			absf(first.position.y + bsize.y * 0.5) < 1e-4)
+		var backing := scene.get_node_or_null("%s/Backing" % f) as MeshInstance3D
+		_check("%s_wall_backing_exists" % fid, backing != null)
+		if backing != null:
+			var bmesh := backing.mesh as BoxMesh
+			_check("%s_wall_backing_is_slab" % fid, bmesh != null and bmesh.size.y >= bsize.y * 0.99)
+	for s in ["ShelterWallWest", "ShelterWallNorth", "ShelterWallSouth"]:
+		var sid: String = str(s).to_lower()
+		var st := scene.get_node_or_null("%s/Tiles" % s) as Node3D
+		if _check("%s_tiles_exist" % sid, st != null):
+			_check("%s_tiles_is_asset" % sid,
+				(st.get_child(0) as Node3D).scene_file_path == FENCE_ASSET)
+			# 庇护棚墙 1.6 m 高 → 模块等比缩放到 0.533×，不能超过护栏那种 1.0×
+			var sc: float = (st.get_child(0) as Node3D).scale.y
+			_check("%s_tiles_scaled_to_wall" % sid, absf(sc - SHELTER_WALL_H / FENCE_MODULE_H) < 1e-4)
 
 	# B 四区域：恰好铺满可玩矩形
 	var area_sum := 0.0

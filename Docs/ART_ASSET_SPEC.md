@@ -107,11 +107,11 @@
 |---|---|
 | 用途 | 庭院围栏 + 庇护棚墙段（现 BoxMesh），需**可复用平铺** |
 | 关键结构 | 模块化：单个模块可在 ±X/±Z 平铺不穿帮；端头/转角有独立件或可旋转复用 |
-| 尺寸 | 现围栏厚 0.3 m、高 2.4 m（`FENCE_THICK/FENCE_HEIGHT`，`tool_make_courtyard.gd`）；模块长建议 2–4 m |
+| 尺寸 | **实测代码为准：围栏厚 0.2 m、高 3.0 m**（`FENCE_THICK/FENCE_HEIGHT`，`tool_make_courtyard.gd`）——本文旧版写"厚 0.3 / 高 2.4"是**错的**，已按代码更正；模块长建议 2–4 m |
 | 面数 | 500–4k / 模块 |
 | 材质/贴图 | ≤2 槽；木/石/金属任选但需与整体风格一致 |
-| 参考状态 | reference_pending（候选 3 个） |
-| 当前状态 | BoxMesh |
+| 参考状态 | **modeling（已接入）**：取 `wall_stefan_wr` 的 `wall_stone` 件 → `SM_Fence_Module_001.glb` |
+| 当前状态 | **已接入**（1,244 tris/件；3.680367 × 3.000000 × 0.302739 m；平铺 90 件；见 `Docs/Tasks/ART03_FENCE.md`） |
 
 ## 5. Reference Lock 状态机（强制）
 

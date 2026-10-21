@@ -79,7 +79,7 @@
 | 8 | 草丛掩体 `ENV_BUSH_001` | T053 | ✅ **已建模**（未 approved） |
 | 9 | 树根屏障 + 鼠洞（含通行净空） `ENV_ROOT_HOLE_001` | T053 | ⬜ BoxMesh 拼的，洞口无几何 |
 | 10 | 溪边巨石 `ENV_BOULDER_001` | T053 | ✅ **已建模并接入**（7,500 tris / 1 槽；未 approved） |
-| 11 | 矮墙/围栏 `ENV_FENCE_MODULE_001` | T053 | ⬜ BoxMesh |
+| 11 | 矮墙/围栏 `ENV_FENCE_MODULE_001` | T053 | ✅ **已建模并接入**（1,244 tris/模块 ×90 平铺；未 approved） |
 | 12 | 庇护棚 / 地面 / 土墩 / 碎片 / 溪岸 | T053 延伸 | ⬜ BoxMesh |
 | 13 | 食物（肉/种子）、水源交互物 | 玩法需要 | ⬜ `BoxMesh` + 纯色 |
 | 14 | 环境材质与贴图（石/土/木/草） | T053/T060 | ⬜ 纯色，无贴图 |
@@ -117,7 +117,7 @@
 1. **猫**：`cat_fripouille` **够格当基础模型**（带 33 骨、面数 8.4k、有 PBR 贴图），主要工作量在"归一化 + 转向 + 2 槽合并 + 自建动画"。
 2. **鼠**：`mouse_arribadaclub` 尺寸/材质完美但**没骨骼**；若你要求"带动画起步"，需要补下 `mouse_charliecatling`（本轮下载失败）。
 3. **洞口**：`stump_callum_arb` 的腔体偏窄，**要么放大改形，要么只借它的树皮质感自建洞口**。
-4. **围栏**：`wall_stefan_wr` 直接可用（模块化 + 2000 面）。
+4. **围栏**：`wall_stefan_wr` 的 `wall_stone` 模块已处理并接入（见 §10），1,244 tris/件、平铺 90 件、共 120,668 tris。
 5. **巨石**：CC0，**实测 1.27 m 米制（不是 12.7 m）**，只需减面 66,122 → 7,500；已完成并接入（见 §9）。
 
 ## 8. 负责人决策后的第一件产物：猫（cat_fripouille → 合规资产）
@@ -167,3 +167,22 @@ sha256 `dc9a00e4…288c`）→ `Game/Reborn/assets/environment/sm_boulder_001.gl
 
 **视觉状态**：`generated + 4 机位实机图`（`Art/Probes/art05_level_boulder_*.png`），**等负责人判读**，
 不写 approved。`vision.js` 本机不可用（502/503），视觉自查用直接读 PNG。
+
+## 10. 围栏/庇护棚墙 `wall_stefan_wr` → 合规资产（**已接入关卡**）
+
+`Tools/Blender/art06_fence_from_ref.py` → `Art/Exports/Environment/SM_Fence_Module_001.glb`
+（1,823,464 B，sha256 `c2f4f152…cf95`）→ `Game/Reborn/assets/environment/sm_fence_module_001.glb`，
+由 `tool_make_courtyard.gd` 的 `_mk_clad_wall()` 平铺到 4 段边界围栏 + 庇护棚三面墙。
+详见 `Docs/Tasks/ART03_FENCE.md` / `Docs/Evidence/ART03_FENCE.md`。
+
+| 项 | 源件实测（取 `wall_stone` 件） | 交付 |
+|---|---|---|
+| 三角形 | 1,244（7 件合计 2,000） | 1,244 / 件 |
+| 尺度 | 246.0665 × 30.2739 × 200.5777（源单位≈厘米） | **3.680367 长 × 3.000000 高 × 0.302739 厚**（÷100 后墙面内等比到 3.0 m 高，厚度保持天然） |
+| 材质 | 2 槽（`stone_wall_low` / `.001`） | **1 槽** `MAT_Fence_Stone`（BaseColor + Normal + Roughness 0.85） |
+| 贴图 | 4 × 1024² | 2 × 1024² 内嵌 |
+| 碰撞 | — | `.glb` 无碰撞；Godot 侧仍是 `BoxShape3D`（围栏 0.2 厚 × 3.0 高、庇护棚 0.2 × 1.6），**尺寸一字未改** |
+| 平铺 | — | 间距 = 段长 / ceil(段长/(模块长×0.80))（重叠 ≥20%）+ 交替 180° 翻转；`Backing` 衬板遮住石块通孔 |
+
+**代价（务必知道）**：墙类合计 **120,668 tris**，是本关卡目前最大开销；**未做帧率实测**，规格里也没有场景总预算。
+**视觉状态**：`generated + 4 机位实机图`，**等负责人判读**，不写 approved。
