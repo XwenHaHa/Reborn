@@ -118,6 +118,13 @@ const FENCE_MODULE_LEN := 3.680367
 const FENCE_MODULE_H := 3.000000
 const FENCE_MODULE_THICK := 0.302739
 
+## ART03-④：鼠洞入口的树桩视觉（Sketchfab `stump_callum_arb`，CC-BY）。
+## 实测（Godot 读回）：0.823243 × 0.850000 × 0.778105（宽 × 高 × 深），12,555 tris，1 材质，
+## 原点 = 脚印中心 + 底面 y=0；**底部已被布尔破出 0.24 宽 × 0.30 高的贯通方孔**（与 `HOLE_W/HOLE_H` 一致）。
+## 纯视觉：不带任何碰撞，也不进导航组（通行仍由 RootBarrier* 三个 BoxShape3D 决定）。
+const ROOT_HOLE_ASSET := "res://assets/environment/sm_root_hole_001.glb"
+const ROOT_HOLE_SIZE := Vector3(0.823243, 0.850000, 0.778105)
+
 const ROUTE_SHORT_START := Vector3(2.0, GROUND_TOP, 2.0)
 const ROUTE_SHORT_END := Vector3(2.0, GROUND_TOP, -22.0)
 
@@ -318,6 +325,12 @@ func _add_roots_structures(parent: Node3D) -> void:
 	_mk_box(parent, "RootBarrierLintel", Vector3(HOLE_W, lintel_h, depth),
 		Vector3(HOLE_CENTER_X, GROUND_TOP + HOLE_H + lintel_h * 0.5, cz), Vector3.ZERO,
 		Color(0.50, 0.36, 0.24))
+	# ART03-④：洞口的树桩视觉。**必须贴在屏障外侧**——第一版把桩子放在 z=19（屏障正中，
+	# 屏障深 1.0 m），结果整个桩子被灰盒吃掉、只露出顶部。这里让桩子的内端面正好贴住屏障面，
+	# 资产里烘好的 0.24×0.30 贯通孔与玩法孔首尾相接，南北两侧各一桩（两侧都像"从树桩里钻出来"）。
+	var half_depth: float = ROOT_HOLE_SIZE.z * 0.5
+	_mk_root_hole_visual(parent, "RootHoleStumpS", Vector3(HOLE_CENTER_X, GROUND_TOP, BARRIER_Z_MIN - half_depth))
+	_mk_root_hole_visual(parent, "RootHoleStumpN", Vector3(HOLE_CENTER_X, GROUND_TOP, BARRIER_Z_MAX + half_depth))
 	print("TOOL|RootBarrier|top=%.3f|hole=%.2fx%.2f@x=%.2f|jump_lane_x=%.1f" % [
 		GROUND_TOP + BARRIER_HEIGHT, HOLE_W, HOLE_H, HOLE_CENTER_X, CAT_JUMP_LANE_X
 	])
@@ -661,6 +674,26 @@ func _mk_clad_wall(parent: Node3D, nm: String, size: Vector3, pos: Vector3, colo
 	return sb
 
 
+## ART03-④：鼠洞入口的树桩视觉（glb 实例，**不带碰撞**、不进导航组，通行仍由 RootBarrier* 决定）。
+func _mk_root_hole_visual(parent: Node3D, nm: String, ground_pos: Vector3) -> void:
+	var ps: PackedScene = null
+	if ResourceLoader.exists(ROOT_HOLE_ASSET):
+		ps = load(ROOT_HOLE_ASSET) as PackedScene
+	if ps == null:
+		print("TOOL|root_hole_visual|%s|ASSET_MISSING|%s" % [nm, ROOT_HOLE_ASSET])
+		return
+	var inst: Node3D = ps.instantiate() as Node3D
+	inst.name = nm
+	parent.add_child(inst)
+	inst.owner = parent          # 不设 owner → pack() 会丢掉这个节点
+	inst.position = ground_pos
+	inst.rotation_degrees = Vector3.ZERO      # 资产里的孔沿 −Z 贯通，必须与玩法孔同轴
+	inst.scale = Vector3.ONE                  # 缩放会改孔径 → 禁止
+	print("TOOL|root_hole_visual|%s|asset=%s|pos=(%.2f, %.2f, %.2f)|size=(%.3f, %.3f, %.3f)" % [
+		nm, ROOT_HOLE_ASSET, ground_pos.x, ground_pos.y, ground_pos.z,
+		ROOT_HOLE_SIZE.x, ROOT_HOLE_SIZE.y, ROOT_HOLE_SIZE.z])
+
+
 func _mk_marker(parent: Node3D, nm: String, pos: Vector3, group: String, meta: Dictionary) -> Marker3D:
 	var m := Marker3D.new()
 	m.name = nm
@@ -804,10 +837,33 @@ func _verify() -> void:
 		# 尺度判据（从配置口径算：鼠站立 0.12×0.18、猫站立 0.32×0.48、猫蹲 0.32×0.30）
 		_check("mouse_stand_fits_root_hole", 0.12 <= w and 0.18 <= h)
 		_check("cat_stand_blocked_by_root_hole", 0.32 > w or 0.48 > h)
+
 		_check("cat_crouch_blocked_by_root_hole", 0.32 > w)
 		print("VERIFY|RootHole|w=%.3f|h=%.3f|barrier_top=%.3f|span=[%.2f,%.2f]" % [
 			w, h, float(lw["top"]), float(lw["min_x"]), float(le["max_x"])
 		])
+
+	# ART03-④：树桩视觉必须与玩法孔**同轴同尺寸**（错位就等于"洞画在树桩旁边"）。
+	# 南北各一桩：内端面分别贴 z=BARRIER_Z_MIN / BARRIER_Z_MAX，孔与玩法孔首尾相接。
+	var stump_hd: float = ROOT_HOLE_SIZE.z * 0.5
+	for pair in [["RootHoleStumpS", BARRIER_Z_MIN - stump_hd, "s"],
+			["RootHoleStumpN", BARRIER_Z_MAX + stump_hd, "n"]]:
+		var nm: String = pair[0]
+		var want_z: float = pair[1]
+		var tag: String = pair[2]
+		var stump := scene.get_node_or_null(nm) as Node3D
+		if not _check("root_hole_stump_%s_exists" % tag, stump != null):
+			continue
+		_check("root_hole_stump_%s_is_asset" % tag, stump.scene_file_path == ROOT_HOLE_ASSET)
+		_check("root_hole_stump_%s_no_collision" % tag, _count_collision_shapes(stump) == 0)
+		_check("root_hole_stump_%s_not_in_nav_group" % tag,
+			not stump.is_in_group("nav_source_courtyard"))
+		_check("root_hole_stump_%s_on_ground" % tag, absf(stump.position.y - GROUND_TOP) < 1e-4)
+		_check("root_hole_stump_%s_axis_x" % tag, absf(stump.position.x - HOLE_CENTER_X) < 1e-4)
+		_check("root_hole_stump_%s_abuts_barrier" % tag, absf(stump.position.z - want_z) < 1e-4)
+		# 一旦有人给实例加旋转/缩放，资产里烘好的 0.24×0.30 孔就与玩法孔不再一致
+		_check("root_hole_stump_%s_unrotated" % tag,
+			stump.rotation_degrees.length() < 1e-4 and stump.scale.is_equal_approx(Vector3.ONE))
 
 	var wa := _box(scene, "CreekBankWallA")
 	var wb := _box(scene, "CreekBankWallB")

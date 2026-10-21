@@ -77,7 +77,7 @@
 | 6 | 鼠骨骼+权重 | T051 | ⬜ 未开始 |
 | 7 | 鼠 Idle/Move/Flee | T052 | ⬜ 未开始 |
 | 8 | 草丛掩体 `ENV_BUSH_001` | T053 | ✅ **已建模**（未 approved） |
-| 9 | 树根屏障 + 鼠洞（含通行净空） `ENV_ROOT_HOLE_001` | T053 | ⬜ BoxMesh 拼的，洞口无几何 |
+| 9 | 树根屏障 + 鼠洞（含通行净空） `ENV_ROOT_HOLE_001` | T053 | 🟡 **洞口的树桩入口已做并接入**；整道屏障仍是 BoxMesh |
 | 10 | 溪边巨石 `ENV_BOULDER_001` | T053 | ✅ **已建模并接入**（7,500 tris / 1 槽；未 approved） |
 | 11 | 矮墙/围栏 `ENV_FENCE_MODULE_001` | T053 | ✅ **已建模并接入**（1,244 tris/模块 ×90 平铺；未 approved） |
 | 12 | 庇护棚 / 地面 / 土墩 / 碎片 / 溪岸 | T053 延伸 | ⬜ BoxMesh |
@@ -185,4 +185,25 @@ sha256 `dc9a00e4…288c`）→ `Game/Reborn/assets/environment/sm_boulder_001.gl
 | 平铺 | — | 间距 = 段长 / ceil(段长/(模块长×0.80))（重叠 ≥20%）+ 交替 180° 翻转；`Backing` 衬板遮住石块通孔 |
 
 **代价（务必知道）**：墙类合计 **120,668 tris**，是本关卡目前最大开销；**未做帧率实测**，规格里也没有场景总预算。
+**视觉状态**：`generated + 4 机位实机图`，**等负责人判读**，不写 approved。
+
+## 11. 鼠洞入口 `stump_callum_arb` → 合规资产（**已接入关卡**）
+
+`Tools/Blender/art07_root_hole_from_ref.py` → `Art/Exports/Environment/SM_RootHole_001.glb`
+（3,102,320 B，sha256 `d983a1e1…2be5`）→ `Game/Reborn/assets/environment/sm_root_hole_001.glb`，
+由 `tool_make_courtyard.gd` 的 `_mk_root_hole_visual()` 放在洞口南北两侧（`RootHoleStumpS/N`）。
+详见 `Docs/Tasks/ART03_ROOTHOLE.md` / `Docs/Evidence/ART03_ROOTHOLE.md`。
+
+| 项 | 源件实测 | 交付 |
+|---|---|---|
+| 三角形 | 39,122（超预算 2.6 倍） | **12,555**（预算 3k–15k） |
+| 尺度 | 2.128 × 2.666 × 1.205（**含扫描自带方形地面**） | 0.823243 × 0.850000 × 0.778105（归一高 0.85 m） |
+| 材质/贴图 | 1 槽 | 1 槽（BaseColor + Normal） |
+| 真实形态 | 空心中空树干，**腔体是"碗"、没有贯穿洞** | 布尔破出 **0.24 × 0.30 贯通方孔**，射线 9/9 全通 |
+| 连通块 | **528 个**（树干 + 扫描碎石） | 只留主体（裁半径 0.55 m 外 + 删小壳） |
+| 碰撞 | — | **零碰撞**、**不进** `nav_source_courtyard`（通行仍由 `RootBarrier*` 的 BoxShape3D 决定） |
+
+**⚠ 更正**：§6 表里"洞口腔体净空 ≈0.238×0.173 m（未达 0.24×0.30）"是**按包围盒猜的**，
+实测没有贯穿洞 → 已改为"自己破孔"方案。
+
 **视觉状态**：`generated + 4 机位实机图`，**等负责人判读**，不写 approved。
