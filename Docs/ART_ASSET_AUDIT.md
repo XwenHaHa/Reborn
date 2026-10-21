@@ -119,3 +119,28 @@
 3. **洞口**：`stump_callum_arb` 的腔体偏窄，**要么放大改形，要么只借它的树皮质感自建洞口**。
 4. **围栏**：`wall_stefan_wr` 直接可用（模块化 + 2000 面）。
 5. **巨石**：CC0 但要减面 + 缩到 1.2 m（12.7 m → 0.09×）。
+
+## 8. 负责人决策后的第一件产物：猫（cat_fripouille → 合规资产）
+
+负责人 2026-10-21 决策：**猫用 `cat_fripouille`，其余也从已下载候选里取**。
+据此新增 `Tools/Blender/art04_cat_from_ref.py`，产出 `Art/Exports/Cat/SM_Cat_002.glb`：
+
+```
+fit|scale=0.03657|dims=(0.3720, 0.5800, 0.3074)|min=(-0.1860, -0.2900, 0.0000)
+check|tris=8376|verts=4264|slots=2|bones=33|dims=(0.3576, 0.5961, 0.3074)|min_z=-0.0000
+glb|path=Art/Exports/Cat/SM_Cat_002.glb|bytes=7,075,276|sha256=bb01371788c837d6…
+```
+
+| 项 | 结果 |
+|---|---|
+| 面数 / 材质槽 | **8,376 tris / 2 槽**（原 3 槽已并：`SHD_eye` + `whiskers` → `MAT_Cat_Detail`） |
+| 骨骼 | **33 骨保留**（`export_skins=True`），无动画（源无 action） |
+| 贴图 | BaseColor + 法线（DirectX → **G 通道已翻转**）+ 眼球贴图；随 GLB 内嵌 |
+| 尺度 | 按体长 **0.596 m** 归一（高 0.307 m、宽 0.358 m），`min_z = 0`（贴地） |
+| 朝向 | 用"眼睛质心"判定头侧 → 绕 Z 旋转 **-90°**，面朝 **+Y**（Godot 内即 -Z） |
+| 渲染 | `Art/Probes/art04_cat_ref_{front,side,back,corner45,top,face}.png` + `_sheet.png` |
+| Godot 接入 | **尚未接入**（`cat.tres` 仍指向 V008）。等视觉确认后再切 |
+
+**视觉判读状态**：`vision.js` 两次调用均失败（502 上游错误 → 503 `auth_unavailable`），
+按项目规则**记录为 NOT-VERIFIED**，不编造判读结论；图已生成，可由负责人直接查看。
+

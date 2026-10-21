@@ -23,7 +23,20 @@
     {
       "asset_id": "CAT_BODY_001",
       "category": "character",
-      "state": "reference_pending",
+      "state": "modeling",
+      "owner_decision": "2026-10-21 负责人指定：猫用 cat_fripouille",
+      "chosen_candidate": "cat_fripouille",
+      "output_asset": {
+        "glb": "Art/Exports/Cat/SM_Cat_002.glb（7,075,276 B，sha256 bb01371788c837d6…）",
+        "generator": "Tools/Blender/art04_cat_from_ref.py",
+        "tris": 8376,
+        "material_slots": 2,
+        "bones": 33,
+        "dims_m": [0.3576, 0.5961, 0.3074],
+        "grounded_min_z": 0.0,
+        "godot_wired": false,
+        "note": "尚未接入 cat.tres；等视觉确认后再切换"
+      },
       "spec": "Docs/ART_ASSET_SPEC.md#41",
       "current_ingame_asset": {
         "file": "Game/Reborn/assets/characters/cat/sm_cat_001.glb",
@@ -143,7 +156,9 @@
     {
       "asset_id": "MOUSE_BODY_001",
       "category": "character",
-      "state": "reference_pending",
+      "state": "reference_confirmed",
+      "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 mouse_arribadaclub",
+      "chosen_candidate": "mouse_arribadaclub",
       "spec": "Docs/ART_ASSET_SPEC.md#42",
       "current_ingame_asset": {
         "file": "Game/Reborn/scenes/characters/animal_body.tscn (CapsuleMesh r=0.06 h=0.18)",
@@ -251,7 +266,9 @@
     {
       "asset_id": "ENV_ROOT_HOLE_001",
       "category": "environment",
-      "state": "reference_pending",
+      "state": "reference_confirmed",
+      "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 stump_callum_arb（需减面 + 改洞口净空）",
+      "chosen_candidate": "stump_callum_arb",
       "spec": "Docs/ART_ASSET_SPEC.md#43",
       "critical_requirement": "洞内可通行截面 >= 0.24 x 0.30 m，且洞口不得切断导航面",
       "current_ingame_asset": {
@@ -331,6 +348,8 @@
       "asset_id": "ENV_BOULDER_001",
       "category": "environment",
       "state": "reference_confirmed",
+      "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 boulder_01（CC0）",
+      "chosen_candidate": "boulder_01",
       "spec": "Docs/ART_ASSET_SPEC.md#44",
       "current_ingame_asset": {
         "file": "Game/Reborn/scenes/maps/l_courtyard.tscn (CreekBoulder, BoxMesh 1.2x1.2x1.2)",
@@ -390,7 +409,9 @@
     {
       "asset_id": "ENV_FENCE_MODULE_001",
       "category": "environment",
-      "state": "reference_pending",
+      "state": "reference_confirmed",
+      "owner_decision": "2026-10-21 负责人：其他模型也从上面取 → 采用 wall_stefan_wr（7 个模块）",
+      "chosen_candidate": "wall_stefan_wr",
       "spec": "Docs/ART_ASSET_SPEC.md#45",
       "current_ingame_asset": {
         "file": "Game/Reborn/scenes/maps/l_courtyard.tscn (FenceNorth/South/West/East + ShelterWall*, BoxMesh)",

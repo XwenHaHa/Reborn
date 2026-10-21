@@ -302,6 +302,13 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **待负责人确认 5 项**：① Sketchfab 下载授权（或你手动放 `references/_downloads/`）；
   ② 是否接受 CC-BY 署名；③ 风格基线（写实偏风格化 vs 卡通）；④ `boulder_01` 缩放 0.09× 是否可接受；
   ⑤ 猫走"自带骨骼候选"还是"无骨骼 + 重新绑骨（P6 T047）"。
+- **2026-10-21 负责人决策**：猫用 `cat_fripouille`；其余也从已下载候选取
+  （鼠 `mouse_arribadaclub`、洞口 `stump_callum_arb`、围栏 `wall_stefan_wr`、巨石 `boulder_01`）→
+  manifest 里 5 类资产全部 `reference_confirmed`，猫进 `modeling`。
+- **猫的第一个合规产物**：`Tools/Blender/art04_cat_from_ref.py` → `Art/Exports/Cat/SM_Cat_002.glb`
+  （8,376 tris / **2 槽** / **33 骨** / 体长 0.596 m / 高 0.307 m / 贴地 / 面朝 +Y / 法线 G 已翻转）。
+  **尚未接入 `cat.tres`**；渲染在 `Art/Probes/art04_cat_ref_*.png`。
+  **视觉判读 NOT-VERIFIED**：`vision.js` 502→503 服务不可用，未编造结论。
 
 ## 下一步（按建议优先级）
 
