@@ -73,7 +73,7 @@
 | 2 | 猫骨骼+权重 | T047 | ⬜ 未开始 |
 | 3 | 猫 Idle/Walk | T048 | ⬜ 未开始 |
 | 4 | 猫 Run/AttackCue | T049 | ⬜ 未开始 |
-| 5 | 鼠形体 `MOUSE_BODY_001` + UV/材质 | T050 | ⬜ 仍是胶囊 |
+| 5 | 鼠形体 `MOUSE_BODY_001` + UV/材质 | T050 | ✅ **已建模并接入**（3,602 tris / 23 骨 / 4 段动画；未 approved） |
 | 6 | 鼠骨骼+权重 | T051 | ⬜ 未开始 |
 | 7 | 鼠 Idle/Move/Flee | T052 | ⬜ 未开始 |
 | 8 | 草丛掩体 `ENV_BUSH_001` | T053 | ✅ **已建模**（未 approved） |
@@ -207,3 +207,23 @@ sha256 `dc9a00e4…288c`）→ `Game/Reborn/assets/environment/sm_boulder_001.gl
 实测没有贯穿洞 → 已改为"自己破孔"方案。
 
 **视觉状态**：`generated + 4 机位实机图`，**等负责人判读**，不写 approved。
+
+## 12. 鼠 `mouse_cc_mehrus_rat` → 合规资产（**已接入关卡**）
+
+`Tools/Blender/art08_mouse_from_ref.py` → `Art/Exports/Mouse/SM_Mouse_002.glb`
+（501,512 B，sha256 `d27a5534…`）→ `Game/Reborn/assets/characters/mouse/sm_mouse_002.glb`，
+经 `resources/species/mouse.tres` 的 `visual_scene` 由 `AnimalBody._rebuild_visual()` 实例化。
+详见 `Docs/Tasks/ART03_MOUSE.md` / `Docs/Evidence/ART03_MOUSE.md`。
+
+| 项 | 源件实测 | 交付 |
+|---|---|---|
+| 三角形 | 3,602 | 3,602（预算 5k–20k，低于下限但结构完整） |
+| 骨骼/动画 | **23 骨**、**4 段**（Iddle/Walk/Run/Eat） | 23 骨、4 段（`Idle/Walk/Run/Eat`，各 69 通道） |
+| 材质/贴图 | 1 槽、1×1024²；**unlit**（Emission+Transparent+Mix） | 1 槽 Principled（Roughness 0.8 / Metallic 0） |
+| 尺度 | 身体（去尾）2.4015 单位 | 身体 **0.135 m**，含尾 0.2245 m，身高 0.0706 m |
+| 朝向 | 头朝 −Y | 绕 Z 180° → 头朝 **+Y**（Godot −Z） |
+| 碰撞 | — | **无**（胶囊 r=0.06 / half_height=0.09 未改） |
+| 已知落差 | — | **大鼠体态**，不是家鼠；**动画播放逻辑未接** |
+
+**弃用记录**：`mouse_arribadaclub`（展平标本扫描件，不能当活体角色）、
+`mouse_charliecatling`（Free Standard 限制再分发 + NoAI 标记，与入库/AI 流程冲突）。

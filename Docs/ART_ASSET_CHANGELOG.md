@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-10-21 · ART03-④（鼠）换源：CC-BY mehrus rat → `SM_Mouse_002.glb`
+
+**变更类型**：**关键角色视觉替换**（胶囊 → 带骨骼/动画的参考模型），玩法数值零改动。
+
+- 弃用：`mouse_arribadaclub`（展平标本扫描件，无腿）；`mouse_charliecatling`（**Free Standard + NoAI**，
+  与"资产入库 + AI 参与处理"冲突）。负责人 2026-10-21 决策：只找 CC0/CC-BY。
+- 采用：`mouse_cc_mehrus_rat`（**CC Attribution**，作者 Mehrus，3,602 tris / **23 骨** / **4 段动画**）。
+- 处理要点：unlit 材质重建 Principled；头朝 −Y → 绕 Z 180°（项目契约 Blender 面朝 +Y）；
+  去尾体长 0.135 m 归一；原点=脚印中心+脚底；4 段动作塞 NLA 轨道导出 + 裁掉 Blender 3.3 多吐的 7 段常量动画。
+- 接入：`mouse.tres` 加 `visual_scene`（胶囊 r=0.06 / half_height=0.09 **未改**）。
+- 顺带更新两处过时断言（`run_art02_cat` 的"鼠仍是占位"、`run_t021_capture` 的 `body_mesh.visible`）。
+- 视觉状态：`generated + 实机 2 图`，**未 approved**；鼠是 **rat 体态**不是家鼠。
+  证据：`Docs/Tasks/ART03_MOUSE.md`、`Docs/Evidence/ART03_MOUSE.md`。
+
+---
+
 ## 2026-10-21 · ART03-④ 鼠洞入口换成真实树桩（`stump_callum_arb`）
 
 **变更类型**：**正式关卡资产替换**（灰盒洞口 → 参考基础模型 + 自建贯通孔）。

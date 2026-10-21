@@ -89,3 +89,15 @@ Sketchfab 模型**全部未下载**（需登录）；它们只在 `reference_man
 - 真实网格检查结果见 `references/reference_measurements.json` 与 `Docs/ART_ASSET_AUDIT.md` §6。
 - 未取得：`mouse_charliecatling`（403/400）、`cat_bigcat_gbarzu`（未下）—— 见 measurements 的 `not_obtained`。
 - **令牌未写入任何文件、日志或提交**；本轮只在本机浏览器上下文内使用。
+
+## 7. 已入库的游戏资产署名（CC-BY 必须署名）
+
+| 资产 | 来源页 | 作者 | 许可 | 署名义务 | 仓库内路径 |
+|---|---|---|---|---|---|
+| 鼠 `SM_Mouse_002`（源 `rat.glb`） | https://sketchfab.com/3d-models/none-978e06562faa4c95b842d451ed23338c | **Mehrus** | **CC Attribution (CC-BY)** | 分发时必须署名 "Rat by Mehrus (CC-BY)" 并附来源链接 | `Game/Reborn/assets/characters/mouse/sm_mouse_002.glb`、`Art/Exports/Mouse/SM_Mouse_002.glb` |
+| 围栏 `SM_Fence_Module_001`（源 `model.glb`） | https://sketchfab.com/models/…（见 manifest `wall_stefan_wr`） | **Stefan**（`stefan_wr`） | **CC Attribution (CC-BY)** | 署名作者与来源 | `Game/Reborn/assets/environment/sm_fence_module_001.glb` |
+| 洞口树桩 `SM_RootHole_001`（源 `model.glb`） | https://sketchfab.com/models/…（见 manifest `stump_callum_arb`） | **Callum**（`callum_arb`） | **CC Attribution (CC-BY)** | 署名作者与来源 | `Game/Reborn/assets/environment/sm_root_hole_001.glb` |
+| 巨石 `SM_Boulder_001`（源 `boulder_01.gltf`） | https://polyhaven.com/a/boulder_01 | Poly Haven | **CC0** | 无（自愿署名） | `Game/Reborn/assets/environment/sm_boulder_001.glb` |
+
+> 原始下载文件在 `references/_downloads/`（已 gitignore）。**不得**把 Sketchfab Free Standard / NoAI
+> 许可的资产放进仓库（`mouse_charliecatling` 因此弃用）。

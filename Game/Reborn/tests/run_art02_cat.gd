@@ -123,10 +123,13 @@ func _check_integration_layer() -> void:
 		return
 	_assert("cat_visual_configured", ASSET, cat.visual_scene.resource_path if cat.visual_scene else "null",
 		cat.visual_scene != null and cat.visual_scene.resource_path == ASSET)
-	# 鼠仍是胶囊占位：本任务**只**换了猫（modeling2.md §三：试点通过前不批量替换）
-	_assert("mouse_visual_still_placeholder", "null",
-		mouse.visual_scene.resource_path if mouse != null and mouse.visual_scene != null else "null",
-		mouse != null and mouse.visual_scene == null)
+	# 每个物种必须指向**自己的**视觉资产，不许串台。
+	# 历史：ART02 时这里断言"鼠仍是胶囊占位"（当时只换猫）；ART03-④ 已按负责人决策换掉鼠，
+	# 断言随之收紧为"鼠指向鼠资产、且不指向猫资产"。
+	var mouse_vis := mouse.visual_scene.resource_path if mouse != null and mouse.visual_scene != null else "null"
+	_assert("mouse_visual_is_mouse_asset", "res://assets/characters/mouse/sm_mouse_002.glb",
+		mouse_vis, mouse != null and mouse_vis.begins_with("res://assets/characters/mouse/"))
+	_assert("mouse_visual_not_cat_asset", "!= cat", mouse_vis, mouse_vis != ASSET)
 
 	var packed: PackedScene = load(BODY_SCENE)
 	var body := packed.instantiate() as AnimalBody

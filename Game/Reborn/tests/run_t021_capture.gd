@@ -348,7 +348,12 @@ func _section_d_obstacle() -> void:
 	_assert("D_prey_in_group", "true", str(_mouse.is_in_group(AnimalBody.GROUP_ANIMAL_BODIES)),
 		_mouse.is_in_group(AnimalBody.GROUP_ANIMAL_BODIES))
 	_assert("D_prey_still_processing", "true", str(_mouse.is_physics_processing()), _mouse.is_physics_processing())
-	_assert("D_prey_mesh_visible", "true", str(_mouse.body_mesh.visible), _mouse.body_mesh.visible)
+	# ART03-④：鼠换成 glb 视觉后 `body_mesh` 恒隐藏（胶囊退化为尺寸代理），
+	# 所以"猎物还看得见"要改看 `visual_root`；没有 visual_root 的物种仍看 `body_mesh`。
+	var prey_visual_visible: bool = (_mouse.visual_root != null and _mouse.visual_root.visible) \
+		or (_mouse.body_mesh != null and _mouse.body_mesh.visible)
+	_assert("D_prey_mesh_visible", "true（visual_root 或 body_mesh）", str(prey_visual_visible),
+		prey_visual_visible)
 	_assert("D_prey_layer_intact", "2", str(_mouse.collision_layer), _mouse.collision_layer == AnimalBody.LAYER_ANIMAL)
 
 	# 收尾口径：掩码回到静止态；恢复期内禁扑（不复位预算、不补体力）

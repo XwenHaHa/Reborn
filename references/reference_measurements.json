@@ -205,6 +205,69 @@
     "17 个对象里含空物体/父级，导入 Godot 时需整理层级（只留网格件）"
    ],
    "verdict": "**可直接作为围栏/矮墙基础模块**（面数与模块化都合格）；阻塞项=确认 CC-BY + 确定模块尺寸归一化与拼接方式"
+  },
+  {
+   "asset_id": "MOUSE_BODY_001",
+   "candidate_id": "mouse_cc_mehrus_rat",
+   "file": "references/_downloads/mouse_cc_mehrus_rat/rat.glb（470,424 B，sha256 aefd676224f3c873…）",
+   "import_ok": true,
+   "meshes": 1,
+   "tris": 3602,
+   "verts": 2270,
+   "materials": [
+    "Material（unlit：Emission+Transparent+MixShader+LightPath）"
+   ],
+   "material_slots": 1,
+   "textures": 1,
+   "texture_size": "1024x1024",
+   "armature": true,
+   "bones": 23,
+   "bone_names": [
+    "_rootJoint",
+    "Bone_00",
+    "Back_01",
+    "Hip_02",
+    "Tail1_03",
+    "Tail2_04",
+    "Tail3_05",
+    "Tail4_06",
+    "FrontLeg1_l_07",
+    "FrontLeg2_l_08",
+    "BackLeg1_l_09",
+    "BackLeg2_l_010",
+    "FrontLeg1_r_011",
+    "FrontLeg2_r_012",
+    "BackLeg1_r_013",
+    "BackLeg2_r_014",
+    "Body_015",
+    "Neck_016",
+    "Head_017",
+    "HeadTop_018",
+    "Jaw_019",
+    "Eye_l_020",
+    "Eye_r_021"
+   ],
+   "actions": 4,
+   "action_names": [
+    "Armature|Eat_Object_5",
+    "Armature|Iddle_Object_5",
+    "Armature|Run_Object_5",
+    "Armature|Walk_Object_5"
+   ],
+   "dims_raw": [
+    0.9824,
+    3.9319,
+    1.253
+   ],
+   "findings": [
+    "**带骨骼带动画**：23 骨 + 4 段动作（Iddle 33f / Walk 25f / Run 10f / Eat 15f）→ 正是本项目最缺的东西",
+    "材质是 Sketchfab **unlit**（Emission+Transparent+MixShader+LightPath）→ 导出 Godot 前必须重建为 Principled",
+    "网格数据带巨大偏移（local y≈80–94、z≈356–362），父级链含 2.6e‑3 与 100× 缩放",
+    "头朝 **−Y**（用头/颈骨权重顶点与尾骨权重顶点的 Y 质心判定）→ 需绕 Z 转 180° 才符合项目契约",
+    "按去尾体长归一：2.4015 → 0.135 m（factor 0.056215），交付 dims 0.0552×0.2245×0.0706",
+    "Blender 3.3 用 NLA 轨道导出 4 段动画时会**额外吐 7 段节点常量动画**，需在 GLB JSON 里裁掉"
+   ],
+   "verdict": "**已作为鼠的正式视觉接入**（`mouse.tres.visual_scene`），胶囊数值未改；注意是大鼠（rat）体态而非家鼠；动画播放逻辑尚未接"
   }
  ],
  "not_obtained": [
