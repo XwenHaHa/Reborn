@@ -926,6 +926,39 @@ PROBE|has_bpy_data_armatures=True
 - **坑**：`--python-expr` 在本机 PowerShell 下会被吞掉内层引号导致 `SyntaxError`（实测）。**统一用 `--python <文件>`。**
 - 出厂立方体 `Cube` 实测 **2.000000 m**；T005 的 1 m 基准**必须显式建模**。
 
+### 3.3 ART01 程序化静态道具：建模 → 导出 → 关卡接入 → 视觉返工（VERIFIED — 2026-10-21）
+
+```powershell
+$g = 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe'
+$proj = 'E:\Reborn\Game\Reborn'
+
+# 建模 + 自检 + 重开复核 + 导出（脚本内含 require()，失败退出码 1 且不写 glb）
+& 'D:\SoftWare\Blender\blender.exe' --background --factory-startup `
+    --python 'E:\Reborn\Tools\Blender\art01_bush_001.py'
+
+# 入工程 + 导入
+Copy-Item Art\Exports\Environment\SM_Bush_001.glb Game\Reborn\assets\environment\sm_bush_001.glb
+& $g --headless --path $proj --import --quit-after 2000
+
+# 读回真实导入结构（不猜层级）
+& $g --headless --path $proj --script 'res://tests/tool_dump_scene_tree.gd' --quit-after 600 `
+    -- 'res://assets/environment/sm_bush_001.glb'
+
+# 视觉捕获（**不能 --headless**；帧数要给足，2400 会在第 3 个机位前被掐断）
+& $g --path $proj --script 'res://tests/tool_capture_art01.gd' --quit-after 8000 -- art01-preview
+& $g --path $proj --script 'res://tests/tool_capture_art01.gd' --quit-after 8000 -- art01-level
+
+# 关卡接入（**改生成器，不手改 .tscn**）+ 必须重烤导航
+& $g --headless --path $proj --script 'res://tests/tool_make_courtyard.gd' --quit-after 20000
+& $g --headless --path $proj --script 'res://tests/tool_make_courtyard_nav.gd' --quit-after 40000
+
+# 断言
+& $g --headless --path $proj --script 'res://tests/run_art01_bush.gd' --quit-after 30000
+```
+
+- 截图落在 `user://`（= `%APPDATA%\Godot\app_userdata\Reborn\`），再拷进 `Art\Probes\` 入库。
+- **重跑生成器会清掉 `NavigationRegion3D`** → 导航必须随后重烤；重烤后 `git status` 里 nav `.tres` 无改动 = 几何没变。
+- 视觉判读用 `node E:\claude-vision-skill\vision.js <png> "<中文问题>"`；判读前先跑已知答案图自检。
 ---
 
 ## 4. 版本与仓库工具（VERIFIED）

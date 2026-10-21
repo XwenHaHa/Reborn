@@ -239,3 +239,38 @@ export_current_frame=False  export_optimize_animation_size=False  export_morph=F
 - **探针用刚性权重**（1 骨/顶点）只用于验证链路；**正式角色必须做真实权重**（本探针看不到关节混合）。
 - **纯旋转无 IK 会让脚端离地**（实测抬高 0.096 m）——正式动作需要足部接触处理。
 - 骨骼与网格命名保持确定（`RIG_BODY_001`、`root/spine/leg_front/leg_back`），导入后名称**实测保留**。
+
+## ART01 实测：带材质的静态道具（草丛掩体 ENV_BUSH_001，2026-10-21）
+
+T005 的探针证明"1 m 会变成 1 m"，ART01 再往前一步：**多材质 + 程序化几何 + 关卡接入 + 视觉返工**。
+
+| 环节 | 事实 |
+|---|---|
+| 建模脚本 | `Tools/Blender/art01_bush_001.py`（`--background --factory-startup --python`），退出码 **0** |
+| 源文件 | `Art/Blender/Environment/ENV_BUSH_001_v001/v002/v003.blend`（**每轮返工存新版本**，不覆盖） |
+| 导出 | `Art/Exports/Environment/SM_Bush_001.glb`，**156,660 B**，sha256 `35e0f2cb…`（可复现） |
+| Godot 侧 | `Game/Reborn/assets/environment/sm_bush_001.glb`（逐字节相同）+ `.import` |
+| 断言 | `tests/run_art01_bush.gd` **83/83**（资产层 32 / 关卡层 39 / 运行层 12） |
+
+**新增的可复用事实**：
+
+1. **双面导出**：Blender 材质 `use_backface_culling = False`（默认）→ glTF `doubleSided` →
+   Godot 导入后 `cull_mode = 2 (CULL_DISABLED)`。**玩家会站在草/树丛里面**，这条必须断言，
+   否则内侧看不见、像"洞里空无一物"。
+2. **材质颜色跨空间**：Blender 线性 `(0.085, 0.200, 0.075)` → Godot `albedo_color (0.3227, 0.4845, 0.3035)`，
+   即 `albedo = 1.055·c^(1/2.4) − 0.055`。断言里要用 sRGB 编码后的值比。
+3. **无贴图就关 texcoords**：`export_texcoords=False` 被 3.3.1 接受，文件更小（`unsupported=none`）。
+4. **`bmesh.ops.create_icosphere(subdivisions=N)`**：N=1 是 20 面（正二十面体），N=2 才是 80 面 ——
+   别把"细分级别"当"面数级别"。
+5. **程序化几何必须自检包络**：叶片的倾倒量会把包围盒推出设计范围（实测 1.511 m > 1.45 m 上限），
+   脚本里要 `require()` 包络、面数预算、材质槽、贴地（`min_z ≈ 0`）。
+6. **"相机能进的高度"要当硬约束**：草地底座（泥土垫）v001 做成 0.32 m 高的实心穹顶，
+   玩家躲进草丛时**相机在土里** → 内部视角整屏发黑。现在把"底座顶面 ≤ 0.12 m"写成脚本断言。
+7. **视觉捕获工具要独立**：`tests/tool_capture_art01.gd` 自己搭光/地面/比例参照物，
+   不依赖任何关卡（`tool_capture_render.gd` 与 `l_movement_lab` 绑得太紧）。
+   参照物与主体**必须同深度**，否则透视会把比例判读带偏。
+8. **关卡接入只改生成器**：`tests/tool_make_courtyard.gd` 里新增 `_mk_cover_bush()`，
+   实例化 glb 并 `owner = parent`（不设 owner 会被 `pack()` 丢掉）；资产缺失时自动退回原盒子。
+   **改了生成器就必须接着跑 `tool_make_courtyard_nav.gd`**，否则导航面被覆盖掉。
+
+证据全文：`Docs/Evidence/ART01.md`。

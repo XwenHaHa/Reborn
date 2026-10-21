@@ -96,6 +96,13 @@ const COVERS := [
 	{"node": "CoverBushWestB", "pos": Vector3(-16.0, 1.5, -16.0)},
 	{"node": "CoverBushNorthC", "pos": Vector3(-8.0, 1.5, -22.0)},
 ]
+## ART01：草丛掩体的**视觉**改用 Blender 资产（glb 实例）。碰撞与可见性仍只由上面的 Area3D
+## 数据体量负责 —— 换视觉**不改玩法**（T011 的几何断言、T026 的掩护断言都不受影响）。
+## 资产缺失时自动退回原来的半透明绿盒子，生成器不会因此失败。
+const BUSH_ASSET := "res://assets/environment/sm_bush_001.glb"
+const BUSH_YAWS := [0.0, 63.0, 141.0]      # 三处朝向不同，避免"复制粘贴感"
+const BUSH_SCALES := [1.00, 0.94, 1.06]
+
 const ROUTE_SHORT_START := Vector3(2.0, GROUND_TOP, 2.0)
 const ROUTE_SHORT_END := Vector3(2.0, GROUND_TOP, -22.0)
 
@@ -259,12 +266,14 @@ func _add_grass_structures(parent: Node3D) -> void:
 	_mk_surface_marker(parent, "DangerZoneMark", Vector3(DANGER_SIZE.x, 0.02, DANGER_SIZE.z),
 		Vector3(DANGER_CENTER.x, GROUND_TOP + 0.01, DANGER_CENTER.z), Color(0.55, 0.35, 0.30, 0.35))
 
-	for c in COVERS:
+	for i in COVERS.size():
+		var c: Dictionary = COVERS[i]
 		_mk_data_area(parent, c["node"], COVER_SIZE, c["pos"], "cover_volumes",
 			{"visibility_factor": COVER_FACTOR, "role": "cover"})
-		var mesh_pos: Vector3 = c["pos"]
-		_mk_surface_marker(parent, "%sMesh" % c["node"], Vector3(3.0, 0.9, 3.0),
-			Vector3(mesh_pos.x, GROUND_TOP + 0.45, mesh_pos.z), Color(0.24, 0.42, 0.26, 0.9))
+		# 视觉：贴地放在掩体中心（资产原点在草根处），只做视觉、不带碰撞
+		_mk_cover_bush(parent, "%sMesh" % c["node"],
+			Vector3(float(c["pos"].x), GROUND_TOP, float(c["pos"].z)),
+			float(BUSH_YAWS[i]), float(BUSH_SCALES[i]))
 
 	# 猫的观察点（0.50 高，鼠上不去）
 	_mk_box(parent, "GrassMoundA", Vector3(2.0, 0.50, 2.0), Vector3(-20.0, GROUND_TOP + 0.25, -12.0),
@@ -333,6 +342,9 @@ func _add_creek_structures(parent: Node3D) -> void:
 		Vector3.ZERO, Color(0.40, 0.42, 0.44))
 	_mk_data_area(parent, "CreekReedCover", COVER_SIZE, Vector3(-28.0, 1.5, 10.0), "cover_volumes",
 		{"visibility_factor": COVER_FACTOR, "role": "cover"})
+	# ART01 审计发现的真实缺陷：这处掩体**原来没有任何视觉**（实测 CreekReedCoverMesh = MISSING，
+	# 玩家在溪边"被草丛掩护"却看不到草）。现在补上同一套资产。
+	_mk_cover_bush(parent, "CreekReedCoverMesh", Vector3(-28.0, GROUND_TOP, 10.0), 212.0, 1.0)
 	print("TOOL|Creek|gap=%.3f@x=%.3f|wall_top=%.3f|water_top=%.3f|water_collision=none" % [
 		BANK_GAP, BANK_GAP_CENTER_X, GROUND_TOP + BANK_WALL_HEIGHT,
 		WATER_CENTER.y + WATER_SIZE.y * 0.5
@@ -468,6 +480,29 @@ func _mk_surface_marker(parent: Node3D, nm: String, size: Vector3, pos: Vector3,
 	return mi
 
 
+## ART01：草丛掩体的**视觉**节点（glb 实例，不带任何碰撞/Area3D）。
+## 缺资产时退回原来的 3x0.9x3 半透明绿盒子 —— 生成器要保持能在没有资产的机器上跑通。
+func _mk_cover_bush(parent: Node3D, nm: String, ground_pos: Vector3, yaw_deg: float,
+		scale_mul: float) -> void:
+	var ps: PackedScene = null
+	if ResourceLoader.exists(BUSH_ASSET):
+		ps = load(BUSH_ASSET) as PackedScene
+	if ps == null:
+		_mk_surface_marker(parent, nm, Vector3(3.0, 0.9, 3.0),
+			ground_pos + Vector3(0.0, 0.45, 0.0), Color(0.24, 0.42, 0.26, 0.9))
+		print("TOOL|cover_visual|%s|FALLBACK_BOX|asset_missing=%s" % [nm, BUSH_ASSET])
+		return
+	var inst: Node3D = ps.instantiate() as Node3D
+	inst.name = nm
+	parent.add_child(inst)
+	inst.owner = parent          # 不设 owner → pack() 会丢掉这个节点
+	inst.position = ground_pos
+	inst.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
+	inst.scale = Vector3.ONE * scale_mul
+	print("TOOL|cover_visual|%s|asset=%s|pos=(%.2f, %.2f, %.2f)|yaw=%.1f|scale=%.2f" % [
+		nm, BUSH_ASSET, ground_pos.x, ground_pos.y, ground_pos.z, yaw_deg, scale_mul])
+
+
 func _mk_marker(parent: Node3D, nm: String, pos: Vector3, group: String, meta: Dictionary) -> Marker3D:
 	var m := Marker3D.new()
 	m.name = nm
@@ -601,12 +636,34 @@ func _verify() -> void:
 		var bm := water.mesh as BoxMesh
 		_check("creek_water_top_0.13", bm != null and absf(water.position.y + bm.size.y * 0.5 - 0.13) < GEO_EPS)
 
+	# ART01：溪边掩体补上的视觉（原来 MISSING）
+	var creek_vis := scene.get_node_or_null("CreekReedCoverMesh") as Node3D
+	if _check("creek_cover_visual_exists", creek_vis != null):
+		_check("creek_cover_visual_is_asset", creek_vis.scene_file_path == BUSH_ASSET)
+		_check("creek_cover_visual_no_collision", _count_collision_shapes(creek_vis) == 0)
+
 	for c in COVERS:
 		var area := scene.get_node_or_null(c["node"]) as Area3D
 		if not _check("cover_%s_exists" % String(c["node"]).to_lower(), area != null):
 			continue
 		_check("cover_%s_factor_0.4" % String(c["node"]).to_lower(),
 			absf(float(area.get_meta("visibility_factor", 0.0)) - COVER_FACTOR) < 1e-9)
+		# ART01：视觉必须是 glb 实例，且**不带碰撞**（掩体不是实体，逻辑只认上面的 Area3D）
+		var vis := scene.get_node_or_null("%sMesh" % c["node"]) as Node3D
+		if _check("cover_%s_visual_exists" % String(c["node"]).to_lower(), vis != null):
+			_check("cover_%s_visual_is_asset" % String(c["node"]).to_lower(),
+				vis.scene_file_path == BUSH_ASSET)
+			_check("cover_%s_visual_no_collision" % String(c["node"]).to_lower(),
+				_count_collision_shapes(vis) == 0)
+			var bush_mi := _find_first_mesh(vis)
+			if _check("cover_%s_visual_mesh" % String(c["node"]).to_lower(),
+					bush_mi != null and bush_mi.mesh != null):
+				var bsz: Vector3 = bush_mi.mesh.get_aabb().size
+				_check("cover_%s_visual_size" % String(c["node"]).to_lower(),
+					bsz.x >= 2.5 and bsz.x <= 3.1 and bsz.z >= 2.5 and bsz.z <= 3.1
+					and bsz.y >= 0.80 and bsz.y <= 1.00)
+				print("VERIFY|CoverBush|%s|mesh_size=(%.3f, %.3f, %.3f)" % [
+					c["node"], bsz.x, bsz.y, bsz.z])
 	var dz := scene.get_node_or_null("DangerZone") as Area3D
 	if _check("danger_zone_exists", dz != null):
 		var cs := dz.get_node_or_null("Shape") as CollisionShape3D
@@ -679,6 +736,17 @@ func _count_collision_shapes(n: Node) -> int:
 			c += 1
 		c += _count_collision_shapes(ch)
 	return c
+
+
+## glb 实例的层级是 Node3D → MeshInstance3D，网格不一定在第一层 → 递归找第一个
+func _find_first_mesh(n: Node) -> MeshInstance3D:
+	if n is MeshInstance3D:
+		return n as MeshInstance3D
+	for ch in n.get_children():
+		var r := _find_first_mesh(ch)
+		if r != null:
+			return r
+	return null
 
 
 ## 走廊是否通畅（纯几何）：沿线段每 0.1 m 取一点，`height` = 离地高度、`radius` = 球半径，

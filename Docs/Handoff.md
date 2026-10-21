@@ -37,6 +37,7 @@
 | T027 | **done（2026-10-24）** | 按玩家物种布置测试生态：新组件 `scripts/world/ecology_spawner.gd`（`EcologySpawner`）+ 可玩入口 `scenes/debug/ecology_entry.tscn`（**唯一**把 `ecology_enabled` 打开的场景；`debug_entry.tscn` 保持关闭 → 12 个既有套件/7 个取景分支零影响）。**按玩家物种铺 NPC**：猫玩家→**2 只鼠 NPC**、鼠玩家→**1 只猫 NPC**，换物种**先 `clear()` 再重铺**（旧实例全释放、id 无残留）；**玩家不计入 NPC 数量**（只数本组件铺出的活跃 NPC，并与关卡 `animal_bodies` 存活数 − 1 交叉核对）；**出生周围无即时攻击** = 距离规则（非捕食者 **8.0 m**、捕食者 **14.0 m**，**都大于该物种视距** 6.5 / 9.0）+ 4 s 行为窗口（玩家零伤害、零攻击启动、最近 **3.63 m**）；落点用"现有出生标记 + 环上候选"，按**物种自己的导航层**吸附（层 1 最差 0.050 m / 层 2 最差 0.201 m）、**不改关卡几何**；集成：鼠 NPC 从 1.51 m 逃到 **8.50 m**、玩家猫 0.98 m 扑击**捕获**（生态计数 2→1）、猫 NPC 4.00 → **0.57 m** 接近、近距离**真的打到玩家**（100 → 65 一次 35 不秒杀）；**96/96 ×3 + 包内 96/96**；全量回归 **25 套 2846 条全绿**；包 **Reborn.pck 263,052 B / SelfTest.pck 889,120 B**；**视觉 2 帧判读通过**；顺带**修掉 1 个真实导出缺陷**（默认候选按 `.tres` 过滤 → 包里是 `.res`/`.remap` → 包内列表为空） |
 | T028 | **awaiting-review（2026-10-25）** | 第一轮概念试玩（**自测半边完成、U01 真人半边 NOT-RUN**）：新增 `tests/tool_t028_walkthrough.gd`（`extends SceneTree` 走查工具：把玩家 `player_controlled=false`，每帧"朝下一个**按层**导航路点 `look_at` + `move_intent=(0,-1)`"驱动），在可玩入口 `scenes/debug/ecology_entry.tscn` 上跑两条真实路线。**猫线**：11.18 m 内 **0.90 s** 看见鼠（`sense: seen=true`）→ **1 次扑击 3.9 s 捕获**（`route_len 10.96 / straight 11.18 / ratio 0.98`、`prey_states=["explore","alert"]`、`prey_min_gap 1.10 m`、捕获后生态 2→1）。**鼠线**：0.43 s 被猫看见（探针复核 = `alert/saw_prey` @8.92 m ≈ 猫 `vision_range 9.0` 的**视觉**触发，**不是**初始化 alert）→ **14.1 s 进洞**（`hole_gap 0.24 m`；逃段 `21.39 m / straight 21.12 / ratio 1.01` = 几乎直线）、**猫最近只到洞心 6.99 m**、12 s 内回 `explore` 且 `giveups=1`；两线 `hp 100→100`。**W1~W4 4/4 ×3 次源码 + 包内 4/4**；全量回归 **25 套 2847 条全绿**；包 **Reborn.pck 263,052 B（与 T027 相同 → 生产代码零改动）/ SelfTest.pck 905,604 B**；视觉 2 帧（`t028_cat_chase` 210,342 B 判读通过；`t028_mouse_hole` 221,923 B **只部分确认**：墙+缺口+HUD `pos:(26.68,0.12,19.00)`=洞口坐标，角色辨识 vision 未确认 → 不编造）。**暴露 2 个体验问题候选交 T029**：A 鼠 `ALERT` 0.3 s 在猫 `sprint 4.5` 下形同虚设；B 猫 AI 追击**从不 `want_sprint`**（walk 1.8 < 鼠 sprint 3.0 → 追不上） |
 | T030 | **done（2026-10-27）** | `Docs/Evidence/T030.md`、`Docs/Tasks/T030.md`、`autoload/game_state.gd`、`scripts/core/life_cycle.gd`、`scripts/core/main_entry.gd`、`scenes/core/main.tscn`（占位 → 真入口）、`tests/run_t030_lifecycle.gd`（111 条） | **生命周期状态与事件记录**：`LifeCycle` 四态（`ALIVE/SETTLING/SELECTING/SPAWNING`）+ 迁移表，非法迁移**不改状态/不写档案/不占 `LifeId`**；`GameState` 存档案（策划 §9.5 全字段）与事件（`seq` 单调、封顶 1024、跨世保留）、`LifeId L%04d` 单调；**死亡只结算一次**（连打 3 次 → 1 条档案 / 1 次信号）；结算期冻结世界时间与输入、**不留尸体**、NPC 数不变；`main.tscn` 改为真入口（关卡/HUD/状态栏运行期构建 → T013/T018/T026 旧断言继续全绿）；**111/111 ×3 + 包内 111/111，全量 27 套 2998 条全绿**；包 **289,832 / 968,900 B**；视觉 `t030_settled` 判读通过。**顺带修掉 2 个真实缺陷**：树外绝对路径取 autoload 报错、包内 `*.tres.remap` 导致 0 物种。遗留：`test_mode=true` 临时开发态（正式解锁属 T031）、真实按键选择 NOT-RUN |
+| ART01 | **done（2026-10-21，系统时钟）** | `Docs/Evidence/ART01.md`、`Docs/Tasks/ART01.md`、`Tools/Blender/art01_bush_001.py`、`Game/Reborn/assets/environment/sm_bush_001.glb`、`tests/run_art01_bush.gd`、`tests/tool_capture_art01.gd` | **AI 建模工作流打通 + 首个静态资产接入**：草丛掩体 `ENV_BUSH_001`（2040 tris、2 材质、双面、**零碰撞**）替换半透明绿盒子，并补上**溪边掩体原本完全没有视觉**的缺陷；`tool_make_courtyard.gd` 生成器接入（**不手改 .tscn**）；**83/83 + 全量 29 套 3081 条全绿**；3 轮返工（泥土墩过高→躲进草丛相机在土里、草叶像"板条"、密度/取景缺陷）；**不是正式美术 approved**，也**没有**越过 P6 阶段门 |
 
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
 
@@ -219,6 +220,23 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **导航代理要挂在"脚下"**（T023 实测缺陷）：`NavigationAgent3D` 继承 `Node`（**没有自己的变换**），位置取自**父节点**。挂在胶囊中心时，与导航面的垂直差会超过 `path_desired_distance`(0.10)，`get_next_path_position()` **永远**返回"脚下的投影起点"（水平差 ≈ 0）→ **高个子物种原地抖、零位移**（猫 0.24 m 中招、鼠 0.09 m 侥幸没事）。现在统一挂到 `AnimalBody/NavOrigin`（`Marker3D`，本地 y = −`capsule_half_height`）。
 - **"有目的地"≠"会动"，"到不了"≠"走了直线"**：`_advance_along_path()` 的"下一点在脚下 → 朝目标走"兜底**只在 `get_current_navigation_path()` 非空时**生效；否则"不可达目标"会被走成"可达"（T019/T022 各挂 4/7 条断言就是踩在这里）。
 
+## 美术流水线（ART01 已打通，2026-10-21）
+
+- **Blender 侧**：`Tools/Blender/art01_bush_001.py`（确定性 seed、程序化建模、无外部贴图）→
+  `Art/Blender/Environment/ENV_BUSH_001_v00{1,2,3}.blend`（**每轮返工存新版本**）→
+  `Art/Exports/Environment/SM_Bush_001.glb` → `Game/Reborn/assets/environment/sm_bush_001.glb`。
+- **资产硬契约**：原点在地面中心（`AABB.position.y=0`）、包络 ≤1.45 m 半径、高 ≤0.90 m、
+  泥土垫顶面 **≤0.12 m**（否则玩家躲进草丛时相机在土里，v001 就是这么错的）、2 材质槽、
+  **双面 `CULL_DISABLED`**、**零碰撞**、不进 `nav_source_courtyard`、三角形 ≤3000。
+- **视觉捕获**：`tests/tool_capture_art01.gd`（自己搭光/地面/1 m 立方体/猫鼠比例胶囊），
+  `--quit-after 8000 -- art01-preview`（7 机位）或 `-- art01-level`（关卡 3 机位）。
+  **`--quit-after 2400` 会在第 3 个机位前被掐断**（实测）。
+- **叶形必须在近景判读**：单片草叶 1–3 cm，720p 远景下只有 1–3 px，远景点位判"直板条"是**分辨率限制**，不是模型结论。
+- **`CharacterBody3D` 不会自己下落**（运动学体），下落探针必须逐帧喂速度 + `move_and_slide()`；
+  否则会得到 `landed == start` 的假"通过/失败"。
+- **重跑 `tool_make_courtyard.gd` 会清掉 `NavigationRegion3D`**（`NavigationMesh` ext_resource 消失）→
+  必须紧接着跑 `tool_make_courtyard_nav.gd`；重烤后 nav `.tres` 若 `git status` 无改动，说明几何确实没变。
+
 ## 下一步（按建议优先级）
 
 1. **T031（地点发现和老鼠解锁）**（2～4h，前置 T030 **已满足**）：给鼠洞指定**稳定 ID**；发现事件写进 `GameState` 长期记录，**不按"刷捕猎"解锁**；同时把 `MainEntry.test_mode` 从临时 `true` 接到正式解锁链上。
@@ -236,7 +254,9 @@ $proj = 'E:\Reborn\Game\Reborn'
    **T023 的 5 个新实现默认值**与**巡逻点位布置（T027）**（`Docs/Evidence/T023.md` §7）；
    **T024 的 5 个新实现默认值**与**多洞口优先级（T027）**（`Docs/Evidence/T024.md` §7）；
    **T025 的 3 个攻击默认值**与**攻击是否消耗体力**（`Docs/Evidence/T025.md` §7）。
-4. 正式角色/骨骼资产仍属 **P6** 阶段门，不得提前。
+4. **美术（ART01 已落地第一轮，待负责人定夺）**：草丛掩体已由半透明盒子换成真实草叶资产，
+   详见 `Docs/Evidence/ART01.md`。待定：① 是否作为**正式基线**（未 approved）；② 下一批建议
+   **补给点标记 → 树根屏障/鼠洞 → 庇护棚**；③ **猫/鼠角色与骨骼资产仍属 P6 阶段门，不得提前**。
 5. **T025 的两帧视觉判读可补**：vision 服务已在 T026 期间恢复，`Art/Probes/t025_*.png` 随时可重新判读。
 
 ## 待负责人处理
