@@ -274,8 +274,27 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **正式资产仍是 V008**：`cat.tres` / 导出 / Godot 资产**全部未改**，`run_art02_cat.gd` 46/46 仍绿。
 - **待负责人决策**（最小请求）：① 授权获取/采购可商用短毛猫基础模型（首选，接入链路已就绪）；
   ② 或安排美术在 Blender 雕刻/重拓扑。**不要**再让 agent 在这套脚本上调参。
-- 同角度对比：`Art/Staging/ART02_V009/ART02_V008_vs_V009_{views,sheet}.png`
-  （两套渲染用同一套机位/灯光/采样）。
+- 同角度对比：`Art/Staging/ART02_V009/ART02_V008_vs_V009_{views,sheet}.png`（两套渲染用同一套机位/灯光/采样）。
+
+### ART03 Reference Lock：参考库 + 基础模型选型（2026-10-21，**awaiting-review**）
+
+- **强制流程已落地**：`reference_pending → reference_confirmed → modeling → review → approved`
+  （`Docs/ART_ASSET_SPEC.md` §5）。**参考未确认前不得开展正式建模**；`approved` 只能负责人置位。
+- **新文件**：`references/ART_STYLE_GUIDE.md`（风格基线=写实偏风格化，待确认）、
+  `references/reference_manifest.json`（5 类资产 / 16 个候选，带 URL/作者/许可/面数/是否已下载）、
+  `Docs/ART_ASSET_SPEC.md`（逐资产规格 + 预算 + 评分 ≥85）、`Docs/ART_ASSET_AUDIT.md`（现状审计）、
+  `Docs/THIRD_PARTY_ASSETS.md`（第三方登记 + 署名义务）、`Docs/ART_ASSET_CHANGELOG.md`。
+- **能力实测**：联网可用；**Poly Haven 匿名直链可下载**（`boulder_01` CC0 glTF 1K 已下载到
+  `references/environment/boulder/candidates/`，5 个文件字节数与 API 一致）；
+  **Sketchfab 匿名 API 只能读元数据，下载需登录** → 13 个 Sketchfab 候选**未下载**（`reference_pending`）。
+- **选型建议（未确认）**：猫→`cat_fripouille`（8.4k 写实无骨骼）或 `cat_bigcat_gbarzu`（58.6k 带 2 段动画）；
+  鼠→`mouse_charliecatling`（6.2k 带 3 段动画，**许可为 Free Standard 需核对**）否则 `mouse_arribadaclub`（CC-BY 10k）；
+  洞口→`stump_callum_arb`（39k 带洞，需减面+量净空）；巨石→`boulder_01`（CC0，需减面 + 12.7 m→1.2 m 缩放）；
+  围栏→`wall_stefan_wr`（2k，作者自述模块化石墙）。
+- **未改动任何正式游戏资产**：`git status` 对 `Game/` 为空；Godot 侧 46/46 仍绿。
+- **待负责人确认 5 项**：① Sketchfab 下载授权（或你手动放 `references/_downloads/`）；
+  ② 是否接受 CC-BY 署名；③ 风格基线（写实偏风格化 vs 卡通）；④ `boulder_01` 缩放 0.09× 是否可接受；
+  ⑤ 猫走"自带骨骼候选"还是"无骨骼 + 重新绑骨（P6 T047）"。
 
 ## 下一步（按建议优先级）
 

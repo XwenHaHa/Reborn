@@ -1,0 +1,48 @@
+# ART_ASSET_CHANGELOG —— 资产与风格变更记录
+
+规则：任何**外形/风格/参考来源**层面的变更都要记一条，写清"为什么"。
+单纯修 bug（法线、非流形、命名）记在对应 `Docs/Evidence/Txxx.md`，这里只记资产决策。
+
+---
+
+## 2026-10-21 · Reference Lock 第 1 轮（本轮）
+
+**变更类型**：流程与参考库（**未改动任何正式游戏资产**）
+
+- 新增强制流程 `reference_pending → reference_confirmed → modeling → review → approved`（见 `Docs/ART_ASSET_SPEC.md` §5）。
+- 新增 `references/` 参考库：`ART_STYLE_GUIDE.md`、`reference_manifest.json`、
+  `characters/{cat,mouse}/candidates/`、`environment/{root_hole,boulder,fence}/candidates/`。
+- 新增 `Docs/ART_ASSET_SPEC.md`（逐资产规格 + 面数预算 + 五项评分 ≥85）、`Docs/ART_ASSET_AUDIT.md`（现状审计）、
+  `Docs/THIRD_PARTY_ASSETS.md`（第三方登记 + 署名义务）。
+- **风格基线定为"写实偏风格化"**（理由：硬核生存 + 近距动物对峙 + 现有关卡的自然材质方向；换卡通会造成风格断裂）。
+  → **待负责人确认**；若改为卡通，`cat/candidates/cat_toon_omabuarts` 与 Kenney Nature Kit 会重新进入候选。
+- **实际下载**：Poly Haven `boulder_01`（CC0）glTF 1K 五个文件，字节数与 API 一致；隔离存放于 `references/`。
+- **未下载**：全部 Sketchfab 候选（需登录）；状态 `reference_pending`，附人工下载步骤。
+
+**为什么**：`modeling3.md` 的重建（V009）证明"脚本化建模"无法达到专业动物形体；
+`modeling4.md` 要求先选对基础模型、建立可验证参考标准，再谈建模。
+
+---
+
+## 2026-10-21 · ART02-V009 基础形体重建：**not-accepted**
+
+- 方法变更：从"放样零件 + voxel remesh + decimate + 噪声位移"改为
+  "一根骨架 + Skin 修改器 + 1 级细分 + bmesh 松弛 + 宽高斯解剖塑形"（**不再使用 remesh/decimate/噪声**）。
+- 结果：5296 tris / 99.3% 四边形 / 0 非流形 / 4 毛发壳 / min_z=0；但**横向环状台阶、四肢关节不可辨、脚掌无趾部**。
+- 决策：按 `modeling3.md` §6 **停止迭代**；**正式资产保持 V008**，V009 未接入 Godot。
+- 证据：`Docs/Evidence/ART02_V009.md`；对比图 `Art/Staging/ART02_V009/ART02_V008_vs_V009_views.png`。
+
+---
+
+## 2026-10-21 · ART02 V008（猫）：`modeling`（在用，未 approved）
+
+- 猫的视觉由 `CapsuleMesh` 换成真实模型：9568 tris / 2 材质槽 / 2048² 烘焙 albedo；配置驱动接入（`SpeciesConfig.visual_scene`）。
+- 5 轮返工（v001→v008），视觉判读从"完全看不出是猫"提升到"轮廓可辨认为猫"；**未达正式美术水准**。
+- 证据：`Docs/Tasks/ART02.md`、`Docs/Evidence/ART02.md`。
+
+---
+
+## 2026-10-21 · ART01（草丛掩体 `ENV_BUSH_001`）：`modeling`（在用，未 approved）
+
+- 半透明绿盒子 → 2040 tris 真实草叶，双面、零碰撞；3 轮返工。
+- 证据：`Docs/Tasks/ART01.md`、`Docs/Evidence/ART01.md`。

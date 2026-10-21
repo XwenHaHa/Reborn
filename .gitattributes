@@ -67,3 +67,7 @@
 .github/       export-ignore
 Tools/Probes/  linguist-vendored=false
 *.png filter=lfs diff=lfs merge=lfs -text
+
+# --- Reference Lock：参考库里的原始下载文件（避免仓库膨胀）---
+references/**/*.bin filter=lfs diff=lfs merge=lfs -text
+references/**/*.jpg filter=lfs diff=lfs merge=lfs -text
