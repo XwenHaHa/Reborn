@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ART02 · 猫 CAT_BODY_001（v008）Blender / Godot 对照</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 28px 32px 60px; background: #14161a; color: #e6e8ec;
+         font: 14px/1.7 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: .3px; }
+  .sub { color: #8d94a0; font-size: 13px; margin-bottom: 26px; }
+  h2 { font-size: 15px; margin: 34px 0 12px; padding-left: 9px; border-left: 3px solid #59b0ff; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  figure { margin: 0; background: #1b1e24; border: 1px solid #262a33; border-radius: 10px; overflow: hidden; }
+  figure img { display: block; width: 100%; height: auto; background: #0e1013; }
+  figcaption { padding: 9px 12px 11px; font-size: 12.5px; color: #a9b0bc; }
+  figcaption b { color: #e6e8ec; font-weight: 600; }
+  .wide { grid-column: 1 / -1; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px;
+         border: 1px solid #3a4150; color: #9fb4cc; margin-right: 6px; }
+  .tag.ok { border-color: #2f6f4a; color: #7fd7a4; }
+  .tag.warn { border-color: #7a5a22; color: #e6bf7a; }
+  ul { margin: 8px 0 0; padding-left: 20px; color: #b9c0cc; }
+  code { background: #232830; padding: 1px 5px; border-radius: 4px; font-size: 12.5px; color: #cfe3ff; }
+</style>
+</head>
+<body>
+  <h1>ART02 · 猫 <code>CAT_BODY_001</code> 最新资产（v008）</h1>
+  <div class="sub">
+    9568 tris · 2 材质槽 · 2048² 烘焙 albedo · 零碰撞 · Blender 3.3.1 Cycles CPU（左）/ Godot 4.7.2 真实游戏相机（右）
+  </div>
+
+  <h2>① Blender 视图（同机位四向合影 + 面部近景 + 线框）</h2>
+  <div class="grid">
+    <figure class="wide">
+      <img src="art02_v008_sheet.png" alt="Blender four views sheet">
+      <figcaption><span class="tag">Blender</span><b>四向合影</b>：正 / 侧 / 背 / 45°，同一光照、同一相机距离。用来判断轮廓、比例、形体断裂。</figcaption>
+    </figure>
+    <figure>
+      <img src="art02_v008_face.png" alt="Blender face closeup">
+      <figcaption><span class="tag">Blender</span><b>面部近景</b>：眼窝/眉弓/上眼睑棱、琥珀虹膜+近黑瞳孔（材质里按距眼心距离画）、鼻头、耳内深色片。</figcaption>
+    </figure>
+    <figure>
+      <img src="art02_v008_wire.png" alt="Blender wireframe">
+      <figcaption><span class="tag">Blender</span><b>线框</b>：remesh 焊接 + 抽面后的拓扑。整体是单一毛发壳，眼/鼻/耳内是刻意独立的贴面件。</figcaption>
+    </figure>
+    <figure class="wide">
+      <img src="art02_v008_side.png" alt="Blender side view">
+      <figcaption><span class="tag">Blender</span><b>侧视单张</b>：胸腔最深、腰收窄、后肢膝-跗两段角度、尾巴由粗到细并上翘。</figcaption>
+    </figure>
+  </div>
+
+  <h2>② Godot 游戏内视图（同机位 before / after）</h2>
+  <div class="grid">
+    <figure>
+      <img src="art02_ingame_before.png" alt="In-game before (capsule placeholder)">
+      <figcaption><span class="tag warn">before</span><b>胶囊占位（旧）</b>：鼠玩家第一人称，猫在正前方 1.58 m。判读原话「像一个光滑的胶囊/蛋」「完全看不出是猫」。</figcaption>
+    </figure>
+    <figure>
+      <img src="art02_ingame_after.png" alt="In-game after (CAT_BODY_001 v008)">
+      <figcaption><span class="tag ok">after</span><b>真实模型（v008）</b>：同一帧、同一机位、同一光照。判读「能认出是猫：四足 + 尾巴 + 尖耳轮廓」；仍指出耳偏长、四肢偏细、表面偏哑光。</figcaption>
+    </figure>
+    <figure class="wide">
+      <img src="art02_after_t028_mouse_hole.png" alt="In-game gameplay frame t028">
+      <figcaption><span class="tag">Godot</span><b>实际玩法帧</b>（既有预设 <code>tool_capture_render.gd -- t028</code>）：鼠躲在洞口、猫在洞外 3 m。这条线的观察距离就是「被猫逼近」。</figcaption>
+    </figure>
+  </div>
+
+  <h2>③ 这组图想说明什么</h2>
+  <ul>
+    <li><b>几何</b>：不是几何体堆叠——躯干/颈/头/四肢/尾都是沿解剖轴线的变截面放样，再 voxel remesh 焊成一个整体壳。</li>
+    <li><b>材质</b>：单色塑料 → 烘焙 albedo（背深/体侧黄褐/腹部米白/虎斑/吻部浅色/耳尖渐变）。</li>
+    <li><b>接入</b>：<code>SpeciesConfig.visual_scene</code> 配置驱动，胶囊网格仅隐藏（尺寸代理），玩法与碰撞零改动。</li>
+    <li><b>仍有差距</b>：肌肉走向、毛发层次、耳比例、四肢体积感依然达不到专业动物模型——下一步建议引入专业基础模型或请美术雕刻基底（需授权）。</li>
+  </ul>
+</body>
+</html>
