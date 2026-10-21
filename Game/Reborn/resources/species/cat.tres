@@ -5,7 +5,7 @@
 
 [ext_resource type="Script" path="res://scripts/data/species_config.gd" id="1_cfg"]
 [ext_resource type="Script" path="res://scripts/ai/cat_ai.gd" id="2_ai"]
-[ext_resource type="PackedScene" path="res://assets/characters/cat/sm_cat_001.glb" id="3_vis"]
+[ext_resource type="PackedScene" path="res://assets/characters/cat/sm_cat_002.glb" id="3_vis"]
 
 [resource]
 script = ExtResource("1_cfg")

@@ -181,7 +181,8 @@ def normalize_orientation():
         return
     ex, ey = abs(eye_c.x), abs(eye_c.y)
     if ex > ey:
-        ang = math.radians(90.0 if eye_c.x < 0 else -90.0)
+        # 头在 +X → 需要 +90°（+X→+Y）；头在 -X → -90°
+        ang = math.radians(90.0 if eye_c.x > 0 else -90.0)
     elif eye_c.y < 0:
         ang = math.radians(180.0)
     else:
@@ -298,10 +299,19 @@ def render_views():
     scene = bpy.context.scene
     cam = scene.camera
     target = Vector((0.0, 0.02, 0.21))
+    mn, mx = world_bbox()
+    head_y = mx.y - 0.06          # 头在 +Y 端
+    mid_z = (mn.z + mx.z) * 0.5
     for name, loc in [("front", (0.0, 1.05, 0.34)), ("side", (1.05, 0.02, 0.32)),
                       ("back", (0.0, -1.05, 0.34)), ("corner45", (0.80, 0.80, 0.46)),
-                      ("top", (0.0, 0.06, 1.15)), ("face", (0.10, 0.52, 0.36))]:
-        aim = Vector((0.0, 0.26, 0.30)) if name == "face" else target
+                      ("top", (0.0, 0.06, 1.15)),
+                      ("face", (0.26, mx.y + 0.80, mid_z + 0.16))]:
+        if name == "face":
+            cam.data.lens = 85.0
+            aim = Vector((0.0, head_y, mid_z + 0.04))
+        else:
+            cam.data.lens = 60.0
+            aim = target
         point_camera(cam, loc, aim)
         scene.render.filepath = "%s/art04_cat_ref_%s.png" % (RENDER_DIR, name)
         bpy.ops.render.render(write_still=True)
@@ -311,8 +321,8 @@ def render_views():
 def export_glb():
     bpy.ops.object.select_all(action="DESELECT")
     for o in bpy.data.objects:
-        if o.type in {"MESH", "ARMATURE"}:
-            o.select_set(True)
+        if o.type in {"MESH", "ARMATURE"} and not o.name.startswith("RENDER_"):
+            o.select_set(True)   # 渲染辅助物（地面/灯/相机）不得进资产
     rna = bpy.ops.export_scene.gltf.get_rna_type()
     props = set(rna.properties.keys())
     wanted = {

@@ -12,20 +12,21 @@ extends SceneTree
 ##       --script 'res://tests/run_art02_cat.gd' --quit-after 30000
 ## 退出码：0 = 全部通过；1 = 有失败。
 
-const ASSET := "res://assets/characters/cat/sm_cat_001.glb"
+const ASSET := "res://assets/characters/cat/sm_cat_002.glb"
 const CAT_CFG := "res://resources/species/cat.tres"
 const MOUSE_CFG := "res://resources/species/mouse.tres"
 const BODY_SCENE := "res://scenes/characters/animal_body.tscn"
 const LEVEL := "res://scenes/maps/l_courtyard.tscn"
 
-## Blender 侧契约（Tools/Blender/art02_cat_001.py 的 PROBE 输出）
-const EXPECT_SIZE_X := 0.184903
-const EXPECT_SIZE_Y := 0.389409
-const EXPECT_SIZE_Z := 0.601082
-const EXPECT_TRIS := 9568
+## 资产契约（Tools/Blender/art04_cat_from_ref.py 的 PROBE + tests/tool_dump_scene_tree.gd 读回）
+## 源：Sketchfab cat_fripouille（CC BY 4.0），已按项目契约归一化（体长 0.58 m / 面朝 +Y / 2 槽 / 33 骨）
+const EXPECT_SIZE_X := 0.304614
+const EXPECT_SIZE_Y := 0.310051
+const EXPECT_SIZE_Z := 0.542281
+const EXPECT_TRIS := 8376
 const EXPECT_SURFACES := 2
-const EXPECT_FUR_ROUGH := 0.78
-const EXPECT_DETAIL_ROUGH := 0.32
+const EXPECT_FUR_ROUGH := 0.72
+const EXPECT_DETAIL_ROUGH := 0.28
 
 const GEO_EPS := 0.02
 const GROUND_TOP := 0.10
@@ -56,7 +57,7 @@ func _check_asset_layer() -> void:
 	print("ASSET|root_class=%s|root_name=%s|children=%d" % [
 		inst.get_class(), inst.name, inst.get_child_count()])
 	_assert("asset_root_is_node3d", "Node3D", inst.get_class(), inst is Node3D)
-	_assert("asset_root_name", "sm_cat_001", str(inst.name), String(inst.name) == "sm_cat_001")
+	_assert("asset_root_name", "sm_cat_002", str(inst.name), String(inst.name) == "sm_cat_002")
 
 	var mi := _find_mesh(inst)
 	_assert("asset_has_mesh", "MeshInstance3D", str(mi != null), mi != null)

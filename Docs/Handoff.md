@@ -307,8 +307,10 @@ $proj = 'E:\Reborn\Game\Reborn'
   manifest 里 5 类资产全部 `reference_confirmed`，猫进 `modeling`。
 - **猫的第一个合规产物**：`Tools/Blender/art04_cat_from_ref.py` → `Art/Exports/Cat/SM_Cat_002.glb`
   （8,376 tris / **2 槽** / **33 骨** / 体长 0.596 m / 高 0.307 m / 贴地 / 面朝 +Y / 法线 G 已翻转）。
-  **尚未接入 `cat.tres`**；渲染在 `Art/Probes/art04_cat_ref_*.png`。
-  **视觉判读 NOT-VERIFIED**：`vision.js` 502→503 服务不可用，未编造结论。
+  **已接入**：`cat.tres` → `sm_cat_002.glb`，`run_art02_cat.gd` **46/46 PASS**；
+  游戏内实拍 `Art/Probes/art02_ingame_after_v2.png`（正面朝向、四脚落地）。
+  **看图方式已变**：`Read` 直接读 PNG（多模态可用），不再依赖 `vision.js`。
+  仍缺：Idle/Walk/Run/AttackCue 动画（P6 T048/T049）；鼠/洞口/围栏/巨石尚未产出资产。
 
 ## 下一步（按建议优先级）
 

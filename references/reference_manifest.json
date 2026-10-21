@@ -27,15 +27,19 @@
       "owner_decision": "2026-10-21 负责人指定：猫用 cat_fripouille",
       "chosen_candidate": "cat_fripouille",
       "output_asset": {
-        "glb": "Art/Exports/Cat/SM_Cat_002.glb（7,075,276 B，sha256 bb01371788c837d6…）",
+        "glb": "Art/Exports/Cat/SM_Cat_002.glb（7,074,364 B，sha256 5a4ce32f9fcb1f04…）",
+        "godot_asset": "Game/Reborn/assets/characters/cat/sm_cat_002.glb（逐字节相同）+ .import",
         "generator": "Tools/Blender/art04_cat_from_ref.py",
         "tris": 8376,
         "material_slots": 2,
         "bones": 33,
-        "dims_m": [0.3576, 0.5961, 0.3074],
-        "grounded_min_z": 0.0,
-        "godot_wired": false,
-        "note": "尚未接入 cat.tres；等视觉确认后再切换"
+        "godot_aabb_size": [0.304614, 0.310051, 0.542281],
+        "grounded_min_y": 0.00175,
+        "facing": "-Z（Godot 前方；Blender 里为 +Y）",
+        "godot_wired": true,
+        "wired_at": "resources/species/cat.tres → ExtResource(3_vis) = sm_cat_002.glb",
+        "verified": "run_art02_cat.gd 46/46 PASS；游戏内同机位截图 art02_ingame_after_v2.png（正面朝向、四脚落地）",
+        "note": "骨骼已带入但无动画；Idle/Walk/Run/AttackCue 属 P6 T048/T049"
       },
       "spec": "Docs/ART_ASSET_SPEC.md#41",
       "current_ingame_asset": {

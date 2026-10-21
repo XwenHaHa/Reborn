@@ -100,7 +100,7 @@ func _run() -> void:
 	await _save("art02_ingame_before")
 
 	# ---- after：恢复真实模型 ----
-	cat_cfg.visual_scene = load("res://assets/characters/cat/sm_cat_001.glb")
+	cat_cfg.visual_scene = load("res://assets/characters/cat/sm_cat_002.glb")
 	cat.call("_rebuild_visual")
 	for i in 6:
 		await process_frame
