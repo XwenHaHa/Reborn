@@ -1,14 +1,18 @@
-[gd_resource type="Resource" script_class="SpeciesConfig" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="SpeciesConfig" load_steps=4 format=3]
 
 ; 猫的起测配置。数值来源：Docs/Parameters.md（厘米 → 米，÷100）。
 ; 改数值请改这里，不要在系统代码里另写一份（见 Docs/Tasks/T008.md）。
 
 [ext_resource type="Script" path="res://scripts/data/species_config.gd" id="1_cfg"]
 [ext_resource type="Script" path="res://scripts/ai/cat_ai.gd" id="2_ai"]
+[ext_resource type="PackedScene" path="res://assets/characters/cat/sm_cat_001.glb" id="3_vis"]
 
 [resource]
 script = ExtResource("1_cfg")
 species_id = &"Cat"
+; ART02：真实视觉模型（静态网格，无骨骼；骨骼/动画资产属 P6 阶段门）。
+; 网格只做视觉：碰撞、尺寸契约仍由胶囊负责。
+visual_scene = ExtResource("3_vis")
 capsule_radius = 0.16
 capsule_half_height = 0.24
 crouch_half_height = 0.15

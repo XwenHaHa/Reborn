@@ -130,6 +130,14 @@ enum FoodType { MEAT, SEED }
 @export var ai_script: Script = null
 
 
+## 视觉资源（ART02）：真实模型场景。
+## 留空 = 继续用 `AnimalBody/BodyMesh` 的胶囊灰盒占位（鼠目前仍是占位）。
+## 有值时 `AnimalBody` 会实例化它、把胶囊网格隐藏（胶囊仍负责碰撞与尺寸契约）。
+## 用**资源引用**而不是"物种名判断"，与 `ai_script` 同一模式。
+@export_group("Visual")
+@export var visual_scene: PackedScene = null
+
+
 ## Godot 的 `CapsuleShape3D.height` 是含两端半球的总高
 func capsule_height() -> float:
 	return capsule_half_height * 2.0

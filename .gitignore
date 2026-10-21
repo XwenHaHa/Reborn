@@ -87,3 +87,7 @@ _commitmsg*.txt
 
 # Blender 自动备份（*.blend1 **不匹配** *.blend，不加这条会以原始二进制入库）
 *.blend1
+
+# Python �﷨�����py_compile��
+__pycache__/
+*.pyc

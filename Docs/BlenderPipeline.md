@@ -274,3 +274,37 @@ T005 的探针证明"1 m 会变成 1 m"，ART01 再往前一步：**多材质 + 
    **改了生成器就必须接着跑 `tool_make_courtyard_nav.gd`**，否则导航面被覆盖掉。
 
 证据全文：`Docs/Evidence/ART01.md`。
+
+## ART02 实测：带烘焙贴图与面部细节的动物模型（猫 CAT_BODY_001，2026-10-21）
+
+ART01 证明"能建静态道具"，ART02 再往前：**变截面放样 + remesh 焊接 + 程序化烘焙贴图 + 面部件**，
+以及"视觉换掉但碰撞契约不变"的接入方式。脚本 `Tools/Blender/art02_cat_001.py`。
+
+| 环节 | 事实 |
+|---|---|
+| 建模 | 骨架线（Catmull-Rom）→ 逐截面椭圆放样；四肢/尾是变半径管；**所有件先闭合**再 remesh |
+| 焊接 | `REMESH`(VOXEL 0.0042) → `SMOOTH`×8 → `DECIMATE` 到 8200 tris → `SMOOTH` 0.30×2 → `DISPLACE`(CLOUDS) |
+| 产物 | `Art/Exports/Cat/SM_Cat_001.glb` 1,744,408 B；9568 tris；2 材质槽；2048² baked albedo |
+| Godot | `res://assets/characters/cat/sm_cat_001.glb`；导入后 **贴图被抽成外部文件** `sm_cat_001_CAT_BODY_001_BaseColor.png` |
+
+**新增的可复用事实**：
+
+1. **`ShaderNodeTexImage` 的输入只有 `Vector`，颜色是输出 `Color`** —— 给烘焙目标节点连"输入 Color"会报
+   `KeyError: 'Color'`。
+2. **烘焙目标贴图节点不能连到 Base Color**：DIFFUSE COLOR 烘焙评估的是**当前 shader**，
+   若 Base Color 来自空贴图 → 烘出全黑。正确顺序：程序化树进 Base Color → 烘到未连接的 Image 节点 → **烘完**再连线。
+3. **多个材质槽可以共烘一张贴图**：每个材质的 active image 节点都指向同一张图即可（本资产 = 毛发 + 眼睛/鼻头）。
+4. **超椭圆（`e<1`）会在正上/正侧方向留下硬棱**：躯干用它"增加骨骼感"，视觉判读直接读成"背上有两条折痕"。
+   改回 `e=1`（纯椭圆）+ 半径变化。
+5. **remesh + 平滑会吃掉 1 cm 级的五官**：眼睛/鼻头/耳内必须**在 remesh 之后**作为独立件加入
+   （每个材质槽的连通壳数要分开统计 `material_island()`；整模型 `islands` 不是 1 是正常的）。
+6. **抽面（Decimate）会留长条三角** → 判读为"菱形折痕"。抽面后再来一次 `SMOOTH 0.30 ×2`。
+7. **在材质里用"距某点距离"画特征**：虹膜/瞳孔/鼻头粉色用 `VectorMath(SUBTRACT) → LENGTH → ColorRamp`，
+   不需要额外材质槽，也不会被 UV 展开破坏。
+8. **`.glb` 里的贴图会被 Godot 抽成同目录 PNG**：不要手工再复制一份（会白占 1.4 MB 且不被引用）。
+9. **换视觉不动碰撞的做法**：`glb` 只做视觉；`AnimalBody` 保留 `BodyMesh` 的 `CapsuleMesh` 但 `visible=false`，
+   于是所有"网格尺寸 == 胶囊尺寸"的既有断言（T009/T013）继续成立。
+10. **蹲姿没有骨骼就是压缩**：`scale.y = crouch_height / capsule_height`（猫 0.625），并给下限
+    `VISUAL_MIN_SQUASH=0.55`；脚底永远贴胶囊底面 `y = -cap_h/2`。
+
+证据全文：`Docs/Evidence/ART02.md`。

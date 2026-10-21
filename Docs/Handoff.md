@@ -237,6 +237,28 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **重跑 `tool_make_courtyard.gd` 会清掉 `NavigationRegion3D`**（`NavigationMesh` ext_resource 消失）→
   必须紧接着跑 `tool_make_courtyard_nav.gd`；重烤后 nav `.tres` 若 `git status` 无改动，说明几何确实没变。
 
+## 美术：模型质量专项（ART02，2026-10-21）
+
+- **猫的视觉已从胶囊换成真实模型**：`Tools/Blender/art02_cat_001.py` →
+  `Art/Blender/Cat/CAT_BODY_001_v00{1..8}.blend` → `Art/Exports/Cat/SM_Cat_001.glb`
+  → `Game/Reborn/assets/characters/cat/sm_cat_001.glb`（9568 tris / 2 材质槽 / 2048² 烘焙 albedo）。
+- **接入方式（配置驱动，无物种名分支）**：`SpeciesConfig.visual_scene` → `AnimalBody._rebuild_visual()`。
+  胶囊网格 `BodyMesh` **保留但 `visible=false`**（它是尺寸代理），所以 T009/T013 的
+  "网格尺寸 == 胶囊尺寸"断言继续成立；蹲姿用 `scale.y = crouch_height/capsule_height`（0.625）近似，
+  脚底永远贴胶囊底面。**改 `cat.tres` 删掉 `visual_scene` 一行即可回退到胶囊**。
+- **资产契约**：原点在四脚着地的地面中心（`aabb.position.y≈0.0004`）、面朝 `-Z`、
+  0.1849×0.3894×0.6011 m、高 ≤0.48（胶囊总高）、**零碰撞**、三角形 ≤10000。
+- **烘焙三坑**（详见 `Docs/BlenderPipeline.md` §ART02）：`ShaderNodeTexImage` 的输入只有 `Vector`；
+  烘焙目标节点**必须先不连** Base Color；眼/鼻/耳内必须在 **remesh 之后**才贴（否则被平滑吃掉）。
+- **游戏内取证工具**：`tests/tool_capture_art02.gd`（真实生态入口 + 鼠玩家第一人称 + 猫固定 1.58 m，
+  同一帧先退回胶囊拍 before 再装回模型拍 after）→ `Art/Probes/art02_ingame_{before,after}.png`。
+- **回归**：`run_art02_cat.gd` 46/46 + t008/t009/t010/t013×2/t021/t026/t027/art01 全绿 = **1122 条**。
+  **未跑**：全量 27 套的其余套件（t002/t005/t006/t007/t011/t012/t014～t020/t022～t025/t029/t030，以及 `tool_t028_walkthrough`）与打包/导出复验。
+- **仍未达专业水准**：四轮视觉判读持续指出"耳比例像兔耳、四肢像棍、颈胸过渡生硬、表面像哑光塑料"。
+  继续调参只会逼近程序化放样的上限 → 下一步建议见 `Docs/Evidence/ART02.md` §7
+  （**首选**：引入有版权的专业猫基础模型或请美术雕刻基底；**需负责人授权**）。
+- **鼠仍是胶囊**：按 `modeling2.md` §五，试点未正式验收前不批量替换。
+
 ## 下一步（按建议优先级）
 
 1. **T031（地点发现和老鼠解锁）**（2～4h，前置 T030 **已满足**）：给鼠洞指定**稳定 ID**；发现事件写进 `GameState` 长期记录，**不按"刷捕猎"解锁**；同时把 `MainEntry.test_mode` 从临时 `true` 接到正式解锁链上。

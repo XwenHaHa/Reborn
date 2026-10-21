@@ -51,6 +51,9 @@ const FOOTSTEP_INTERVAL_MAX := 1.5
 const FOOTSTEP_MIN_SPEED := 0.05
 ## 身体所属组（T020）：不同物种的成员互为潜在威胁（按物种 ID 比，不写物种名）
 const GROUP_ANIMAL_BODIES := &"animal_bodies"
+## ART02：蹲姿时视觉的**最小**竖向压缩比。
+## 没有姿态动画（骨骼属 P6）时用压缩近似蹲伏；下限防止压成"饼"。
+const VISUAL_MIN_SQUASH := 0.55
 
 ## 物种配置（由生成者赋值；T009/T010 用它区分两种玩家）
 @export var species_config: SpeciesConfig:
@@ -91,6 +94,8 @@ var climb: StepClimb = null
 @onready var shape_node: CollisionShape3D = $CollisionShape3D
 ## 灰盒占位网格：与碰撞胶囊同尺寸（正式模型属 P6 资产任务）
 @onready var body_mesh: MeshInstance3D = get_node_or_null("BodyMesh") as MeshInstance3D
+## ART02：真实模型实例（来自 `SpeciesConfig.visual_scene`）。空 = 仍在用胶囊灰盒。
+var visual_root: Node3D = null
 @onready var camera: Camera3D = $Camera3D
 
 var _pitch: float = 0.0
@@ -388,6 +393,47 @@ func _sync_body_mesh(cap: CapsuleShape3D) -> void:
 	mesh.radius = cap.radius
 	mesh.height = cap.height
 	body_mesh.position = Vector3.ZERO
+	_sync_visual()
+
+
+## ART02：按配置实例化真实模型；没有配置就继续用胶囊灰盒。
+## 网格里**不带碰撞**（碰撞永远由 `CollisionShape3D` 的胶囊负责），
+## 因此换视觉不会改变任何玩法数值。
+func _rebuild_visual() -> void:
+	if visual_root != null and is_instance_valid(visual_root):
+		visual_root.queue_free()
+		visual_root = null
+	if species_config == null or species_config.visual_scene == null:
+		if body_mesh != null:
+			body_mesh.visible = not captured
+		return
+	var inst: Node = species_config.visual_scene.instantiate()
+	if inst == null:
+		if body_mesh != null:
+			body_mesh.visible = not captured
+		return
+	inst.name = "Visual"
+	add_child(inst)
+	visual_root = inst as Node3D
+	# 胶囊网格退化为"不可见的尺寸代理"：T009/T013 的 mesh==capsule 断言仍然成立
+	if body_mesh != null:
+		body_mesh.visible = false
+	if visual_root != null:
+		visual_root.visible = not captured
+	_sync_visual()
+
+
+## ART02：视觉贴地 + 蹲姿压缩。
+## 模型原点在四脚着地的地面中心（`min_z ≈ 0`），所以脚底 = 胶囊底面。
+## 蹲姿没有姿态动画（骨骼/动画属 P6 阶段门），这里用竖向压缩把视觉留在碰撞体内，
+## 避免"看不见的胶囊比看得见的猫还矮"。
+func _sync_visual() -> void:
+	if visual_root == null or species_config == null:
+		return
+	var cap_h: float = species_config.crouch_height() if is_crouching else species_config.capsule_height()
+	visual_root.position = Vector3(0.0, -cap_h * 0.5, 0.0)
+	var stand_h: float = maxf(0.001, species_config.capsule_height())
+	visual_root.scale = Vector3(1.0, clampf(cap_h / stand_h, VISUAL_MIN_SQUASH, 1.0), 1.0)
 
 
 ## 相机：竖直偏移 = 配置值；蹲下时按 crouch_drop() 降低视线（视线跟着身体变低）
@@ -434,6 +480,7 @@ func apply_config() -> void:
 
 	is_crouching = false
 	_rebuild_capsule()
+	_rebuild_visual()
 	_update_camera()
 
 	collision_layer = LAYER_ANIMAL
@@ -975,6 +1022,8 @@ func mark_captured(captor_id: String) -> bool:
 		interaction.release_interact(&"captured")
 	if body_mesh != null:
 		body_mesh.visible = false
+	if visual_root != null:
+		visual_root.visible = false
 	return true
 
 
