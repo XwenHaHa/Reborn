@@ -146,9 +146,12 @@ CAP|art06|tiles_total_tris=120668
 
 ### 做法
 `Tools/Blender/art12_short_wall.py` → `SM_Wall_Low_001.glb`：取 `wall_stone` **最上面 0.800 m**
-（上边界不动、下边界切在 2.006 − 0.800），底面补一块石帽盖住切口。
+（上边界不动、下边界切在 2.006 − 0.800），切口用一块**藏在砌体内部**的石板封住
+（`inset_x 0.90 / inset_y 0.42`、顶面下沉 6 mm —— 第一版几乎与石块同宽同厚，层缝处
+露出一条偏亮的"找平线"，收进去之后侧视被石块包住，仍保持 **1 材质槽**）。
 产出 **2.436584 × 0.800000 × 0.302739 m / 663 tris / 1 材质槽 / 1,810,332 B**，
-sha256 `6bee417f362dc1f2cb820cfcf77cad17205e52707db69e50eca0cdccb3809db7`。
+sha256 `af7c6d52c7d5fee6d6f4764734948e06ee9fe5d593d78ae04af5b8c7ad53e168`
+（初版 `6bee417f…` 是石帽未收进去的那一版）。
 
 生成器 `_mk_low_wall()`：`courses = round(1.6 / 0.800) = 2`、`k_y = 1.0`（**无竖向压扁**）、
 `n = round(段长 / 2.436584)`（3.0 m → 1 块、3.4 m → 1 块）、`k_x = 段长 / 2.436584`（1.231 / 1.395），
@@ -163,7 +166,7 @@ sha256 `6bee417f362dc1f2cb820cfcf77cad17205e52707db69e50eca0cdccb3809db7`。
 ### 实机
 ```
 & '<godot_console.exe>' --path 'E:\Reborn\Game\Reborn' `
-    --script 'res://tests/tool_capture_art06.gd' --quit-after 6000 -- art06-level
+    --script 'res://tests/tool_capture_art06.gd' --quit-after 40000 -- art06-level
 ```
 ```
 CAP|art06|wall|ShelterWallWest|box=(0.2, 1.6, 3.4)|tiles=2|tile_scene=res://assets/environment/sm_wall_low_001.glb|tile_scale=1.000|tris_per_tile=663|backing=yes
@@ -172,14 +175,24 @@ CAP|art06|wall|ShelterWallSouth|box=(3.0, 1.6, 0.2)|tiles=2|tile_scene=res://ass
 ```
 新增机位 `art06_shelter_q34`（3/4 全景）与 `art06_shelter_face`（正对南墙）。
 **视觉自查**（直接 Read PNG）：两面矮墙现在是**致密砌石**，石块比例与围栏一致、不再悬空；
-层缝处有一条浅色"找平线"（石帽）；角落有一小段衬板/石排台阶可见。诊断用探针
-`tests/tool_capture_low_wall.gd`（空场景单块正/背投影，产物 `Art/Probes/lowwall_front/back.png`）。
+原来层缝处那条浅色"找平线"已随石帽收进砌体消失，只在个别石排缺口处露出小亮块；
+角落仍能看到一小段衬板/石排台阶。诊断用探针 `tests/tool_capture_low_wall.gd`
+（空场景单块正/背投影，产物 `Art/Probes/lowwall_front/back.png`）。
 
 ### 回归
 **全量 30 套 / 3,173 条断言 / 0 失败 / 每套 EXIT=0 / `SCRIPT ERROR` 0**
 （`run_t013_movement_regression` 73、`run_t024_chase_search` 136、`run_t027_ecology` 96 需 `--quit-after 40000`，
 默认 6000 会被截断成 NO_SUMMARY）。
 
+### 两条本轮踩到的操作坑（务必记住）
+1. **`tool_capture_art06.gd` 6 个机位要 `--quit-after 40000`**。用 6000 会在第 1 机位后
+   被引擎截断，PNG 不更新 → 读到的是**上一轮的旧图**（本轮据此误判过"墙面变成一块空板"）。
+   判据：日志里必须有 `CAP|art06|done` 和 6 条 `save_result=0`。
+2. **重跑 `tool_make_courtyard.gd` 后必须重跑 `tool_make_courtyard_nav.gd`**。生成器会重建整份
+   `l_courtyard.tscn`，`NavRegion_Mouse/Cat` 与 `nav_source_courtyard` 组随之消失 → 全量回归里
+   t012(18) / t013(15) / t020(4) / t023(3) / t024(1) / t025(3) / t026(16) / t027(16) 连锁失败（**76 条**），
+   重烘焙后立刻恢复 3,173 条全绿。
+
 ### 仍未做
-- 两端台阶（源件自带 ±7 cm）与横向 1.23–1.40 拉伸未处理；石帽可换成更暗的砂岩色。
+- 两端台阶（源件自带 ±7 cm）与横向 1.23–1.40 拉伸未处理。
 - 未由负责人视觉验收；**不写 approved**；未推送、未发布。

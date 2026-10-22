@@ -63,7 +63,7 @@
 | ART03-⑬ | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Evidence/ART03_GREYBOX_B.md`、`Tools/Blender/art10_props_002.py`、`SM_Mound_001.glb`、`SM_Roof_001.glb`、`tests/tool_make_courtyard.gd` | 土墩换 198 tris 圆丘（复用地面 shader）+ 棚顶换 228 tris 木板条（含托梁）；碰撞盒未动；全量 30 套 3,173 条全绿；仍剩树根屏障本体 |
 
 | ART03-⑭ | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Evidence/ART03_ROOT_BARRIER.md`、`Tools/Blender/art11_root_barrier.py`、`SM_RootBarrier_001.glb`（640 tris）、`tests/tool_make_courtyard.gd` | 26 m 树根屏障换盘根模块平铺（7+4 块）；碰撞与洞口净空未动；全量 30 套 3,173 条全绿；根管偏规整、接缝有周期性 |
-| ART03-⑮ | **done（2026-10-22，系统时钟；未 approved）** | `Docs/Evidence/ART03_FENCE.md` §9、`Docs/Tasks/ART03_FENCE.md` §8、`Tools/Blender/art12_short_wall.py`、`SM_Wall_Low_001.glb`（663 tris）、`tests/tool_make_courtyard.gd`（`_mk_low_wall`）、`tests/tool_capture_low_wall.gd` | 庇护棚矮墙换专用模块（取 `wall_stone` 最上面 0.8 m，2 皮叠成 1.6 m，`k_y=1.0` 不压扁；横向精确贴合）；碰撞未动；全量 30 套 3,173 条全绿；两端台阶与横向拉伸未处理 |
+| ART03-⑮ | **done（2026-10-22，系统时钟；未 approved）** | `Docs/Evidence/ART03_FENCE.md` §9、`Docs/Tasks/ART03_FENCE.md` §8、`Tools/Blender/art12_short_wall.py`、`SM_Wall_Low_001.glb`（663 tris）、`tests/tool_make_courtyard.gd`（`_mk_low_wall`）、`tests/tool_capture_low_wall.gd` | 庇护棚矮墙换专用模块（取 `wall_stone` 最上面 0.8 m，2 皮叠成 1.6 m，`k_y=1.0` 不压扁；横向精确贴合）；碰撞未动；全量 30 套 3,173 条全绿；层缝"找平线"已把封口石板收进砌体压掉；两端台阶与横向拉伸未处理 |
 
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
 

@@ -160,16 +160,22 @@ def cut_band(o, z_lo, z_hi):
     log("cut_band|before_faces=%d" % before)
 
 
-def add_cap(o, cap_h=0.05, inset=0.995, cap_at_bottom=False):
-    """在底/顶加一块石板，盖住裁切留下的开口（否则单块俯视/仰视会看穿壳体）。"""
+def add_cap(o, cap_h=0.05, inset_x=0.90, inset_y=0.42, drop=0.006, cap_at_bottom=False):
+    """在底/顶加一块石板，**藏在砌体内部**盖住裁切开口。
+
+    v4 第一版把石板做成 `inset=0.995`（几乎与石块同宽同厚），结果在层缝处露出一条
+    明显偏亮的"找平线"（石板 UV 是整张 1024² 贴图挤在 5 cm 高的面上）。
+    现在缩到 0.90/0.42 并下沉 6 mm：只在**正上方/正下方**看得到，侧视完全被石块包住，
+    因此不需要第 2 个材质槽，也不会破坏"1 材质槽"的规格。
+    """
     xs = [v.co.x for v in o.data.vertices]
     ys = [v.co.y for v in o.data.vertices]
     zs = [v.co.z for v in o.data.vertices]
-    w = (max(xs) - min(xs)) * inset
-    d = (max(ys) - min(ys)) * inset
+    w = (max(xs) - min(xs)) * inset_x
+    d = (max(ys) - min(ys)) * inset_y
     cx = (min(xs) + max(xs)) * 0.5
     cy = (min(ys) + max(ys)) * 0.5
-    z0 = min(zs) if cap_at_bottom else max(zs) - cap_h
+    z0 = min(zs) if cap_at_bottom else max(zs) - cap_h - drop
     bpy.ops.mesh.primitive_cube_add(size=1.0, location=(cx, cy, z0 + cap_h * 0.5))
     cap = bpy.context.active_object
     cap.name = "ENV_WALL_LOW_CAP"
