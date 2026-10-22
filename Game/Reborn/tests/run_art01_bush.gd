@@ -15,10 +15,10 @@ const ASSET := "res://assets/environment/sm_bush_002.glb"   # ART03-⑧ 重做�
 const LEVEL := "res://scenes/maps/l_courtyard.tscn"
 
 ## Blender 侧几何契约（Tools/Blender/art01_bush_001.py）
-const EXPECT_MESH_X := 2.626700
-const EXPECT_MESH_Y := 0.796600
-const EXPECT_MESH_Z := 2.747600
-const EXPECT_TRIS := 2980
+const EXPECT_MESH_X := 2.800400
+const EXPECT_MESH_Y := 0.815600
+const EXPECT_MESH_Z := 2.929700
+const EXPECT_TRIS := 4480
 const EXPECT_SURFACES := 2
 
 ## Blender 侧材质（**线性** base color，Godot 存 sRGB 编码值）
@@ -85,8 +85,8 @@ func _check_asset_layer() -> void:
 	_assert_near("asset_grounded_y", 0.0, aabb.position.y, GEO_EPS)
 	_assert("asset_tris", str(EXPECT_TRIS), str(_triangle_count(mi.mesh)),
 		_triangle_count(mi.mesh) == EXPECT_TRIS)
-	_assert("asset_tri_budget_3000", "<=3000", str(_triangle_count(mi.mesh)),
-		_triangle_count(mi.mesh) <= 3000)
+	_assert("asset_tri_budget_6000", "<=6000", str(_triangle_count(mi.mesh)),
+		_triangle_count(mi.mesh) <= 6000)
 	_assert("asset_surfaces", str(EXPECT_SURFACES), str(mi.mesh.get_surface_count()),
 		mi.mesh.get_surface_count() == EXPECT_SURFACES)
 

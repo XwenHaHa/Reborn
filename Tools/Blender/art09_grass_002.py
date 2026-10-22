@@ -31,11 +31,11 @@ GLB_OUT = REPO + "/Art/Exports/Environment/SM_Bush_002.glb"
 RENDER_DIR = REPO + "/Art/Probes"
 
 SEED = 20261021
-BLADES = 210
+BLADES = 220
 ENVELOPE_R = 1.43          # 目标半径（ART01 契约：2.87 / 2 ≈ 1.435）
 TARGET_H = 0.88            # 目标最高点
 SOIL_H = 0.085             # 泥土垫高度（≤0.12）
-TRI_BUDGET = 3000
+TRI_BUDGET = 6000      # ART03-⑪：预算 3000→6000（叶数 145→220、加宽），实测场景余量充足
 
 LEAF_LINEAR = (0.085, 0.200, 0.075)
 SOIL_LINEAR = (0.055, 0.038, 0.025)
@@ -324,9 +324,9 @@ def main():
     # 3 圈叶片：外圈铺开（矮、倾角大）、中圈、内圈（高、直立）
     rings = [
         # (数量, 半径范围, 高度范围, 倾角范围)
-        (64, 0.55, 1.26, 0.46, 0.72, 0.44, 0.62),
-        (48, 0.22, 0.52, 0.72, 0.92, 0.20, 0.42),
-        (33, 0.00, 0.22, 0.84, 1.02, 0.05, 0.24),
+        (96, 0.55, 1.26, 0.46, 0.72, 0.44, 0.62),
+        (72, 0.22, 0.52, 0.72, 0.92, 0.20, 0.42),
+        (52, 0.00, 0.22, 0.84, 1.02, 0.05, 0.24),
     ]
     blade_count = 0
     for (n, r0, r1, h0, h1, lean0, lean1) in rings:
@@ -335,7 +335,7 @@ def main():
             r = rng.uniform(r0, r1)
             base = Vector((math.cos(a) * r, math.sin(a) * r, SOIL_H * 0.55))
             length = rng.uniform(h0, h1)
-            width = rng.uniform(0.030, 0.055)
+            width = rng.uniform(0.034, 0.062)
             yaw = a + rng.uniform(-0.5, 0.5)
             lean = rng.uniform(lean0, lean1)
             twist = rng.uniform(-0.6, 0.6)
