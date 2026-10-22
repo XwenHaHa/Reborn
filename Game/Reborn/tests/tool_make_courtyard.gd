@@ -121,7 +121,9 @@ const COVERS := [
 ## ART01：草丛掩体的**视觉**改用 Blender 资产（glb 实例）。碰撞与可见性仍只由上面的 Area3D
 ## 数据体量负责 —— 换视觉**不改玩法**（T011 的几何断言、T026 的掩护断言都不受影响）。
 ## 资产缺失时自动退回原来的半透明绿盒子，生成器不会因此失败。
-const BUSH_ASSET := "res://assets/environment/sm_bush_001.glb"
+## ART03-⑧：草丛换成重做的 `sm_bush_002`（带中脊折面的弯曲叶片 + 210 片/2,600 tris）。
+## 旧 `sm_bush_001` 是单层平面叶片（2040 tris），近距离就是"绿纸条"，保留在仓库里可回退。
+const BUSH_ASSET := "res://assets/environment/sm_bush_002.glb"
 const BUSH_YAWS := [0.0, 63.0, 141.0]      # 三处朝向不同，避免"复制粘贴感"
 const BUSH_SCALES := [1.00, 0.94, 1.06]
 
