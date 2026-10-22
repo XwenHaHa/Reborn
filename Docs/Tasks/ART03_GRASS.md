@@ -74,3 +74,38 @@ Godot 侧：两张贴图被正常抽取为 `sm_bush_002_T_Grass_{Leaf,Soil}.png`
 
 **效果与局限**：中近景能看到叶片根暗尖亮、纵向纹理、土堆有斑驳；但**远处（>6 m）增益有限**，
 而且**没有法线贴图**，折面 + 贴图仍是"程序化草"的底子。要继续提升得做叶片双面法线或用贴图工厂做 atlas。
+
+## 8. 细分 + 法线贴图 + 双面法线（ART03-⑩，续做）
+
+上一轮贴图只解决了"颜色纹理"，近景仍是"硬折 + 平面光照"。这一轮补三件事：
+
+| 项 | 改动 | 为什么 |
+|---|---|---|
+| 叶片细分 | 3 段 → **5 段**；为守住 ≤3000 tris，叶片数 210 → **145**（145×5×2×2 = 2,900 + 土垫 80 = **2,980**） | 3 段时叶尖有明显硬折；5 段弯曲更顺，代价是同样面数下叶子少一些 |
+| **叶片法线贴图** `T_Grass_Leaf_N`（128×256，Non-Color） | 由高度场（中脊凹槽 + 叶脉细棱 + 斑驳 + 叶缘下卷）做有限差分生成切线空间法线，接 `Normal Map → Principled Normal`；导出开 `export_tangents` | 让中脊/叶脉在光照下真的"有起伏"，而不是只靠折面 |
+| **双面法线修正** | `grass_wind.gdshader` 的 `fragment()` 第一条：`NORMAL = FRONT_FACING ? NORMAL : -NORMAL;` | 草叶是单面网格 + `cull_disabled` 双面渲染；背面不翻法线会让**草丛内部发黑**（玩家蹲在草里时最明显） |
+
+导出后核验（自写 GLB JSON 解析）：
+
+```
+mat[0] MAT_Bush_Leaf baseColorFactor=[0.085, 0.200, 0.075, 1] roughness=0.85 baseColorTex=True normalTex=True
+mat[1] MAT_Bush_Soil baseColorFactor=[0.055, 0.038, 0.025, 1] roughness=0.85 baseColorTex=True normalTex=False
+image[0] T_Grass_Leaf_N 58,641 B / image[1] T_Grass_Leaf 10,063 B / image[2] T_Grass_Soil 13,662 B
+```
+
+Godot 侧抽出 3 张图（含 `sm_bush_002_T_Grass_Leaf_N.png` 58,641 B）。
+
+**AABB 变化**：2.626693 × 0.796629 × 2.747555（叶片更少更细），已同步
+`run_art01_bush.gd` 的 `EXPECT_MESH_X/Y/Z` 与 `EXPECT_TRIS=2980`；
+生成器 `cover_*_visual_size` 的下界从 y≥0.80 放宽到 **y≥0.78** 并在注释里写明原因
+（0.797 仍远高于猫 0.48，掩体语义不变）。
+
+## 9. 验证（⑩）
+
+- `run_art01_bush.gd`：**83/83**
+- 生成器：`VERIFY|CoverBush|*|mesh_size=(2.627, 0.797, 2.748)` 三处 OK
+- 全量回归：**30 套 / 3,173 条 / 0 失败**
+- 实机图 `Art/Probes/art01_level_west_a_near.png`：叶片弯曲连续（无硬折）、有明暗条纹
+
+**剩余局限**：法线贴图是程序化生成的，近景仍有"程序化"底子；草叶数量减少后密度略降
+（可用 scale 或再提高面数预算补回，但那需要先改 ART01 的 ≤3000 预算）。

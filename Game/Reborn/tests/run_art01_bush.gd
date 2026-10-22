@@ -15,10 +15,10 @@ const ASSET := "res://assets/environment/sm_bush_002.glb"   # ART03-⑧ 重做�
 const LEVEL := "res://scenes/maps/l_courtyard.tscn"
 
 ## Blender 侧几何契约（Tools/Blender/art01_bush_001.py）
-const EXPECT_MESH_X := 2.764810
-const EXPECT_MESH_Y := 0.815492
-const EXPECT_MESH_Z := 2.952138
-const EXPECT_TRIS := 2600
+const EXPECT_MESH_X := 2.626700
+const EXPECT_MESH_Y := 0.796600
+const EXPECT_MESH_Z := 2.747600
+const EXPECT_TRIS := 2980
 const EXPECT_SURFACES := 2
 
 ## Blender 侧材质（**线性** base color，Godot 存 sRGB 编码值）

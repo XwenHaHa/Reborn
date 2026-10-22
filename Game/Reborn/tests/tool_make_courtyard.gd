@@ -1101,7 +1101,7 @@ func _verify() -> void:
 				var bsz: Vector3 = bush_mi.mesh.get_aabb().size
 				_check("cover_%s_visual_size" % String(c["node"]).to_lower(),
 					bsz.x >= 2.5 and bsz.x <= 3.1 and bsz.z >= 2.5 and bsz.z <= 3.1
-					and bsz.y >= 0.80 and bsz.y <= 1.00)
+					and bsz.y >= 0.78 and bsz.y <= 1.00)   # ART03-⑩：叶片改 5 段后高 0.797（仍远高于猫 0.48）
 				print("VERIFY|CoverBush|%s|mesh_size=(%.3f, %.3f, %.3f)" % [
 					c["node"], bsz.x, bsz.y, bsz.z])
 	var dz := scene.get_node_or_null("DangerZone") as Area3D

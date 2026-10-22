@@ -63,7 +63,7 @@ def require(cond, msg):
 rng = random.Random(SEED)
 
 
-def make_material(name, linear_rgb, roughness=0.85, image=None):
+def make_material(name, linear_rgb, roughness=0.85, image=None, normal_image=None):
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     nt = mat.node_tree
@@ -87,6 +87,16 @@ def make_material(name, linear_rgb, roughness=0.85, image=None):
         mix.inputs["Color1"].default_value = (linear_rgb[0], linear_rgb[1], linear_rgb[2], 1.0)
         nt.links.new(tex.outputs["Color"], mix.inputs["Color2"])
         nt.links.new(mix.outputs["Color"], bsdf.inputs["Base Color"])
+    if normal_image is not None:
+        ntex = nt.nodes.new("ShaderNodeTexImage")
+        ntex.image = normal_image
+        ntex.interpolation = "Linear"
+        ntex.location = (-620, -220)
+        nmap = nt.nodes.new("ShaderNodeNormalMap")
+        nmap.location = (-300, -220)
+        nmap.inputs["Strength"].default_value = 1.0
+        nt.links.new(ntex.outputs["Color"], nmap.inputs["Color"])
+        nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
     return mat
 
 
@@ -147,6 +157,48 @@ def make_leaf_image(name="T_Grass_Leaf", w=128, h=256):
     return img
 
 
+
+def make_leaf_normal_image(name="T_Grass_Leaf_N", w=128, h=256):
+    """叶片切线空间法线：中脊凹槽 + 叶脉细棱 + 斑驳。ND 朝 +Z，强度 0.5 编码。"""
+    img = bpy.data.images.new(name, w, h, alpha=False)
+    img.colorspace_settings.name = "Non-Color"
+    px = [0.0] * (w * h * 4)
+
+    def height(u, v):
+        hgt = 0.0
+        # 中脊：u=0.5 处一条凸起（与几何折面同向，强化而不是打架）
+        hgt += 0.55 * math.exp(-((u - 0.5) ** 2) / (2.0 * 0.010))
+        # 叶脉：沿长度方向的细棱
+        hgt += 0.16 * (0.5 + 0.5 * math.sin(u * 46.0 * math.pi))
+        # 斑驳
+        hgt += 0.10 * (_vnoise(u * 11.0, v * 30.0, 7) - 0.5)
+        # 叶缘轻微下卷
+        hgt -= 0.30 * max(0.0, (abs(u - 0.5) - 0.42) / 0.08)
+        return hgt
+
+    strength = 2.6
+    for j in range(h):
+        v = (j + 0.5) / float(h)
+        for i in range(w):
+            u = (i + 0.5) / float(w)
+            e = 1.0 / float(w)
+            hu = (height(min(1.0, u + e), v) - height(max(0.0, u - e), v)) / (2.0 * e)
+            hv = (height(u, min(1.0, v + e)) - height(u, max(0.0, v - e))) / (2.0 * e)
+            nx = -hu * strength
+            ny = -hv * strength
+            nz = 1.0
+            ln = math.sqrt(nx * nx + ny * ny + nz * nz)
+            nx, ny, nz = nx / ln, ny / ln, nz / ln
+            k = (j * w + i) * 4
+            px[k] = 0.5 + 0.5 * nx
+            px[k + 1] = 0.5 + 0.5 * ny
+            px[k + 2] = 0.5 + 0.5 * nz
+            px[k + 3] = 1.0
+    img.pixels = px
+    img.pack()
+    return img
+
+
 def make_soil_image(name="T_Grass_Soil", w=128, h=128):
     """泥土贴图：斑驳 + 边缘压暗（倍率均值≈1）。"""
     img = bpy.data.images.new(name, w, h, alpha=False)
@@ -175,7 +227,7 @@ def make_soil_image(name="T_Grass_Soil", w=128, h=128):
 
 def build_blade_mesh(verts, faces, uvs, mat_index, base, yaw, lean, twist, length, width, droop):
     """一片带中脊的弯曲叶子：3 段 × 横向 2 格（共 6 个四边形）。"""
-    segs = 3
+    segs = 5      # 3→5：叶尖不再硬折
     across = 2
     base_idx = len(verts)
     cy = math.cos(yaw)
@@ -272,9 +324,9 @@ def main():
     # 3 圈叶片：外圈铺开（矮、倾角大）、中圈、内圈（高、直立）
     rings = [
         # (数量, 半径范围, 高度范围, 倾角范围)
-        (92, 0.55, 1.26, 0.46, 0.72, 0.44, 0.62),
-        (70, 0.22, 0.52, 0.72, 0.92, 0.20, 0.42),
-        (48, 0.00, 0.22, 0.84, 1.02, 0.05, 0.24),
+        (64, 0.55, 1.26, 0.46, 0.72, 0.44, 0.62),
+        (48, 0.22, 0.52, 0.72, 0.92, 0.20, 0.42),
+        (33, 0.00, 0.22, 0.84, 1.02, 0.05, 0.24),
     ]
     blade_count = 0
     for (n, r0, r1, h0, h1, lean0, lean1) in rings:
@@ -308,11 +360,15 @@ def main():
     bpy.context.scene.collection.objects.link(obj)
 
     leaf_img = make_leaf_image()
+    leaf_n_img = make_leaf_normal_image()
     soil_img = make_soil_image()
-    log("textures|leaf=%dx%d|soil=%dx%d|packed=%s/%s" % (
-        leaf_img.size[0], leaf_img.size[1], soil_img.size[0], soil_img.size[1],
-        str(leaf_img.packed_file is not None), str(soil_img.packed_file is not None)))
-    obj.data.materials.append(make_material("MAT_Bush_Leaf", LEAF_LINEAR, image=leaf_img))
+    log("textures|leaf=%dx%d|leaf_normal=%dx%d|soil=%dx%d|packed=%s/%s/%s" % (
+        leaf_img.size[0], leaf_img.size[1], leaf_n_img.size[0], leaf_n_img.size[1],
+        soil_img.size[0], soil_img.size[1],
+        str(leaf_img.packed_file is not None), str(leaf_n_img.packed_file is not None),
+        str(soil_img.packed_file is not None)))
+    obj.data.materials.append(make_material("MAT_Bush_Leaf", LEAF_LINEAR,
+                                            image=leaf_img, normal_image=leaf_n_img))
     obj.data.materials.append(make_material("MAT_Bush_Soil", SOIL_LINEAR, image=soil_img))
     for pi, poly in enumerate(mesh.polygons):
         poly.material_index = 0
@@ -343,7 +399,7 @@ def main():
         "export_format": "GLB", "use_selection": True, "export_apply": True,
         "export_yup": True, "export_materials": "EXPORT", "export_cameras": False,
         "export_lights": False, "export_extras": False, "export_texcoords": True,
-        "export_normals": True, "export_colors": False,
+        "export_normals": True, "export_colors": False, "export_tangents": True,
         "export_skins": False, "export_animations": False,
     }
     os.makedirs(os.path.dirname(GLB_OUT), exist_ok=True)

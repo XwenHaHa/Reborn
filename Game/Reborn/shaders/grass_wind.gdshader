@@ -37,6 +37,8 @@ void vertex() {
 }
 
 void fragment() {
+	// 双面法线修正：草叶是单面网格 + cull_disabled，背面若不翻 NORMAL，从草丛内部看会发黑
+	NORMAL = FRONT_FACING ? NORMAL : -NORMAL;
 	ALBEDO = albedo_color;
 	ROUGHNESS = roughness_value;
 	SPECULAR = 0.25;

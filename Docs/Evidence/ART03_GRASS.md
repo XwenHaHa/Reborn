@@ -91,3 +91,14 @@ image[0] T_Grass_Leaf 10,063 B / image[1] T_Grass_Soil 13,662 B（均 image/png�
 
 Godot 抽取：`sm_bush_002_T_Grass_Leaf.png` 10,063 B、`sm_bush_002_T_Grass_Soil.png` 13,662 B（+`.import`）。
 `run_art01_bush` 83/83；全量 30 套 3,173 条 0 失败。
+
+## 8. 细分 + 法线贴图 + 双面法线（ART03-⑩）
+
+```
+PROBE|textures|leaf=128x256|leaf_normal=128x256|soil=128x128|packed=True/True/True
+PROBE|built|blades=145|tris=2980|verts=2659|dims=(2.6267, 2.7476, 0.7966)|min_z=0.0000
+mat[0] MAT_Bush_Leaf baseColorFactor=[0.085,0.200,0.075,1] baseColorTex=True normalTex=True
+DUMP|mesh|aabb_size=(2.626693, 0.796629, 2.747555)|tris=2980
+```
+
+`run_art01_bush` 83/83；生成器 CoverBush 三处 mesh_size OK；全量 30 套 3,173 条 0 失败。
