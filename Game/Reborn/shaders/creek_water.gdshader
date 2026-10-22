@@ -89,7 +89,7 @@ void fragment() {
 	// ⑤ 颜色：深色 ↔ 浅色，涟漪高处偏亮（像被风推起的细浪）
 	float band = smoothstep(0.35, 0.75, h);
 	vec3 water = mix(deep_color, shallow_color, band);
-	water = mix(water, shallow_color * 1.25, fres * 0.45);
+	water = mix(water, shallow_color * 1.10, fres * 0.30);
 
 	// ⑥ 岸边泡沫：用面 UV 到矩形边界的距离，形成一圈窄白边（水的边界不再是硬切口）
 	float edge = min(min(face_uv.x, 1.0 - face_uv.x), min(face_uv.y, 1.0 - face_uv.y));

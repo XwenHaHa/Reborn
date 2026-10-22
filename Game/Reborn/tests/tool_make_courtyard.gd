@@ -82,6 +82,8 @@ const WATER_DEPTH := 0.03
 ## 溪岸补湿泥带与芦苇丛，让"一整块纯蓝平面 + 一小丛草"不再那么假。
 ## 注意：这些全是 **MeshInstance3D**（零碰撞、不进导航组），玩法与 T011 断言零影响。
 const WATER_SHADER := "res://shaders/creek_water.gdshader"
+## ART03-⑦：草丛/芦苇的风摆动 shader（叶尖摆、根部不动；每丛相位不同）
+const GRASS_WIND_SHADER := "res://shaders/grass_wind.gdshader"
 ## 芦苇丛位置（沿溪岸一圈，避开水面中心；尺度/朝向下面对应打散）
 const REED_SPOTS := [
 	{"x": -32.0, "z": 20.9, "yaw": 12.0, "s": 0.95},
@@ -378,21 +380,87 @@ func _add_creek_dressing(parent: Node3D) -> void:
 			inst.position = Vector3(float(spot["x"]), GROUND_TOP, float(spot["z"]))
 			inst.rotation_degrees = Vector3(0.0, float(spot["yaw"]), 0.0)
 			inst.scale = Vector3.ONE * float(spot["s"])
+			_apply_grass_wind(inst)
 			placed += 1
 	print("TOOL|CreekReeds|count=%d|asset=%s|via=_add_creek_dressing" % [placed, BUSH_ASSET])
 
 	# 湿泥岸带：贴在水面边缘、略低于水面（0.105 < 水面顶 0.13），让"蓝面直接切到草地"变成
 	# "草→湿泥→水"的过渡。四条窄带各 straddle 一条边。
-	var wet := Color(0.26, 0.24, 0.19)
-	var edge_y: float = GROUND_TOP + 0.005
-	_mk_surface_marker(parent, "CreekWetBankSouth", Vector3(WATER_SIZE.x + 0.6, 0.02, 1.0),
-		Vector3(WATER_CENTER.x, edge_y, WATER_CENTER.z - WATER_SIZE.z * 0.5), wet)
-	_mk_surface_marker(parent, "CreekWetBankNorth", Vector3(WATER_SIZE.x + 0.6, 0.02, 1.0),
-		Vector3(WATER_CENTER.x, edge_y, WATER_CENTER.z + WATER_SIZE.z * 0.5), wet)
-	_mk_surface_marker(parent, "CreekWetBankWest", Vector3(1.0, 0.02, WATER_SIZE.z + 0.6),
-		Vector3(WATER_CENTER.x - WATER_SIZE.x * 0.5, edge_y, WATER_CENTER.z), wet)
-	_mk_surface_marker(parent, "CreekWetBankEast", Vector3(1.0, 0.02, WATER_SIZE.z + 0.6),
-		Vector3(WATER_CENTER.x + WATER_SIZE.x * 0.5, edge_y, WATER_CENTER.z), wet)
+	# ART03-⑦：岸线不再用 4 条笔直湿泥带（那样读起来还是矩形切口），
+	# 改成"锯齿泥舌 + 泥舌上的草"让可见水边变弯，另加水下砾石层做深度。
+	_add_creek_shore(parent)
+
+
+## ART03-⑦：把"矩形水面"读成"有岸线的溪"。
+##
+## 原理：水面的顶面固定在 y=0.13（T011 断言 `creek_water_top_0.13`），而地面是 0.10，
+## 所以**不可能**靠"把岸抬高到水面上"来做岸线——那需要改地面网格或改水位（都会碰玩法/断言）。
+## 这里用两个纯视觉手段：
+##   ① **锯齿泥舌**：沿水面四条边，各自以蜿蜒偏移铺 7 段低矮泥板（顶面 0.155，比水面高 2.5 cm），
+##      有的探进水面、有的退回岸上 → 可见水边变成弯的，而且会遮住水面的直边。
+##   ② **水下砾石层** `CreekBed`：水面 alpha 0.62 半透明，没有它就透出灰色地面；有了才有深浅层次。
+## 两者都是 MeshInstance3D：零碰撞、不进导航组，玩法与 T011 断言完全不受影响。
+func _add_creek_shore(parent: Node3D) -> void:
+	var mud := Color(0.185, 0.170, 0.145)      # 湿泥：比地面暗一档，才不会读成棕色木板
+	var gravel := Color(0.205, 0.198, 0.185)
+	var half_x: float = WATER_SIZE.x * 0.5
+	var half_z: float = WATER_SIZE.z * 0.5
+
+	# ① 水下砾石层：顶面 0.106（比水面低 2.4 cm，靠水的透明度透出来）
+	_mk_surface_marker(parent, "CreekBed", Vector3(WATER_SIZE.x - 0.2, 0.006, WATER_SIZE.z - 0.2),
+		Vector3(WATER_CENTER.x, GROUND_TOP + 0.003, WATER_CENTER.z), gravel)
+
+	# ② 锯齿泥舌：北/南两条长边各 7 段，东/西两端各 4 段
+	var rim_top: float = 0.142      # 只比水面(0.13)高 1.2 cm
+	var rim_h: float = rim_top - GROUND_TOP          # 0.055
+	var rim_y: float = GROUND_TOP + rim_h * 0.5
+	var seg := 0
+	for side in [-1.0, 1.0]:
+		var n := 7
+		for i in n:
+			var t: float = (float(i) + 0.5) / float(n)
+			var x: float = WATER_CENTER.x - half_x + (half_x * 2.0) * t
+			# 蜿蜒：奇数段探进水里（-0.45），偶数段退到岸上（+0.42）
+			var inward: float = -0.45 if i % 2 == 0 else 0.42
+			var z: float = WATER_CENTER.z + side * (half_z + inward)
+			var nm := "CreekShore%s%02d" % ["S" if side < 0.0 else "N", i]
+			# 尺寸/明暗按段号做确定性抖动：3.5×0.95 定死会读成"同规格木板"
+			var w: float = 0.62 + 0.5 * absf(sin(float(i) * 2.3 + side))
+			var l: float = 2.6 + 1.7 * absf(cos(float(i) * 1.7))
+			var tone: float = 0.88 + 0.16 * absf(sin(float(i) * 1.1 + side * 0.7))
+			var mi := _mk_surface_marker(parent, nm, Vector3(l, rim_h, w),
+				Vector3(x, rim_y, z), Color(mud.r * tone, mud.g * tone, mud.b * tone))
+			mi.rotation_degrees = Vector3(0.0, 11.0 * side * sin(float(i) * 1.3), 0.0)
+			seg += 1
+			# 泥舌上长草（隔一段一丛，避免整齐排队）
+			if i % 2 == 0 and ResourceLoader.exists(BUSH_ASSET):
+				var ps: PackedScene = load(BUSH_ASSET) as PackedScene
+				if ps != null:
+					var inst: Node3D = ps.instantiate() as Node3D
+					inst.name = "%sGrass" % nm
+					parent.add_child(inst)
+					inst.owner = parent
+					inst.position = Vector3(x + 1.1 * side, GROUND_TOP, z)
+					inst.rotation_degrees = Vector3(0.0, 47.0 * float(i), 0.0)
+					inst.scale = Vector3.ONE * (0.62 + 0.05 * float(i % 4))
+					_apply_grass_wind(inst)
+	for side in [-1.0, 1.0]:
+		var n := 4
+		for i in n:
+			var t: float = (float(i) + 0.5) / float(n)
+			var z: float = WATER_CENTER.z - half_z + (half_z * 2.0) * t
+			var inward: float = -0.4 if i % 2 == 0 else 0.38
+			var x: float = WATER_CENTER.x + side * (half_x + inward)
+			var nm := "CreekShore%s%02d" % ["W" if side < 0.0 else "E", i]
+			var w: float = 0.60 + 0.45 * absf(cos(float(i) * 2.1 + side))
+			var l: float = 2.3 + 1.4 * absf(sin(float(i) * 1.9))
+			var tone: float = 0.88 + 0.16 * absf(cos(float(i) * 1.2 + side * 0.5))
+			var mi := _mk_surface_marker(parent, nm, Vector3(w, rim_h, l),
+				Vector3(x, rim_y, z), Color(mud.r * tone, mud.g * tone, mud.b * tone))
+			mi.rotation_degrees = Vector3(0.0, 11.0 * side * cos(float(i) * 1.5), 0.0)
+			seg += 1
+	print("TOOL|CreekShore|segments=%d|rim_top=%.3f|bed_y=%.3f" % [
+		seg, rim_top, GROUND_TOP + 0.003])
 
 
 func _add_creek_structures(parent: Node3D) -> void:
@@ -596,6 +664,34 @@ func _mk_surface_marker(parent: Node3D, nm: String, size: Vector3, pos: Vector3,
 	return mi
 
 
+## ART03-⑦：给草丛实例的**叶片**表面换成风动 shader。
+## 只换名字里带 leaf 的表面：土墩面（MAT_Bush_Soil）保持原材质，否则整坨土也会跟着摆。
+## 找不到 shader 就什么都不做（生成器仍能在缺文件时跑通）。
+func _apply_grass_wind(inst: Node3D) -> void:
+	var shader_res := load(GRASS_WIND_SHADER) as Shader
+	if shader_res == null:
+		return
+	var mi := _find_first_mesh(inst)
+	if mi == null or mi.mesh == null:
+		return
+	var applied := 0
+	for i in mi.mesh.get_surface_count():
+		var base_mat := mi.mesh.surface_get_material(i) as StandardMaterial3D
+		if base_mat == null:
+			continue
+		if not "leaf" in String(base_mat.resource_name).to_lower():
+			continue
+		var wm := ShaderMaterial.new()
+		wm.shader = shader_res
+		wm.set_shader_parameter(&"albedo_color", base_mat.albedo_color)
+		wm.set_shader_parameter(&"roughness_value", base_mat.roughness)
+		mi.set_surface_override_material(i, wm)
+		applied += 1
+	if applied == 0:
+		print("TOOL|grass_wind|%s|NO_LEAF_SURFACE|surfaces=%d" % [
+			inst.name, mi.mesh.get_surface_count()])
+
+
 ## ART01：草丛掩体的**视觉**节点（glb 实例，不带任何碰撞/Area3D）。
 ## 缺资产时退回原来的 3x0.9x3 半透明绿盒子 —— 生成器要保持能在没有资产的机器上跑通。
 func _mk_cover_bush(parent: Node3D, nm: String, ground_pos: Vector3, yaw_deg: float,
@@ -615,6 +711,7 @@ func _mk_cover_bush(parent: Node3D, nm: String, ground_pos: Vector3, yaw_deg: fl
 	inst.position = ground_pos
 	inst.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
 	inst.scale = Vector3.ONE * scale_mul
+	_apply_grass_wind(inst)
 	print("TOOL|cover_visual|%s|asset=%s|pos=(%.2f, %.2f, %.2f)|yaw=%.1f|scale=%.2f" % [
 		nm, BUSH_ASSET, ground_pos.x, ground_pos.y, ground_pos.z, yaw_deg, scale_mul])
 

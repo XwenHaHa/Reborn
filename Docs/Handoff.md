@@ -48,6 +48,8 @@
 
 | ART03-⑥ | **done（2026-10-21，系统时钟）** | `Docs/Tasks/ART03_CREEK.md`、`Docs/Evidence/ART03_CREEK.md`、`shaders/creek_water.gdshader`、`tests/tool_capture_creek.gd`、`tests/tool_make_courtyard.gd` | 溪水换成程序化 shader（滚动 noise + 域扭曲 + 菲涅尔 + 岸边泡沫）+ 水面收成 22×9 溪带 + 13 丛芦苇 + 湿泥岸带；取证：两帧像素差 2.1%~3.1%、变化像素 31%~43%（水确实在动）；全量 30 套 3,173 条全绿；草丛网格未重做、无风摆 |
 
+| ART03-⑦ | **done（2026-10-21，系统时钟）** | `Docs/Tasks/ART03_CREEK.md` §6、`shaders/grass_wind.gdshader`、`tests/tool_make_courtyard.gd` | 溪岸 22 段锯齿泥舌 + 水下砾石层 + 草丛风摆 shader（只动 leaf 表面）；全量 30 套 3,173 条全绿；草叶几何仍是平面片（下一步需重做草丛资产）|
+
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
 
 **T030 的边界声明**：① 只做生命周期与记录，**没做**结算页美术/动效（P6/T032）、存档（T037）、正式解锁条件（T031）；② `MainEntry.test_mode = true` 是**临时开发态**，正式解锁接入后必须改 `false`；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。
