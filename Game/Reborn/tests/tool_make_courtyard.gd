@@ -86,6 +86,9 @@ const WATER_SHADER := "res://shaders/creek_water.gdshader"
 const GRASS_WIND_SHADER := "res://shaders/grass_wind.gdshader"
 ## ART03-⑫：地面程序化材质（草地/土/干草斑块），只换材质不动几何
 const GROUND_SHADER := "res://shaders/ground.gdshader"
+## ART03-⑬：土墩与棚顶的正式资产（极低面数，原点在脚印中心 + 底面 y=0）
+const MOUND_ASSET := "res://assets/environment/sm_mound_001.glb"
+const ROOF_ASSET := "res://assets/environment/sm_roof_001.glb"
 ## 芦苇丛位置（沿溪岸一圈，避开水面中心；尺度/朝向下面对应打散）
 const REED_SPOTS := [
 	{"x": -32.0, "z": 20.9, "yaw": 12.0, "s": 0.95},
@@ -292,8 +295,12 @@ func _add_courtyard_structures(parent: Node3D) -> void:
 		Vector3(cx, wall_y, SHELTER_Z_MAX - FENCE_THICK * 0.5), col)
 	_mk_clad_wall(parent, "ShelterWallSouth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
 		Vector3(cx, wall_y, SHELTER_Z_MIN + FENCE_THICK * 0.5), col)
-	_mk_box(parent, "ShelterRoof", Vector3(len_x + 0.4, 0.2, len_z + 0.2),
+	# ART03-⑬：棚顶换木板条资产（228 tris，含两根托梁）；碰撞盒（3.4 × 0.2 × 3.8）不变
+	var roof := _mk_box(parent, "ShelterRoof", Vector3(len_x + 0.4, 0.2, len_z + 0.2),
 		Vector3(cx, GROUND_TOP + SHELTER_WALL_H + 0.1, cz), Vector3.ZERO, col)
+	_mk_prop_visual(roof, "ShelterRoofVisual", ROOF_ASSET,
+		Vector3((len_x + 0.4) / 3.437582, 1.0, (len_z + 0.2) / 3.771297),
+		Vector3(0.0, -0.1, 0.0), "")
 
 	var debris_col := Color(0.62, 0.56, 0.46)
 	var debris := [
@@ -327,10 +334,15 @@ func _add_grass_structures(parent: Node3D) -> void:
 			float(BUSH_YAWS[i]), float(BUSH_SCALES[i]))
 
 	# 猫的观察点（0.50 高，鼠上不去）
-	_mk_box(parent, "GrassMoundA", Vector3(2.0, 0.50, 2.0), Vector3(-20.0, GROUND_TOP + 0.25, -12.0),
-		Vector3.ZERO, Color(0.30, 0.45, 0.28))
-	_mk_box(parent, "GrassMoundB", Vector3(2.0, 0.50, 2.0), Vector3(14.0, GROUND_TOP + 0.25, -8.0),
-		Vector3.ZERO, Color(0.30, 0.45, 0.28))
+	# ART03-⑬：土墩换低模圆丘（198 tris）+ 复用地面 shader 做草/土斑块；碰撞盒不变
+	var mound_a := _mk_box(parent, "GrassMoundA", Vector3(2.0, 0.50, 2.0),
+		Vector3(-20.0, GROUND_TOP + 0.25, -12.0), Vector3.ZERO, Color(0.30, 0.45, 0.28))
+	_mk_prop_visual(mound_a, "GrassMoundAVisual", MOUND_ASSET, Vector3(1.0, 1.0, 1.0),
+		Vector3(0.0, -0.25, 0.0), GROUND_SHADER)
+	var mound_b := _mk_box(parent, "GrassMoundB", Vector3(2.0, 0.50, 2.0),
+		Vector3(14.0, GROUND_TOP + 0.25, -8.0), Vector3.ZERO, Color(0.30, 0.45, 0.28))
+	_mk_prop_visual(mound_b, "GrassMoundBVisual", MOUND_ASSET, Vector3(1.06, 1.0, 0.94),
+		Vector3(0.0, -0.25, 0.0), GROUND_SHADER)
 
 
 # ---------------------------------------------------------------------------
@@ -737,6 +749,37 @@ func _mk_rock_debris(parent: Node3D, nm: String, size: Vector3, pos: Vector3, co
 	rock.rotation_degrees = Vector3(0.0, 37.0 + 61.0 * float(nm.length()), 0.0)
 	print("TOOL|debris_rock|%s|asset=%s|scale=%.2f" % [nm, BOULDER_ASSET, scale_mul])
 	return sb
+
+
+## ART03-⑬：道具视觉替换 —— 保留 StaticBody3D 的碰撞与尺寸，只把 `Mesh` 换成 glb 实例。
+## `shader_path` 非空时，会给实例里的网格挂上该 shader（土墩复用地面材质，草/土斑块自然衔接）。
+func _mk_prop_visual(body: StaticBody3D, nm: String, glb: String, prop_scale: Vector3,
+		pos: Vector3, shader_path: String) -> Node3D:
+	var ps: PackedScene = null
+	if ResourceLoader.exists(glb):
+		ps = load(glb) as PackedScene
+	if ps == null:
+		print("TOOL|prop_visual|%s|FALLBACK_BOX|asset_missing=%s" % [nm, glb])
+		return null
+	var box_mesh := body.get_node_or_null("Mesh") as MeshInstance3D
+	if box_mesh != null:
+		box_mesh.visible = false
+	var inst: Node3D = ps.instantiate() as Node3D
+	inst.name = nm
+	body.add_child(inst)
+	inst.owner = body.owner
+	inst.scale = prop_scale
+	inst.position = pos
+	if shader_path != "":
+		var shader_res := load(shader_path) as Shader
+		var mi := _find_first_mesh(inst)
+		if shader_res != null and mi != null:
+			var smat := ShaderMaterial.new()
+			smat.shader = shader_res
+			mi.material_override = smat
+	print("TOOL|prop_visual|%s|asset=%s|scale=%s|pos=%s|shader=%s" % [
+		nm, glb, prop_scale, pos, shader_path if shader_path != "" else "-"])
+	return inst
 
 
 ## ART01：草丛掩体的**视觉**节点（glb 实例，不带任何碰撞/Area3D）。
