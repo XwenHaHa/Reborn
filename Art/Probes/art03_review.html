@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ART03 四个资产 · 实机对照</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 26px 30px 60px; background: #14161a; color: #e6e8ec;
+         font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #2a2f38; }
+  .sub { color: #9aa3af; font-size: 12.5px; margin-bottom: 8px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+  .card { background: #1b1e24; border: 1px solid #2a2f38; border-radius: 10px; overflow: hidden; }
+  .card img { width: 100%; display: block; background: #0e0f12; }
+  .cap { padding: 9px 12px; font-size: 12.5px; color: #c3c9d4; }
+  .cap b { color: #e6e8ec; }
+  code { background: #232830; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .tag { font-size: 11px; color: #7ee2a2; }
+</style>
+</head>
+<body>
+  <h1>ART03 · 四个灰盒替换的实机对照</h1>
+  <div class="sub">全部来自真实关卡 <code>l_courtyard.tscn</code>，引擎自绘截图（非 Blender 渲染）。都<b>未 approved</b>，等你判读。</div>
+
+  <h2>② 溪边巨石 · <code>SM_Boulder_001</code> <span class="tag">7,500 tris / 1 槽 / 碰撞=BoxShape3D</span></h2>
+  <div class="sub">源 Poly Haven boulder_01（CC0），实测 1.27 × 1.83 × 1.00 m 米制，未缩放，只减面。</div>
+  <div class="row">
+    <div class="card"><img src="art05_level_boulder_wide.png"><div class="cap"><b>wide</b> 远景：与两侧草丛/涂地的相对尺度</div></div>
+    <div class="card"><img src="art05_level_boulder_front.png"><div class="cap"><b>front</b> 正对：真实多面体剪影 + 接触阴影；水面 0.13 &gt; 底面 0.10，3 cm 浸水</div></div>
+    <div class="card"><img src="art05_level_boulder_corner.png"><div class="cap"><b>corner</b> 斜 45°</div></div>
+    <div class="card"><img src="art05_level_boulder_close.png"><div class="cap"><b>close</b> 近景：纹理与法线细节</div></div>
+  </div>
+
+  <h2>③ 边界围栏 + 庇护棚墙 · <code>SM_Fence_Module_001</code> <span class="tag">1,244 tris/件 × 90 件</span></h2>
+  <div class="sub">源 Sketchfab wall_stefan_wr（CC-BY），3.68 × 3.00 × 0.30 m；碰撞盒一字未改（0.2 厚 × 3.0 高）。</div>
+  <div class="row">
+    <div class="card"><img src="art06_fence_north_interior.png"><div class="cap"><b>north 内侧</b> 背光面：石块成连续砌体、缝里是深色衬板（修前这里是一片黑）</div></div>
+    <div class="card"><img src="art06_fence_corner.png"><div class="cap"><b>corner</b> 转角：两面墙咬合处</div></div>
+    <div class="card"><img src="art06_fence_west_close.png"><div class="cap"><b>west 近景</b></div></div>
+    <div class="card"><img src="art06_shelter.png"><div class="cap"><b>庇护棚</b> 三面墙按 0.533× 等比缩到 1.6 m 高</div></div>
+  </div>
+
+  <h2>④ 鼠洞入口 · <code>SM_RootHole_001</code> <span class="tag">12,555 tris / 孔 0.24×0.30 贯通</span></h2>
+  <div class="sub">源 Sketchfab stump_callum_arb（CC-BY）；腔体原本是"碗"没有贯穿洞，孔是<b>自己布尔破的</b>（射线 9/9 全通）。</div>
+  <div class="row">
+    <div class="card"><img src="art07_hole_approach.png"><div class="cap"><b>approach</b> 正对洞口：树桩贴住屏障、孔里能看进去</div></div>
+    <div class="card"><img src="art07_hole_q34.png"><div class="cap"><b>q34</b> 斜看：桩体贴在屏障外侧（首版被灰盒吞掉只剩顶部，这是修后）</div></div>
+    <div class="card"><img src="art07_roothole_mouth_south.png"><div class="cap"><b>资产侧 mouth</b> Blender 渲染：底部方孔确实贯通</div></div>
+  </div>
+
+  <h2>④ 鼠 · <code>SM_Mouse_002</code> <span class="tag">3,602 tris / 23 骨 / 4 段动画</span></h2>
+  <div class="sub">源 Sketchfab mehrus rat（CC-BY，作者 Mehrus）；身体（去尾）0.135 m、身高 0.0706 m；动画按速度切 Idle/Walk/Run。</div>
+  <div class="row">
+    <div class="card"><img src="art08_mouse_q34.png"><div class="cap"><b>q34 实机</b> 站在庭院地面上，Idle 在播（前爪抬起）</div></div>
+    <div class="card"><img src="art08_mouse_side.png"><div class="cap"><b>side 实机</b> 长尾与四足</div></div>
+    <div class="card"><img src="art08_mehrus_v3_q34.png"><div class="cap"><b>资产侧</b> Blender 渲染（同一 GLB，无光照差异）</div></div>
+  </div>
+
+  <h2>还没换的灰盒（仍待做资产）</h2>
+  <div class="sub">树根屏障本体（<code>RootBarrierWest/East/Lintel</code>）、地面、土墩、碎屑、溪岸墙、庇护棚顶、食物/水源交互物。</div>
+</body>
+</html>
