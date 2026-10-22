@@ -75,9 +75,29 @@ const BANK_WALL_A_CENTER_X := -32.0           # x∈[−32.15, −31.85]
 const BANK_GAP_CENTER_X := -31.73             # 缝隙中心（鼠车道）
 
 ## 浅溪：仅网格、无碰撞（不做游泳系统）
-const WATER_SIZE := Vector3(22.0, 0.03, 20.0)
+const WATER_SIZE := Vector3(22.0, 0.03, 9.0)   # ART03-⑥：20→9，从"池塘"收成"溪带"（仍覆盖 WaterPoint_Creek 的 z=16）
 const WATER_CENTER := Vector3(-23.0, GROUND_TOP + 0.015, 16.0)
 const WATER_DEPTH := 0.03
+## ART03-⑥：溪水/溪边的视觉。水面用**程序化 shader**（流动+涟漪+岸边泡沫），
+## 溪岸补湿泥带与芦苇丛，让"一整块纯蓝平面 + 一小丛草"不再那么假。
+## 注意：这些全是 **MeshInstance3D**（零碰撞、不进导航组），玩法与 T011 断言零影响。
+const WATER_SHADER := "res://shaders/creek_water.gdshader"
+## 芦苇丛位置（沿溪岸一圈，避开水面中心；尺度/朝向下面对应打散）
+const REED_SPOTS := [
+	{"x": -32.0, "z": 20.9, "yaw": 12.0, "s": 0.95},
+	{"x": -27.5, "z": 21.1, "yaw": 78.0, "s": 1.05},
+	{"x": -22.0, "z": 20.8, "yaw": 155.0, "s": 0.88},
+	{"x": -16.5, "z": 21.0, "yaw": 210.0, "s": 1.00},
+	{"x": -30.5, "z": 11.1, "yaw": 40.0, "s": 0.92},
+	{"x": -25.0, "z": 11.0, "yaw": 130.0, "s": 1.02},
+	{"x": -18.5, "z": 11.2, "yaw": 265.0, "s": 0.86},
+	{"x": -14.0, "z": 11.3, "yaw": 300.0, "s": 0.94},
+	{"x": -34.4, "z": 13.5, "yaw": 330.0, "s": 0.98},
+	{"x": -34.2, "z": 18.5, "yaw": 25.0, "s": 1.06},
+	{"x": -11.7, "z": 14.0, "yaw": 190.0, "s": 0.90},
+	{"x": -11.9, "z": 19.0, "yaw": 300.0, "s": 1.04},
+	{"x": -22.5, "z": 16.2, "yaw": 96.0, "s": 0.72},
+]
 
 ## 庭院休息棚（§8.1 猫）、碎屑（鼠）
 const SHELTER_X_MIN := -9.5
@@ -340,6 +360,41 @@ func _add_roots_structures(parent: Node3D) -> void:
 # 浅溪（§8.1：饮水与路线选择；不做游泳系统）
 # ---------------------------------------------------------------------------
 
+## ART03-⑥：溪边"氛围"层 —— 芦苇丛沿两岸铺开 + 岸边湿泥带。
+## 全部是 MeshInstance3D：**没有碰撞**、**不进** `nav_source_courtyard`，所以玩法与导航都不变。
+## 为什么需要它：原来的溪边只有**一小丛**芦苇浮在整块纯色水面上，被负责人判为"假"。
+func _add_creek_dressing(parent: Node3D) -> void:
+	var ps: PackedScene = null
+	if ResourceLoader.exists(BUSH_ASSET):
+		ps = load(BUSH_ASSET) as PackedScene
+	var placed := 0
+	if ps != null:
+		for i in REED_SPOTS.size():
+			var spot: Dictionary = REED_SPOTS[i]
+			var inst: Node3D = ps.instantiate() as Node3D
+			inst.name = "CreekReed%02d" % i
+			parent.add_child(inst)
+			inst.owner = parent
+			inst.position = Vector3(float(spot["x"]), GROUND_TOP, float(spot["z"]))
+			inst.rotation_degrees = Vector3(0.0, float(spot["yaw"]), 0.0)
+			inst.scale = Vector3.ONE * float(spot["s"])
+			placed += 1
+	print("TOOL|CreekReeds|count=%d|asset=%s|via=_add_creek_dressing" % [placed, BUSH_ASSET])
+
+	# 湿泥岸带：贴在水面边缘、略低于水面（0.105 < 水面顶 0.13），让"蓝面直接切到草地"变成
+	# "草→湿泥→水"的过渡。四条窄带各 straddle 一条边。
+	var wet := Color(0.26, 0.24, 0.19)
+	var edge_y: float = GROUND_TOP + 0.005
+	_mk_surface_marker(parent, "CreekWetBankSouth", Vector3(WATER_SIZE.x + 0.6, 0.02, 1.0),
+		Vector3(WATER_CENTER.x, edge_y, WATER_CENTER.z - WATER_SIZE.z * 0.5), wet)
+	_mk_surface_marker(parent, "CreekWetBankNorth", Vector3(WATER_SIZE.x + 0.6, 0.02, 1.0),
+		Vector3(WATER_CENTER.x, edge_y, WATER_CENTER.z + WATER_SIZE.z * 0.5), wet)
+	_mk_surface_marker(parent, "CreekWetBankWest", Vector3(1.0, 0.02, WATER_SIZE.z + 0.6),
+		Vector3(WATER_CENTER.x - WATER_SIZE.x * 0.5, edge_y, WATER_CENTER.z), wet)
+	_mk_surface_marker(parent, "CreekWetBankEast", Vector3(1.0, 0.02, WATER_SIZE.z + 0.6),
+		Vector3(WATER_CENTER.x + WATER_SIZE.x * 0.5, edge_y, WATER_CENTER.z), wet)
+
+
 func _add_creek_structures(parent: Node3D) -> void:
 	# 水面：只有网格，**没有碰撞**（可通行）
 	var mi := MeshInstance3D.new()
@@ -348,11 +403,31 @@ func _add_creek_structures(parent: Node3D) -> void:
 	var bm := BoxMesh.new()
 	bm.size = WATER_SIZE
 	mi.mesh = bm
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.20, 0.45, 0.65, 0.60)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.roughness = 0.15
-	mi.material_override = mat
+	# 材质：优先程序化水面 shader（流动 + 涟漪 + 岸边泡沫）；shader 缺失则退回旧的纯色
+	# 为什么：旧材质是**完全静态**的纯色平面，负责人直接指出"水都不带动的"。
+	# 注意水面节点本身必须保持 BoxMesh（T011 的 creek_water_mesh_is_box / top_0.13 / depth_0.03），
+	# 运动只做在片元里，不做顶点位移。
+	var shader_res := load(WATER_SHADER) as Shader
+	if shader_res != null:
+		var smat := ShaderMaterial.new()
+		smat.shader = shader_res
+		smat.set_shader_parameter(&"shallow_color", Color(0.281, 0.514, 0.596))
+		smat.set_shader_parameter(&"deep_color", Color(0.121, 0.286, 0.376))
+		smat.set_shader_parameter(&"foam_color", Color(0.858, 0.898, 0.925))
+		smat.set_shader_parameter(&"flow_dir", Vector2(-0.92, 0.39))
+		smat.set_shader_parameter(&"flow_speed", 0.42)
+		smat.set_shader_parameter(&"ripple_scale", 3.4)
+		smat.set_shader_parameter(&"ripple_strength", 0.35)
+		smat.set_shader_parameter(&"base_alpha", 0.62)
+		mi.material_override = smat
+		print("TOOL|CreekWater|material=shader|%s" % WATER_SHADER)
+	else:
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.20, 0.45, 0.65, 0.60)
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.roughness = 0.15
+		mi.material_override = mat
+		print("TOOL|CreekWater|material=FALLBACK_STATIC|shader_missing=%s" % WATER_SHADER)
 	mi.set_meta("water_depth", WATER_DEPTH)
 	mi.add_to_group("water_bodies", true)
 	parent.add_child(mi)
@@ -374,6 +449,8 @@ func _add_creek_structures(parent: Node3D) -> void:
 	# ART01 审计发现的真实缺陷：这处掩体**原来没有任何视觉**（实测 CreekReedCoverMesh = MISSING，
 	# 玩家在溪边"被草丛掩护"却看不到草）。现在补上同一套资产。
 	_mk_cover_bush(parent, "CreekReedCoverMesh", Vector3(-28.0, GROUND_TOP, 10.0), 212.0, 1.0)
+	# ART03-⑥：补密芦苇 + 湿泥岸带（都是纯视觉 MeshInstance3D，零碰撞、不进导航组）
+	_add_creek_dressing(parent)
 	print("TOOL|Creek|gap=%.3f@x=%.3f|wall_top=%.3f|water_top=%.3f|water_collision=none" % [
 		BANK_GAP, BANK_GAP_CENTER_X, GROUND_TOP + BANK_WALL_HEIGHT,
 		WATER_CENTER.y + WATER_SIZE.y * 0.5
