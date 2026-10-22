@@ -62,6 +62,8 @@
 
 | ART03-⑬ | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Evidence/ART03_GREYBOX_B.md`、`Tools/Blender/art10_props_002.py`、`SM_Mound_001.glb`、`SM_Roof_001.glb`、`tests/tool_make_courtyard.gd` | 土墩换 198 tris 圆丘（复用地面 shader）+ 棚顶换 228 tris 木板条（含托梁）；碰撞盒未动；全量 30 套 3,173 条全绿；仍剩树根屏障本体 |
 
+| ART03-⑭ | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Evidence/ART03_ROOT_BARRIER.md`、`Tools/Blender/art11_root_barrier.py`、`SM_RootBarrier_001.glb`（640 tris）、`tests/tool_make_courtyard.gd` | 26 m 树根屏障换盘根模块平铺（7+4 块）；碰撞与洞口净空未动；全量 30 套 3,173 条全绿；根管偏规整、接缝有周期性 |
+
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
 
 **T030 的边界声明**：① 只做生命周期与记录，**没做**结算页美术/动效（P6/T032）、存档（T037）、正式解锁条件（T031）；② `MainEntry.test_mode = true` 是**临时开发态**，正式解锁接入后必须改 `false`；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。

@@ -89,6 +89,10 @@ const GROUND_SHADER := "res://shaders/ground.gdshader"
 ## ART03-⑬：土墩与棚顶的正式资产（极低面数，原点在脚印中心 + 底面 y=0）
 const MOUND_ASSET := "res://assets/environment/sm_mound_001.glb"
 const ROOF_ASSET := "res://assets/environment/sm_roof_001.glb"
+## ART03-⑭：树根屏障本体的盘根模块（实测 2.461093 长 × 0.480000 高 × 0.295729 厚，640 tris）
+const ROOT_BARRIER_ASSET := "res://assets/environment/sm_root_barrier_001.glb"
+const ROOT_BARRIER_MOD_LEN := 2.461093
+const ROOT_BARRIER_MOD_H := 0.480000
 ## 芦苇丛位置（沿溪岸一圈，避开水面中心；尺度/朝向下面对应打散）
 const REED_SPOTS := [
 	{"x": -32.0, "z": 20.9, "yaw": 12.0, "s": 0.95},
@@ -357,10 +361,13 @@ func _add_roots_structures(parent: Node3D) -> void:
 	var hole_l: float = HOLE_CENTER_X - HOLE_W * 0.5      # 26.38
 	var hole_r: float = HOLE_CENTER_X + HOLE_W * 0.5      # 26.62
 
-	_mk_box(parent, "RootBarrierWest", Vector3(hole_l - BARRIER_MIN_X, BARRIER_HEIGHT, depth),
+	# ART03-⑭：两段屏障换成盘根模块平铺（碰撞盒 / 洞口净空一字未改）
+	var rw := _mk_box(parent, "RootBarrierWest", Vector3(hole_l - BARRIER_MIN_X, BARRIER_HEIGHT, depth),
 		Vector3((BARRIER_MIN_X + hole_l) * 0.5, cy, cz), Vector3.ZERO, col)
-	_mk_box(parent, "RootBarrierEast", Vector3(BARRIER_MAX_X - hole_r, BARRIER_HEIGHT, depth),
+	_mk_root_barrier_visual(rw, "RootBarrierWestRoots")
+	var re := _mk_box(parent, "RootBarrierEast", Vector3(BARRIER_MAX_X - hole_r, BARRIER_HEIGHT, depth),
 		Vector3((hole_r + BARRIER_MAX_X) * 0.5, cy, cz), Vector3.ZERO, col)
+	_mk_root_barrier_visual(re, "RootBarrierEastRoots")
 	# 洞的上沿：从 0.10+HOLE_H 到屏障顶 0.60
 	var lintel_h: float = BARRIER_HEIGHT - HOLE_H        # 0.20
 	_mk_box(parent, "RootBarrierLintel", Vector3(HOLE_W, lintel_h, depth),
@@ -780,6 +787,42 @@ func _mk_prop_visual(body: StaticBody3D, nm: String, glb: String, prop_scale: Ve
 	print("TOOL|prop_visual|%s|asset=%s|scale=%s|pos=%s|shader=%s" % [
 		nm, glb, prop_scale, pos, shader_path if shader_path != "" else "-"])
 	return inst
+
+
+## ART03-⑭：把一段树根屏障的视觉换成盘根模块平铺。
+## 碰撞盒（0.50 高 × 1.00 深的 BoxShape3D）完全不动，所以"猫跳顶 / 鼠钻洞"的玩法契约不变。
+func _mk_root_barrier_visual(body: StaticBody3D, nm: String) -> void:
+	var ps: PackedScene = null
+	if ResourceLoader.exists(ROOT_BARRIER_ASSET):
+		ps = load(ROOT_BARRIER_ASSET) as PackedScene
+	if ps == null:
+		print("TOOL|root_barrier_visual|%s|FALLBACK_BOX|asset_missing=%s" % [nm, ROOT_BARRIER_ASSET])
+		return
+	var cs := body.get_node_or_null("Shape") as CollisionShape3D
+	var box := cs.shape as BoxShape3D if cs != null else null
+	var bsize: Vector3 = box.size if box != null else Vector3.ZERO
+	var box_mesh := body.get_node_or_null("Mesh") as MeshInstance3D
+	if box_mesh != null:
+		box_mesh.visible = false
+	# 高度等比缩放；沿长轴（X）平铺，间距 = 段长 / ceil(段长 / 模块长)
+	var k: float = bsize.y / ROOT_BARRIER_MOD_H
+	var mod_len: float = ROOT_BARRIER_MOD_LEN * k
+	var n: int = maxi(1, int(ceil(bsize.x / maxf(0.01, mod_len * 0.92))))
+	var spacing: float = bsize.x / float(n)
+	var tiles := Node3D.new()
+	tiles.name = "Roots"
+	body.add_child(tiles)
+	tiles.owner = body.owner
+	for i in n:
+		var inst: Node3D = ps.instantiate() as Node3D
+		inst.name = "Root%d" % i
+		tiles.add_child(inst)
+		inst.owner = body.owner
+		inst.scale = Vector3(k, k, k)
+		inst.position = Vector3(-bsize.x * 0.5 + spacing * (float(i) + 0.5), -bsize.y * 0.5, 0.0)
+		inst.rotation_degrees = Vector3(0.0, 180.0 if i % 2 == 1 else 0.0, 0.0)
+	print("TOOL|root_barrier_visual|%s|asset=%s|size=(%.2f, %.2f, %.2f)|tiles=%d|spacing=%.3f|k=%.3f" % [
+		nm, ROOT_BARRIER_ASSET, bsize.x, bsize.y, bsize.z, n, spacing, k])
 
 
 ## ART01：草丛掩体的**视觉**节点（glb 实例，不带任何碰撞/Area3D）。
