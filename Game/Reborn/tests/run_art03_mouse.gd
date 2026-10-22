@@ -34,6 +34,7 @@ func _initialize() -> void:
 	_check_asset()
 	_check_config()
 	await _check_runtime()
+	await _check_animation_switch()
 	print("SUMMARY|checks=%d|failures=%d" % [_checks, _fails])
 	print("RESULT|%s" % ("PASS" if _fails == 0 else "FAIL"))
 	quit(0 if _fails == 0 else 1)
@@ -131,6 +132,59 @@ func _check_runtime() -> void:
 	print("MEASURE|runtime|visual=%s|pos=%s|cap_h=%.4f|skeleton_bones=%d" % [
 		vis.scene_file_path, vis.position, cap_h,
 		skel.get_bone_count() if skel != null else -1])
+
+
+## 动画接线：静止→Idle、走动→Walk、冲刺→Run、停下→Idle。
+## 这段验证的是 `animal_body.gd` 里 ART03-④ 的视觉动画逻辑（只读速度与冲刺意图，不写玩法状态）。
+func _check_animation_switch() -> void:
+	# 加一块地板，否则鼠会一直自由落体（水平位移仍算，但落地判定更真实）
+	var floor_body := StaticBody3D.new()
+	floor_body.name = "AnimTestFloor"
+	floor_body.collision_layer = 1
+	floor_body.collision_mask = 0
+	floor_body.position = Vector3(0.0, -0.05, 0.0)
+	var cs := CollisionShape3D.new()
+	cs.name = "Shape"
+	var box := BoxShape3D.new()
+	box.size = Vector3(20.0, 0.1, 20.0)
+	cs.shape = box
+	floor_body.add_child(cs)
+	_world.add_child(floor_body)
+
+	var cfg: SpeciesConfig = load(MOUSE_CFG)
+	var body: AnimalBody = (load(BODY_SCENE) as PackedScene).instantiate() as AnimalBody
+	body.species_config = cfg
+	body.ai_enabled = false
+	body.player_controlled = false
+	_world.add_child(body)
+	body.global_position = Vector3(0.0, 0.2, 0.0)
+	for i in 20:
+		await physics_frame
+	if not _check("anim_bound", body.visual_anim_active):
+		return
+	_check("anim_idle_when_still", body.visual_anim_current == &"Idle")
+
+	body.move_intent = Vector2(0.0, -1.0)
+	body.want_sprint = false
+	for i in 30:
+		await physics_frame
+	_check("anim_walk_when_moving", body.visual_anim_current == &"Walk")
+	var walk_speed := body.horizontal_speed()
+
+	body.want_sprint = true
+	for i in 40:
+		await physics_frame
+	_check("anim_run_when_sprinting", body.visual_anim_current == &"Run")
+	var run_speed := body.horizontal_speed()
+	_check("anim_run_faster_than_walk", run_speed > walk_speed)
+
+	body.move_intent = Vector2.ZERO
+	body.want_sprint = false
+	for i in 40:
+		await physics_frame
+	_check("anim_idle_after_stop", body.visual_anim_current == &"Idle")
+	print("MEASURE|anim_switch|walk_speed=%.3f|run_speed=%.3f|final_clip=%s" % [
+		walk_speed, run_speed, body.visual_anim_current])
 
 
 func _find_first(node: Node, cls: String) -> Node:

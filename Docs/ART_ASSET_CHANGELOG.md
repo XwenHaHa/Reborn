@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-10-21 · ART03-⑤ 鼠动画接线 + 场景渲染实测
+
+**变更类型**：行为接线（**视觉层**，不改玩法数值）+ 性能实测。
+
+- `animal_body.gd`：`_bind_visual_animation()` / `_update_visual_animation(speed)` —— 按**实际水平速度**
+  在 `Idle/Walk/Run` 之间切换，`speed_scale` 跟速度挂钩；只读速度与冲刺意图，**不写** `velocity`/`move_intent`；
+  clip 缺失保持不动；没有 `AnimationPlayer` 的物种（猫）零影响。
+- 验证：`run_art03_mouse.gd` 新增 6 条断言（静止→Idle、走→Walk、冲刺→Run、跑比走快、停下→Idle、绑定成功）。
+- 实测（`tests/tool_perf_probe.gd`，720p / 关 vsync / 墙钟 240 帧）：
+  **1.662 ms/帧（p95 2.407）≈600 fps、111,028 primitives、32 draw call、112 objects**
+  → 石墙平铺 90 件的 **120,668 tris 不是瓶颈**。
+- **测量陷阱记录**：首次用 `Performance.TIME_PROCESS` 采样得到 240 帧全为 `84.077 ms`，
+  是窗口被节流造成的假象；改用墙钟计时后才是真实分布。
+- 来源说明：`animal_body.gd` 的动画代码**在接手收尾时已在工作区未提交**（非本人所写），
+  本次做的是复核、补断言与提交。
+
+---
+
 ## 2026-10-21 · ART03-④（鼠）换源：CC-BY mehrus rat → `SM_Mouse_002.glb`
 
 **变更类型**：**关键角色视觉替换**（胶囊 → 带骨骼/动画的参考模型），玩法数值零改动。

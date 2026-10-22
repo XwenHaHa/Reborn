@@ -115,3 +115,43 @@ X 型四足站姿，前爪抬起（Idle 动画在播），没有浮空/陷地/�
 - 动画**没有**接播放逻辑（Godot 里资源存在、能手动 play，但 `AnimalBody` 不会按速度切 Idle/Walk/Run）。
 - 未由负责人视觉验收 → 不写 approved；鼠是 **rat 体态**，不是家鼠。
 - 未推送、未发布。
+
+## 10. 动画接线验证（ART03-⑤）
+
+`animal_body.gd` 中的视觉动画代码**在接手收尾时已在工作区未提交**（非本次会话所写），
+本次做了复核 + 补断言 + 提交。关键事实（`run_art03_mouse.gd`）：
+
+```
+ASSERT|anim_bound|PASS
+ASSERT|anim_idle_when_still|PASS
+ASSERT|anim_walk_when_moving|PASS
+ASSERT|anim_run_when_sprinting|PASS
+ASSERT|anim_run_faster_than_walk|PASS
+ASSERT|anim_idle_after_stop|PASS
+MEASURE|anim_switch|walk_speed=1.100|run_speed=3.000|final_clip=Idle
+SUMMARY|checks=45|failures=0
+```
+
+设计约束（复核时逐条确认）：只读 `velocity`/`want_sprint`，不写 `velocity`/`move_intent`；
+clip 名字对不上就保持不动；没有 `AnimationPlayer` 的物种（猫）完全不受影响。
+
+## 11. 渲染实测基线（回答"墙类 12 万三角贵不贵"）
+
+```
+& '<godot_console.exe>' --path 'E:\Reborn\Game\Reborn' `
+    --script 'res://tests/tool_perf_probe.gd' --quit-after 4000 -- perf
+```
+
+```
+PERF|res=1280x720|warmup=60|sample=240
+PERF|frame_ms|avg=1.662|p50=1.514|p95=2.407|max=2.613|avg_fps=601.6
+PERF|primitives|avg=111028|peak=111028
+PERF|draw_calls|avg=32|peak=32
+PERF|objects_in_frame|peak=112
+```
+
+**测量陷阱记录**：第一版用 `Performance.TIME_PROCESS`，240 帧全是 `84.077 ms` —— 常数说明采到的
+不是真实帧时长（窗口被合成器节流）。改成 `Time.get_ticks_usec()` 环绕
+`await RenderingServer.frame_post_draw` 后拿到真实分布。
+
+口径限制：单机、单视角、无动态角色、非发行构建；只证明"这个规模不是瓶颈"，不等于性能验收。

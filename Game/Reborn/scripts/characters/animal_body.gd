@@ -262,6 +262,8 @@ func _physics_process(delta: float) -> void:
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z).move_toward(target, accel * delta)
 	velocity.x = horizontal.x
 	velocity.z = horizontal.z
+	# ART03-④：视觉动画跟实际水平速度走（只读，不写 velocity / move_intent）
+	_update_visual_animation(Vector2(velocity.x, velocity.z).length())
 
 	# 生存状态按**世界时间**推进（统一时间入口；见 scripts/systems/survival_controller.gd 头注）
 	if survival != null:
@@ -421,6 +423,7 @@ func _rebuild_visual() -> void:
 	if visual_root != null:
 		visual_root.visible = not captured
 	_sync_visual()
+	_bind_visual_animation()
 
 
 ## ART02：视觉贴地 + 蹲姿压缩。
@@ -434,6 +437,70 @@ func _sync_visual() -> void:
 	visual_root.position = Vector3(0.0, -cap_h * 0.5, 0.0)
 	var stand_h: float = maxf(0.001, species_config.capsule_height())
 	visual_root.scale = Vector3(1.0, clampf(cap_h / stand_h, VISUAL_MIN_SQUASH, 1.0), 1.0)
+
+## ART03-④：视觉动画（有 `AnimationPlayer` 才生效；没有动画的物种完全不受影响）。
+## 之前鼠的 4 段动画（Idle/Walk/Run/Eat）导进来了但**没人播**，等于资产只发挥了一半。
+## 这里有两条硬约束：
+##   ① **不碰玩法**：只读速度与冲刺意图，绝不写 `velocity` / `move_intent`。
+##   ② **缺动画不许崩**：clips 名字对不上就保持不动，不影响任何既有断言。
+const VISUAL_ANIM_IDLE := &"Idle"
+const VISUAL_ANIM_WALK := &"Walk"
+const VISUAL_ANIM_RUN := &"Run"
+const VISUAL_ANIM_MOVE_EPS := 0.05          # 低于这个速度算"站着"
+const VISUAL_ANIM_SPRINT_RATIO := 1.15      # 超过 walk 速度的 1.15 倍就切 Run
+var visual_anim: AnimationPlayer = null
+var visual_anim_current := &""
+
+
+func _bind_visual_animation() -> void:
+	visual_anim = null
+	visual_anim_active = false
+	visual_anim_current = &""
+	if visual_root == null:
+		return
+	visual_anim = _find_animation_player(visual_root)
+	if visual_anim == null:
+		return
+	# glTF 导入的动画 loop_mode 是 NONE；循环由运行时决定（Eat 保持一次性）
+	for name in [VISUAL_ANIM_IDLE, VISUAL_ANIM_WALK, VISUAL_ANIM_RUN]:
+		var a := visual_anim.get_animation(name)
+		if a != null:
+			a.loop_mode = Animation.LOOP_LINEAR
+	visual_anim_active = true
+
+
+## 有没有可播的动画（测试与调试用；无动画物种恒为 false）
+var visual_anim_active := false
+
+
+func _find_animation_player(n: Node) -> AnimationPlayer:
+	if n is AnimationPlayer:
+		return n as AnimationPlayer
+	for c in n.get_children():
+		var r := _find_animation_player(c)
+		if r != null:
+			return r
+	return null
+
+
+## 按**实际水平速度**选 clip。速率跟速度挂钩，避免"人在缓慢挪动、腿在狂奔"。
+func _update_visual_animation(speed: float) -> void:
+	if not visual_anim_active or visual_anim == null or species_config == null:
+		return
+	var want := VISUAL_ANIM_IDLE
+	if speed > VISUAL_ANIM_MOVE_EPS:
+		want = VISUAL_ANIM_RUN if (want_sprint and speed > species_config.walk_speed * VISUAL_ANIM_SPRINT_RATIO) else VISUAL_ANIM_WALK
+	if not visual_anim.has_animation(want):
+		return
+	if want != visual_anim_current:
+		visual_anim.play(want)
+		visual_anim_current = want
+	var rate := 1.0
+	if want == VISUAL_ANIM_WALK:
+		rate = clampf(speed / maxf(0.05, species_config.walk_speed), 0.5, 1.8)
+	elif want == VISUAL_ANIM_RUN:
+		rate = clampf(speed / maxf(0.05, species_config.sprint_speed), 0.6, 1.6)
+	visual_anim.speed_scale = rate
 
 
 ## 相机：竖直偏移 = 配置值；蹲下时按 crouch_drop() 降低视线（视线跟着身体变低）

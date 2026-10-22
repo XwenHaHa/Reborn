@@ -81,3 +81,35 @@
 - 视觉比胶囊略长（0.2245 m 含尾巴 vs 胶囊直径 0.12 m）→ 尾巴会伸出碰撞体，属预期。
 - 蹲姿仍用 `_sync_visual()` 的竖向压缩近似（无蹲姿动画）。
 - 未推送、未发布。
+
+## 7. 动画接线（ART03-⑤，本轮收尾）
+
+> **来源说明**：`animal_body.gd` 里这段视觉动画代码在我接手"本轮收尾"时**已经在工作区里未提交**
+> （不是我写的）。我做了三件事：① 逐行复核（只读速度、缺动画不崩、不写玩法状态）；
+> ② 补 6 条断言把它验成事实；③ 与我的改动一起提交，提交信息里写明来源。
+
+- 实现：`_bind_visual_animation()` 在 `_rebuild_visual()` 末尾绑定子树里的 `AnimationPlayer`；
+  把 `Idle/Walk/Run` 的 `loop_mode` 设为 `LOOP_LINEAR`（glTF 导进来是 `NONE`）；
+  `_update_visual_animation(speed)` 每物理帧按**实际水平速度**选 clip，并把 `speed_scale`
+  按 `speed / walk_speed`（Run 用 `sprint_speed`）夹到 [0.5, 1.8] / [0.6, 1.6]。
+- 硬约束：**不写** `velocity` / `move_intent`；找不到 clip 就保持不动；没有 `AnimationPlayer` 的物种
+  （猫的 glb 没有动画）完全不受影响。
+- 验证（`run_art03_mouse.gd` 新增 6 条）：`anim_bound` / 静止→`Idle` / 走动→`Walk` /
+  冲刺→`Run` / 跑比走快 / 停下回 `Idle`；实测 `walk_speed=1.100 | run_speed=3.000`。
+
+## 8. 场景渲染实测基线（本轮补的客观数字）
+
+工具：`tests/tool_perf_probe.gd`（**非 headless**，关 vsync、不限帧，按墙钟测 240 帧）。
+
+```
+PERF|res=1280x720|warmup=60|sample=240
+PERF|frame_ms|avg=1.662|p50=1.514|p95=2.407|max=2.613|avg_fps=601.6
+PERF|primitives|avg=111028|peak=111028
+PERF|draw_calls|avg=32|peak=32
+PERF|objects_in_frame|peak=112
+```
+
+结论：石墙平铺 90 件后**墙体三角形 ≈111k / 32 draw call，在 1280×720 下单帧 1.5–2.6 ms**，
+不是瓶颈。**注意口径**：单机单视角、无动态角色、非正式发行构建；第一次用
+`Performance.TIME_PROCESS` 采样得到"恒定 84.077 ms"是**测量假象**（窗口被合成器节流），
+已改成墙钟计时。

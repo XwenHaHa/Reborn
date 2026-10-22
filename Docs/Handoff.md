@@ -44,6 +44,8 @@
 
 | ART03-④（鼠） | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Tasks/ART03_MOUSE.md`、`Docs/Evidence/ART03_MOUSE.md`、`Tools/Blender/art08_mouse_from_ref.py`、`Art/Exports/Mouse/SM_Mouse_002.glb`、`Game/Reborn/assets/characters/mouse/sm_mouse_002.glb`、`resources/species/mouse.tres`、`tests/run_art03_mouse.gd`、`tests/tool_capture_art08.gd` | **鼠视觉换成 CC-BY 大鼠**：3,602 tris / **23 骨** / **4 段动画**；unlit→Principled、头朝 −Y→绕 Z 180°、去尾体长归一 0.135 m、NLA 导出并裁掉 7 段节点垃圾动画；`mouse.tres` 加 `visual_scene`（胶囊未改）；**39/39 + 全量 30 套 3,167 条全绿**；实机 2 图确认贴地/纹理/Idle 在播；**动画播放逻辑未接**、大鼠体态非家鼠 |
 
+| ART03-⑤ | **done（2026-10-21，系统时钟）** | `Docs/Tasks/ART03_MOUSE.md` §7–§8、`Docs/Evidence/ART03_MOUSE.md` §10–§11、`scripts/characters/animal_body.gd`、`tests/run_art03_mouse.gd`、`tests/tool_perf_probe.gd` | 鼠 4 段动画接上播放（按速度切 Idle/Walk/Run，speed_scale 跟速度走，不写玩法状态）；渲染实测 **1.66 ms/帧 ≈600 fps @720p、111,028 tris、32 draw call** → 墙体 12 万三角不是瓶颈；全量 30 套 3,173 条全绿 |
+
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
 
 **T030 的边界声明**：① 只做生命周期与记录，**没做**结算页美术/动效（P6/T032）、存档（T037）、正式解锁条件（T031）；② `MainEntry.test_mode = true` 是**临时开发态**，正式解锁接入后必须改 `false`；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。
