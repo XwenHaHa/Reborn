@@ -23,6 +23,15 @@
   <h1>ART03 · 四个灰盒替换的实机对照</h1>
   <div class="sub">全部来自真实关卡 <code>l_courtyard.tscn</code>，引擎自绘截图（非 Blender 渲染）。都<b>未 approved</b>，等你判读。</div>
 
+  <h2>⑥ 溪水与溪边（本轮打磨 · 水会动了）</h2>
+  <div class="sub">左：改前（纯色 StandardMaterial3D，无时间项 → 一整块蓝漆）。右：改后（程序化 shader + 22×9 溪带 + 两岸芦苇 + 湿泥岸带）。</div>
+  <div class="row">
+    <div class="card"><img src="art01_level_creek_cur.png"><div class="cap"><b>改前</b> 纯蓝平板 + 一小丛草：水不动、无高光、岸边硬切</div></div>
+    <div class="card"><img src="creek_low_a.png"><div class="cap"><b>改后</b> 低机位：涟漪纹理 + 太阳高光斑 + 两岸成排芦苇 + 溪心一丛</div></div>
+    <div class="card"><img src="creek_wide_a.png"><div class="cap"><b>改后</b> 远机位：溪带成形，岸边有湿泥过渡</div></div>
+  </div>
+  <div class="sub">运动取证：同机位相隔 0.75 s 两帧，<b>31%–43% 采样像素发生变化</b>（mean_abs_diff 0.021–0.031）。仍未解决：草丛本身是平面叶片、没有风摆；溪道仍是矩形。</div>
+
   <h2>② 溪边巨石 · <code>SM_Boulder_001</code> <span class="tag">7,500 tris / 1 槽 / 碰撞=BoxShape3D</span></h2>
   <div class="sub">源 Poly Haven boulder_01（CC0），实测 1.27 × 1.83 × 1.00 m 米制，未缩放，只减面。</div>
   <div class="row">
