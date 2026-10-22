@@ -18,6 +18,8 @@ const VIEWS := [
 	{"tag": "art06_fence_corner", "pos": Vector3(24.0, 1.80, 20.0), "look": Vector3(35.0, 1.20, 29.0), "fov": 60.0},
 	{"tag": "art06_fence_west_close", "pos": Vector3(-32.0, 1.30, 18.0), "look": Vector3(-36.0, 1.20, 22.0), "fov": 55.0},
 	{"tag": "art06_shelter", "pos": Vector3(-11.6, 1.35, 27.3), "look": Vector3(-8.0, 0.90, 27.3), "fov": 60.0},
+	{"tag": "art06_shelter_q34", "pos": Vector3(-12.4, 1.75, 22.6), "look": Vector3(-8.2, 0.85, 27.2), "fov": 55.0},
+	{"tag": "art06_shelter_face", "pos": Vector3(-8.0, 1.00, 23.2), "look": Vector3(-8.0, 0.80, 25.7), "fov": 55.0},
 ]
 
 

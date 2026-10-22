@@ -93,6 +93,12 @@ const ROOF_ASSET := "res://assets/environment/sm_roof_001.glb"
 const ROOT_BARRIER_ASSET := "res://assets/environment/sm_root_barrier_001.glb"
 const ROOT_BARRIER_MOD_LEN := 2.461093
 const ROOT_BARRIER_MOD_H := 0.480000
+## ART03-⑮：矮墙专用模块（源件里本来就矮的那件，真实比例 1.6221 × 0.7738 × 0.1989，238 tris）
+## 之前庇护棚 1.6 m 墙是把 3 m 模块压到 1.6 m（k=0.533）→ 石块被竖着压扁；现在改成**叠两层**
+const WALL_LOW_ASSET := "res://assets/environment/sm_wall_low_001.glb"
+const WALL_LOW_LEN := 2.436584
+const WALL_LOW_H := 0.800000
+const WALL_LOW_THICK := 0.302739
 ## 芦苇丛位置（沿溪岸一圈，避开水面中心；尺度/朝向下面对应打散）
 const REED_SPOTS := [
 	{"x": -32.0, "z": 20.9, "yaw": 12.0, "s": 0.95},
@@ -293,11 +299,12 @@ func _add_courtyard_structures(parent: Node3D) -> void:
 	var cz: float = (SHELTER_Z_MIN + SHELTER_Z_MAX) * 0.5
 	var wall_y: float = GROUND_TOP + SHELTER_WALL_H * 0.5
 	# 三面墙（东侧留门）+ 顶；内部净空 1.6 m
-	_mk_clad_wall(parent, "ShelterWallWest", Vector3(FENCE_THICK, SHELTER_WALL_H, len_z),
+	# ART03-⑮：三面矮墙改用真比例矮墙模块**叠两层**（石块不再被压扁）
+	_mk_low_wall(parent, "ShelterWallWest", Vector3(FENCE_THICK, SHELTER_WALL_H, len_z),
 		Vector3(SHELTER_X_MIN + FENCE_THICK * 0.5, wall_y, cz), col)
-	_mk_clad_wall(parent, "ShelterWallNorth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
+	_mk_low_wall(parent, "ShelterWallNorth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
 		Vector3(cx, wall_y, SHELTER_Z_MAX - FENCE_THICK * 0.5), col)
-	_mk_clad_wall(parent, "ShelterWallSouth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
+	_mk_low_wall(parent, "ShelterWallSouth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
 		Vector3(cx, wall_y, SHELTER_Z_MIN + FENCE_THICK * 0.5), col)
 	# ART03-⑬：棚顶换木板条资产（228 tris，含两根托梁）；碰撞盒（3.4 × 0.2 × 3.8）不变
 	var roof := _mk_box(parent, "ShelterRoof", Vector3(len_x + 0.4, 0.2, len_z + 0.2),
@@ -825,6 +832,72 @@ func _mk_root_barrier_visual(body: StaticBody3D, nm: String) -> void:
 		nm, ROOT_BARRIER_ASSET, bsize.x, bsize.y, bsize.z, n, spacing, k])
 
 
+## ART03-⑮：矮石墙 —— 用真比例矮墙模块**叠层**（而不是把 3 m 模块压扁）。
+## 层数 = round(段高 / 模块高)（1.6 / 0.774 → 2 层），每层按 `层高/模块高` 等比缩放，
+## 相邻层错开半个间距形成"通缝错开"，视觉上才像砌体。
+## 碰撞盒仍是原来的 BoxShape3D（尺寸/位置一字未改）。
+func _mk_low_wall(parent: Node3D, nm: String, size: Vector3, pos: Vector3, color: Color) -> StaticBody3D:
+	var sb := _mk_box(parent, nm, size, pos, Vector3.ZERO, color)
+	var ps: PackedScene = null
+	if ResourceLoader.exists(WALL_LOW_ASSET):
+		ps = load(WALL_LOW_ASSET) as PackedScene
+	if ps == null:
+		print("TOOL|low_wall|%s|FALLBACK_BOX|asset_missing=%s" % [nm, WALL_LOW_ASSET])
+		return sb
+	var box_mesh := sb.get_node_or_null("Mesh") as MeshInstance3D
+	if box_mesh != null:
+		box_mesh.visible = false
+	var along_x: bool = size.x >= size.z
+	var long_len: float = size.x if along_x else size.z
+	var courses: int = maxi(1, int(round(size.y / WALL_LOW_H)))
+	var course_h: float = size.y / float(courses)
+	# 竖向：每皮按 层高/模块高 缩放（0.8 / 0.8 → 1.0，石块**不被压扁**）
+	var k_y: float = course_h / WALL_LOW_H
+	# 横向：先按真实长度决定块数，再用 k_x = 间距/模块长 精确贴合 → 不重叠、不漏缝
+	var n: int = maxi(1, int(round(long_len / maxf(0.05, WALL_LOW_LEN * k_y))))
+	var spacing: float = long_len / float(n)
+	var k_x: float = spacing / WALL_LOW_LEN
+	var tiles := Node3D.new()
+	tiles.name = "Tiles"
+	sb.add_child(tiles)
+	tiles.owner = parent
+	var total := 0
+	for c in courses:
+		# 模块原点是**脚底**（契约：原点=脚底），所以每皮的 y 取这一皮的底面，不能取中心
+		var y: float = -size.y * 0.5 + course_h * float(c)
+		for i in n:
+			var inst: Node3D = ps.instantiate() as Node3D
+			inst.name = "C%d_%d" % [c, i]
+			tiles.add_child(inst)
+			inst.owner = parent
+			inst.scale = Vector3(k_x, k_y, k_y)
+			var off: float = -long_len * 0.5 + spacing * (float(i) + 0.5)
+			if along_x:
+				inst.position = Vector3(off, y, 0.0)
+			else:
+				inst.position = Vector3(0.0, y, off)
+				inst.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+			total += 1
+	var backing := MeshInstance3D.new()
+	backing.name = "Backing"
+	var bm := BoxMesh.new()
+	bm.size = Vector3(size.x * 0.99, size.y * 0.99, 0.06) if along_x \
+		else Vector3(0.06, size.y * 0.99, size.z * 0.99)
+	backing.mesh = bm
+	var bmat := StandardMaterial3D.new()
+	# 衬板是"灰缝"的底色，不能太黑 —— 石块接缝处透出来的应该是砂浆色而不是黑洞
+	bmat.albedo_color = Color(0.34, 0.33, 0.30)
+	bmat.roughness = 0.95
+	backing.material_override = bmat
+	backing.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sb.add_child(backing)
+	backing.owner = parent
+	print("TOOL|low_wall|%s|asset=%s|size=(%.2f, %.2f, %.2f)|courses=%d|course_h=%.3f|n=%d|k=(%.3f, %.3f)|tiles=%d" % [
+		nm, WALL_LOW_ASSET, size.x, size.y, size.z, courses, course_h, n, k_x, k_y, total])
+	return sb
+	return sb
+
+
 ## ART01：草丛掩体的**视觉**节点（glb 实例，不带任何碰撞/Area3D）。
 ## 缺资产时退回原来的 3x0.9x3 半透明绿盒子 —— 生成器要保持能在没有资产的机器上跑通。
 func _mk_cover_bush(parent: Node3D, nm: String, ground_pos: Vector3, yaw_deg: float,
@@ -1066,12 +1139,55 @@ func _verify() -> void:
 	for s in ["ShelterWallWest", "ShelterWallNorth", "ShelterWallSouth"]:
 		var sid: String = str(s).to_lower()
 		var st := scene.get_node_or_null("%s/Tiles" % s) as Node3D
-		if _check("%s_tiles_exist" % sid, st != null):
-			_check("%s_tiles_is_asset" % sid,
-				(st.get_child(0) as Node3D).scene_file_path == FENCE_ASSET)
-			# 庇护棚墙 1.6 m 高 → 模块等比缩放到 0.533×，不能超过护栏那种 1.0×
-			var sc: float = (st.get_child(0) as Node3D).scale.y
-			_check("%s_tiles_scaled_to_wall" % sid, absf(sc - SHELTER_WALL_H / FENCE_MODULE_H) < 1e-4)
+		if not _check("%s_tiles_exist" % sid, st != null):
+			continue
+		var first_low := st.get_child(0) as Node3D
+		_check("%s_tiles_is_low_asset" % sid,
+			first_low != null and first_low.scene_file_path == WALL_LOW_ASSET)
+		_check("%s_tiles_no_collision" % sid, _count_collision_shapes(st) == 0)
+		# 矮墙用真比例模块叠层（而不是把 3 m 模块压扁）：层数 = round(段高/模块高)
+		var courses_seen := {}
+		for ch in st.get_children():
+			courses_seen[str((ch as Node).name).split("_")[0]] = true
+		var courses: int = courses_seen.size()
+		_check("%s_tiles_courses_cover_height" % sid,
+			courses == maxi(1, int(round(SHELTER_WALL_H / WALL_LOW_H))))
+		# 竖向：每皮缩放到 层高/模块高（1.6 m / 2 皮 → 0.8 / 0.8 = 1.0，石块不被压扁）
+		var k_y_expected: float = (SHELTER_WALL_H / float(maxi(1, courses))) / WALL_LOW_H
+		_check("%s_tiles_course_height_ok" % sid,
+			first_low != null and absf(first_low.scale.y - k_y_expected) < 1e-4)
+		# 厚度跟着竖向同比例（石块不会变成薄片/厚块）
+		_check("%s_tiles_thickness_kept" % sid,
+			first_low != null and absf(first_low.scale.z - k_y_expected) < 1e-4)
+		# 横向：k_x 必须让模块宽度精确等于间距 → 既不重叠也不漏缝
+		var per_course := 0
+		for ch in st.get_children():
+			if str((ch as Node).name).begins_with("C0_"):
+				per_course += 1
+		var wall_box: Vector3 = _box(scene, s).get("size", Vector3.ZERO)
+		var long_len_low: float = maxf(wall_box.x, wall_box.z)
+		var spacing_low: float = long_len_low / float(maxi(1, per_course))
+		_check("%s_tiles_width_matches_spacing" % sid,
+			first_low != null and absf(first_low.scale.x * WALL_LOW_LEN - spacing_low) < 1e-4)
+		# 任何一块都不能探出这段墙的两端（v1 的"悬空石头"就是这么来的）
+		var protrude := 0.0
+		var half_mod: float = first_low.scale.x * WALL_LOW_LEN * 0.5 if first_low != null else 0.0
+		for ch in st.get_children():
+			var cn := ch as Node3D
+			var along: float = cn.position.x if wall_box.x >= wall_box.z else cn.position.z
+			protrude = maxf(protrude, absf(along) + half_mod - long_len_low * 0.5)
+		_check("%s_tiles_inside_run" % sid, protrude <= 1e-4)
+		# 竖向：最下一块踩地、最上一块顶到墙顶（模块原点是脚底，写成"中心"就会上下各错半皮）
+		var ymin_low := INF
+		var ymax_low := -INF
+		for ch in st.get_children():
+			var cy := ch as Node3D
+			ymin_low = minf(ymin_low, cy.position.y)
+			ymax_low = maxf(ymax_low, cy.position.y + cy.scale.y * WALL_LOW_H)
+		_check("%s_tiles_cover_height_exactly" % sid,
+			absf(ymin_low + wall_box.y * 0.5) < 1e-4 and absf(ymax_low - wall_box.y * 0.5) < 1e-4)
+		var low_backing := scene.get_node_or_null("%s/Backing" % s) as MeshInstance3D
+		_check("%s_tiles_backing_exists" % sid, low_backing != null)
 
 	# B 四区域：恰好铺满可玩矩形
 	var area_sum := 0.0

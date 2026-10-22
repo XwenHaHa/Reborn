@@ -75,3 +75,20 @@ Art/Probes/art06_{fence_north_interior,fence_corner,fence_west_close,shelter}.pn
 - 衬板是"遮缝"手段，不是真实砌体厚度；从上方俯视能看到衬板与石块的层次。
 - 未做帧率/预算实测（见 §5）。
 - 未推送、未发布。
+
+## 8. ART03-⑮ 更新：庇护棚矮墙改用专用模块（2026-10-22）
+
+§4 表里"庇护棚 1.6 m → 0.533× 等比缩放""间距含 ≥20% 重叠"这两条**只对围栏/岸墙仍然成立**；
+庇护棚三面墙已改走独立路径：
+
+| 项 | 新约定 | 断言 |
+|---|---|---|
+| 资产 | `sm_wall_low_001.glb`（`ENV_WALL_LOW_001`）= 2.436584 × 0.800000 × 0.302739，663 tris | `*_tiles_is_low_asset` |
+| 层数 | `courses = round(段高 / 0.800)` → 1.6 m = **2 皮** | `*_tiles_courses_cover_height` |
+| 竖向 | `k_y = 层高 / 0.800` → **1.0（不压扁）**；厚度同比 | `*_tiles_course_height_ok` / `*_tiles_thickness_kept` |
+| 横向 | `n = round(段长 / 2.436584)`，`k_x = 段长 / (n × 2.436584)` → **宽度精确等于间距**（不重叠不漏缝） | `*_tiles_width_matches_spacing` |
+| 位置 | 每块**踩在这一皮的底面**（模块原点是脚底） | `*_tiles_cover_height_exactly` / `*_tiles_inside_run` |
+| 衬板 | `Backing` 色 **(0.34, 0.33, 0.30)**、不投影 | `*_tiles_backing_exists` |
+
+原因：3 m 模块压到 1.6 m 会让石块比例走样，且源件下半部是被地面遮挡的扫描区（石块大缺口）。
+定位过程与四次弯路见 `Docs/Evidence/ART03_FENCE.md` §9。**碰撞盒未动**。

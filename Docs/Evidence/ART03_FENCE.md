@@ -126,3 +126,60 @@ CAP|art06|tiles_total_tris=120668
 - 未做帧率/场景总面数实测（当前墙类共 120,668 tris）。
 - 未由负责人视觉验收；**不写 approved**。
 - 未推送、未发布。
+
+---
+
+## 9. ART03-⑮ 后续：庇护棚矮墙换专用模块（2026-10-22）
+
+### 问题
+§6 记录的已知瑕疵：庇护棚三面墙（`0.20 × 1.60 × 3.40/3.00`）此前把 **3 m 高的围栏模块整体缩到 1.6 m**
+（`k = 0.533`），近看"石块悬空 + 大片深色衬板"。
+
+### 定位（三次证伪，避免再走回头路）
+1. **不是缩放压扁**：把源件各候选模块单独摆进 Blender/Godot 空场景正投影看，问题依旧。
+2. `wall_stone_low`（1.622 × 0.774）**不是墙**，是 **7 块零星石头垒的锥形残堆**（顶端 1 块）。
+3. `wall_stone_medium`（1.613 × 0.993）是 **4 排梯形石堆**；`wall_stone_triplet` 只有 3 块石头。
+   → 源件 `wall_stefan_wr` 里**只有 `wall_stone`（围栏那件）是真墙面**。
+4. 用"顶点压平"把 2.006 m 削到 0.800 m → 被压的三角面挤成一条、法线翻转被剔除，
+   实机出现**大片塌陷空洞**（`holes_fill` 对这种"分离壳体"补不出面，实测 `faces=0`）。
+5. 只留**下面** 0.8 m 也空 → 源件**下半部是被地面遮挡的扫描区**，石块本来就有大缺口。
+
+### 做法
+`Tools/Blender/art12_short_wall.py` → `SM_Wall_Low_001.glb`：取 `wall_stone` **最上面 0.800 m**
+（上边界不动、下边界切在 2.006 − 0.800），底面补一块石帽盖住切口。
+产出 **2.436584 × 0.800000 × 0.302739 m / 663 tris / 1 材质槽 / 1,810,332 B**，
+sha256 `6bee417f362dc1f2cb820cfcf77cad17205e52707db69e50eca0cdccb3809db7`。
+
+生成器 `_mk_low_wall()`：`courses = round(1.6 / 0.800) = 2`、`k_y = 1.0`（**无竖向压扁**）、
+`n = round(段长 / 2.436584)`（3.0 m → 1 块、3.4 m → 1 块）、`k_x = 段长 / 2.436584`（1.231 / 1.395），
+每块**踩在这一皮的底面**（模块原点是脚底，写成中心会上下各错半皮 —— 本轮真踩过这个坑，
+已补 `*_tiles_cover_height_exactly` 断言）。衬板色从 0.20 提到 0.34（石缝读成砂浆而非黑洞）。
+
+### 新增断言（9 条 × 3 面 = 27 条，全 OK）
+`tiles_exist` / `tiles_is_low_asset`（`scene_file_path == WALL_LOW_ASSET`）/ `tiles_no_collision` /
+`tiles_courses_cover_height` / `tiles_course_height_ok` / `tiles_thickness_kept` /
+`tiles_width_matches_spacing` / `tiles_inside_run`（不探出段端）/ `tiles_cover_height_exactly` / `tiles_backing_exists`。
+
+### 实机
+```
+& '<godot_console.exe>' --path 'E:\Reborn\Game\Reborn' `
+    --script 'res://tests/tool_capture_art06.gd' --quit-after 6000 -- art06-level
+```
+```
+CAP|art06|wall|ShelterWallWest|box=(0.2, 1.6, 3.4)|tiles=2|tile_scene=res://assets/environment/sm_wall_low_001.glb|tile_scale=1.000|tris_per_tile=663|backing=yes
+CAP|art06|wall|ShelterWallNorth|box=(3.0, 1.6, 0.2)|tiles=2|tile_scene=res://assets/environment/sm_wall_low_001.glb|tile_scale=1.000|tris_per_tile=663|backing=yes
+CAP|art06|wall|ShelterWallSouth|box=(3.0, 1.6, 0.2)|tiles=2|tile_scene=res://assets/environment/sm_wall_low_001.glb|tile_scale=1.000|tris_per_tile=663|backing=yes
+```
+新增机位 `art06_shelter_q34`（3/4 全景）与 `art06_shelter_face`（正对南墙）。
+**视觉自查**（直接 Read PNG）：两面矮墙现在是**致密砌石**，石块比例与围栏一致、不再悬空；
+层缝处有一条浅色"找平线"（石帽）；角落有一小段衬板/石排台阶可见。诊断用探针
+`tests/tool_capture_low_wall.gd`（空场景单块正/背投影，产物 `Art/Probes/lowwall_front/back.png`）。
+
+### 回归
+**全量 30 套 / 3,173 条断言 / 0 失败 / 每套 EXIT=0 / `SCRIPT ERROR` 0**
+（`run_t013_movement_regression` 73、`run_t024_chase_search` 136、`run_t027_ecology` 96 需 `--quit-after 40000`，
+默认 6000 会被截断成 NO_SUMMARY）。
+
+### 仍未做
+- 两端台阶（源件自带 ±7 cm）与横向 1.23–1.40 拉伸未处理；石帽可换成更暗的砂岩色。
+- 未由负责人视觉验收；**不写 approved**；未推送、未发布。
