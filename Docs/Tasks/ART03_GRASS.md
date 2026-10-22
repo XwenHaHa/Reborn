@@ -50,3 +50,27 @@
   用更贵的建模手法（这也是 `ART_ASSET_SPEC` 允许的下一步）。
 - 叶尖仍有轻微"硬折"（3 段），没有做逐叶细分。
 - 未 approved、未推送。
+
+## 7. 贴图（ART03-⑨，续做）
+
+原因：ART03-⑧ 之后草丛是"纯色 + 折面"，近距离仍是程序化观感。这一轮加**程序化生成的贴图**。
+
+| 项 | 做法 |
+|---|---|
+| 叶片 `T_Grass_Leaf` | 128×256：纵向明暗（基部 0.78 → 中上部 1.10 → 叶尖 0.90）+ 中脊高光（与几何中脊折面对应）+ 细纵纹（叶脉）+ 斑驳噪声；三通道轻微色偏（R1.00 / G1.03 / B0.96） |
+| 泥土 `T_Grass_Soil` | 128×128：两级噪声斑驳 + 边缘压暗（土堆轮廓） |
+| **关键：贴图是倍率图（均值≈1）** | 节点树用 `MixRGB(MULTIPLY)`：`image × 线性色 → Base Color`。glTF 因此**同时**导出 `baseColorTexture` 与 `baseColorFactor`，ART01 的"albedo ≈ sRGB(线性色)"契约**原样成立**（实测 factor = [0.085, 0.200, 0.075] 完全一致） |
+
+导出核验（自写 GLB JSON 解析）：
+
+```
+mat[0] name=MAT_Bush_Leaf baseColorFactor=[0.085, 0.200, 0.075, 1] metallic=0 roughness=0.85 baseColorTex=True
+mat[1] name=MAT_Bush_Soil baseColorFactor=[0.055, 0.038, 0.025, 1] metallic=0 roughness=0.85 baseColorTex=True
+image[0] T_Grass_Leaf image/png 10,063 B / image[1] T_Grass_Soil image/png 13,662 B
+```
+
+Godot 侧：两张贴图被正常抽取为 `sm_bush_002_T_Grass_{Leaf,Soil}.png`（+`.import`）；
+`MAT_Bush_Leaf.albedo_color` 仍是 `(0.3227, 0.4845, 0.3035)`、roughness 0.85、`cull_mode=2`。
+
+**效果与局限**：中近景能看到叶片根暗尖亮、纵向纹理、土堆有斑驳；但**远处（>6 m）增益有限**，
+而且**没有法线贴图**，折面 + 贴图仍是"程序化草"的底子。要继续提升得做叶片双面法线或用贴图工厂做 atlas。

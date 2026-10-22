@@ -78,3 +78,16 @@ T026 掩护 96 条）。
 - 资产仍是**纯色 + 折面**（无贴图）；近看仍有"程序化草"观感。
 - 未做逐叶细分，叶尖 3 段有轻微硬折。
 - 未由负责人视觉验收 → 不写 approved；未推送、未发布。
+
+## 7. 贴图（ART03-⑨）
+
+见 `Docs/Tasks/ART03_GRASS.md` §7。核验要点：
+
+```
+mat[0] MAT_Bush_Leaf baseColorFactor=[0.085, 0.200, 0.075, 1] baseColorTex=True roughness=0.85
+mat[1] MAT_Bush_Soil baseColorFactor=[0.055, 0.038, 0.025, 1] baseColorTex=True roughness=0.85
+image[0] T_Grass_Leaf 10,063 B / image[1] T_Grass_Soil 13,662 B（均 image/png，内嵌）
+```
+
+Godot 抽取：`sm_bush_002_T_Grass_Leaf.png` 10,063 B、`sm_bush_002_T_Grass_Soil.png` 13,662 B（+`.import`）。
+`run_art01_bush` 83/83；全量 30 套 3,173 条 0 失败。

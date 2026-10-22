@@ -52,6 +52,8 @@
 
 | ART03-⑧ | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Tasks/ART03_GRASS.md`、`Docs/Evidence/ART03_GRASS.md`、`Tools/Blender/art09_grass_002.py`、`Art/Exports/Environment/SM_Bush_002.glb`、`tests/run_art01_bush.gd` | 草丛重做：带中脊折面的 3 段弯曲叶片、210 片 3 圈、2,600 tris、土垫半径 0.62 m 且补盘心；ART01 83/83 + 全量 30 套 3,173 条全绿；旧资产保留可回退；仍无贴图 |
 
+| ART03-⑨ | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Tasks/ART03_GRASS.md` §7、`Tools/Blender/art09_grass_002.py`、`Art/Exports/Environment/SM_Bush_002.glb`（124,136 B）、`Game/Reborn/assets/environment/sm_bush_002_T_Grass_*.png` | 叶片/泥土程序化倍率贴图（MixRGB multiply）+ baseColorFactor 保颜色契约；83/83 + 全量 30 套 3,173 条全绿；远离 >6 m 增益有限、无法线贴图 |
+
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
 
 **T030 的边界声明**：① 只做生命周期与记录，**没做**结算页美术/动效（P6/T032）、存档（T037）、正式解锁条件（T031）；② `MainEntry.test_mode = true` 是**临时开发态**，正式解锁接入后必须改 `false`；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。

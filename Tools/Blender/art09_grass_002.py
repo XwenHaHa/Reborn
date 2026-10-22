@@ -63,15 +63,114 @@ def require(cond, msg):
 rng = random.Random(SEED)
 
 
-def make_material(name, linear_rgb, roughness=0.85):
+def make_material(name, linear_rgb, roughness=0.85, image=None):
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
-    bsdf = mat.node_tree.nodes["Principled BSDF"]
+    nt = mat.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
     bsdf.inputs["Base Color"].default_value = (linear_rgb[0], linear_rgb[1], linear_rgb[2], 1.0)
     bsdf.inputs["Roughness"].default_value = roughness
     bsdf.inputs["Metallic"].default_value = 0.0
     mat.use_backface_culling = False        # 双面：玩家会站在草丛里往外看
+    if image is not None:
+        # 贴图是**倍率图**（均值≈1）：MixRGB(MULTIPLY) → Base Color，
+        # 这样 glTF 会同时导出 baseColorTexture 与 baseColorFactor，
+        # 颜色契约（albedo_color ≈ sRGB(线性色)）保持不变。
+        tex = nt.nodes.new("ShaderNodeTexImage")
+        tex.image = image
+        tex.interpolation = "Linear"
+        tex.location = (-620, 260)
+        mix = nt.nodes.new("ShaderNodeMixRGB")
+        mix.blend_type = "MULTIPLY"
+        mix.inputs["Fac"].default_value = 1.0
+        mix.location = (-320, 300)
+        mix.inputs["Color1"].default_value = (linear_rgb[0], linear_rgb[1], linear_rgb[2], 1.0)
+        nt.links.new(tex.outputs["Color"], mix.inputs["Color2"])
+        nt.links.new(mix.outputs["Color"], bsdf.inputs["Base Color"])
     return mat
+
+
+
+def _srgb(c):
+    if c <= 0.0031308:
+        return 12.92 * c
+    return 1.055 * (c ** (1.0 / 2.4)) - 0.055
+
+
+def _hash(u, v, seed):
+    x = math.sin(u * 127.1 + v * 311.7 + seed * 17.31) * 43758.5453
+    return x - math.floor(x)
+
+
+def _vnoise(u, v, seed):
+    iu, iv = math.floor(u), math.floor(v)
+    fu, fv = u - iu, v - iv
+    fu = fu * fu * (3.0 - 2.0 * fu)
+    fv = fv * (3.0 - 2.0 * fv)
+    a = _hash(iu, iv, seed)
+    b = _hash(iu + 1, iv, seed)
+    c = _hash(iu, iv + 1, seed)
+    d = _hash(iu + 1, iv + 1, seed)
+    return (a * (1 - fu) + b * fu) * (1 - fv) + (c * (1 - fu) + d * fu) * fv
+
+
+def make_leaf_image(name="T_Grass_Leaf", w=128, h=256):
+    """叶片贴图：纵向明暗 + 中脊高光 + 细纵纹 + 斑驳。返回的是**倍率**（均值≈1）。"""
+    img = bpy.data.images.new(name, w, h, alpha=False)
+    img.colorspace_settings.name = "sRGB"
+    px = [0.0] * (w * h * 4)
+    for j in range(h):
+        v = (j + 0.5) / float(h)          # 0 = 叶基, 1 = 叶尖
+        # 纵向：基部偏暗（0.78）→ 中上部最亮（1.10）→ 叶尖略暗（0.90）
+        grad = 0.78 + 0.32 * math.sin(math.pi * min(1.0, 0.10 + v * 0.95)) + 0.10 * (1.0 - v)
+        for i in range(w):
+            u = (i + 0.5) / float(w)      # 0/1 = 叶缘, 0.5 = 中脊
+            m = grad
+            # 中脊高光（与几何中脊折面对应）
+            ridge = math.exp(-((u - 0.5) ** 2) / (2.0 * 0.022))
+            m += 0.10 * ridge
+            # 叶缘略压暗，避免边缘"发光"
+            edge = min(u, 1.0 - u)
+            m *= 0.92 + 0.08 * min(1.0, edge / 0.12)
+            # 细纵纹（叶脉）
+            m *= 1.0 + 0.045 * math.sin(u * 46.0 * math.pi) * (0.4 + 0.6 * v)
+            # 斑驳
+            m += 0.07 * (_vnoise(u * 9.0, v * 26.0, 3) - 0.5)
+            m = max(0.35, min(1.35, m))
+            k = (j * w + i) * 4
+            px[k] = _srgb(m * 1.00)
+            px[k + 1] = _srgb(m * 1.03)
+            px[k + 2] = _srgb(m * 0.96)
+            px[k + 3] = 1.0
+    img.pixels = px
+    img.pack()
+    return img
+
+
+def make_soil_image(name="T_Grass_Soil", w=128, h=128):
+    """泥土贴图：斑驳 + 边缘压暗（倍率均值≈1）。"""
+    img = bpy.data.images.new(name, w, h, alpha=False)
+    img.colorspace_settings.name = "sRGB"
+    px = [0.0] * (w * h * 4)
+    for j in range(h):
+        v = (j + 0.5) / float(h)
+        for i in range(w):
+            u = (i + 0.5) / float(w)
+            m = 0.86
+            m += 0.20 * (_vnoise(u * 7.0, v * 7.0, 11) - 0.5)
+            m += 0.12 * (_vnoise(u * 19.0, v * 19.0, 29) - 0.5)
+            # 越靠外越暗（土堆边缘）
+            r = math.hypot(u - 0.5, v - 0.5) * 2.0
+            m *= 1.02 - 0.18 * min(1.0, r)
+            m = max(0.45, min(1.30, m))
+            k = (j * w + i) * 4
+            px[k] = _srgb(m * 1.04)
+            px[k + 1] = _srgb(m * 0.99)
+            px[k + 2] = _srgb(m * 0.92)
+            px[k + 3] = 1.0
+    img.pixels = px
+    img.pack()
+    return img
 
 
 def build_blade_mesh(verts, faces, uvs, mat_index, base, yaw, lean, twist, length, width, droop):
@@ -208,8 +307,13 @@ def main():
     obj = bpy.data.objects.new("ENV_BUSH_002", mesh)
     bpy.context.scene.collection.objects.link(obj)
 
-    obj.data.materials.append(make_material("MAT_Bush_Leaf", LEAF_LINEAR))
-    obj.data.materials.append(make_material("MAT_Bush_Soil", SOIL_LINEAR))
+    leaf_img = make_leaf_image()
+    soil_img = make_soil_image()
+    log("textures|leaf=%dx%d|soil=%dx%d|packed=%s/%s" % (
+        leaf_img.size[0], leaf_img.size[1], soil_img.size[0], soil_img.size[1],
+        str(leaf_img.packed_file is not None), str(soil_img.packed_file is not None)))
+    obj.data.materials.append(make_material("MAT_Bush_Leaf", LEAF_LINEAR, image=leaf_img))
+    obj.data.materials.append(make_material("MAT_Bush_Soil", SOIL_LINEAR, image=soil_img))
     for pi, poly in enumerate(mesh.polygons):
         poly.material_index = 0
     # 前 soil_faces 个面是泥土垫
