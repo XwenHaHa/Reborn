@@ -84,6 +84,8 @@ const WATER_DEPTH := 0.03
 const WATER_SHADER := "res://shaders/creek_water.gdshader"
 ## ART03-⑦：草丛/芦苇的风摆动 shader（叶尖摆、根部不动；每丛相位不同）
 const GRASS_WIND_SHADER := "res://shaders/grass_wind.gdshader"
+## ART03-⑫：地面程序化材质（草地/土/干草斑块），只换材质不动几何
+const GROUND_SHADER := "res://shaders/ground.gdshader"
 ## 芦苇丛位置（沿溪岸一圈，避开水面中心；尺度/朝向下面对应打散）
 const REED_SPOTS := [
 	{"x": -32.0, "z": 20.9, "yaw": 12.0, "s": 0.95},
@@ -195,7 +197,9 @@ func _initialize() -> void:
 # ---------------------------------------------------------------------------
 
 func _add_ground(parent: Node3D) -> void:
-	_mk_box(parent, "Ground", GROUND_SIZE, Vector3.ZERO, Vector3.ZERO, Color(0.32, 0.34, 0.36))
+	var ground := _mk_box(parent, "Ground", GROUND_SIZE, Vector3.ZERO, Vector3.ZERO,
+		Color(0.32, 0.34, 0.36))
+	_apply_material_override(ground, GROUND_SHADER, "ground")
 	print("TOOL|Ground|size=%s|top=%.3f" % [GROUND_SIZE, GROUND_TOP])
 
 
@@ -298,7 +302,8 @@ func _add_courtyard_structures(parent: Node3D) -> void:
 		Vector3(9.4, GROUND_TOP + 0.15, 25.4),
 	]
 	for i in debris.size():
-		_mk_box(parent, "CourtyardDebris%d" % (i + 1), Vector3(0.6, 0.3, 0.6), debris[i], Vector3.ZERO, debris_col)
+		_mk_rock_debris(parent, "CourtyardDebris%d" % (i + 1), Vector3(0.6, 0.3, 0.6),
+			debris[i], debris_col, 0.40 + 0.06 * float(i))
 
 
 # ---------------------------------------------------------------------------
@@ -506,11 +511,11 @@ func _add_creek_structures(parent: Node3D) -> void:
 	# 溪边隐蔽入口：两道 1.00 高的岸墙夹出 0.24 的缝
 	var cy: float = GROUND_TOP + BANK_WALL_HEIGHT * 0.5
 	var bank_col := Color(0.42, 0.40, 0.38)
-	_mk_box(parent, "CreekBankWallA", Vector3(BANK_WALL_THICK, BANK_WALL_HEIGHT, BANK_WALL_LEN),
-		Vector3(BANK_WALL_A_CENTER_X, cy, BANK_Z_CENTER), Vector3.ZERO, bank_col)
-	_mk_box(parent, "CreekBankWallB", Vector3(BANK_WALL_THICK, BANK_WALL_HEIGHT, BANK_WALL_LEN),
-		Vector3(BANK_WALL_A_CENTER_X + BANK_WALL_THICK + BANK_GAP, cy, BANK_Z_CENTER),
-		Vector3.ZERO, bank_col)
+	# ART03-⑫：岸墙换成和围栏同一套石墙模块（碰撞盒尺寸/位置一字未改，仍是 0.30 × 1.00 × 8.00）
+	_mk_clad_wall(parent, "CreekBankWallA", Vector3(BANK_WALL_THICK, BANK_WALL_HEIGHT, BANK_WALL_LEN),
+		Vector3(BANK_WALL_A_CENTER_X, cy, BANK_Z_CENTER), bank_col)
+	_mk_clad_wall(parent, "CreekBankWallB", Vector3(BANK_WALL_THICK, BANK_WALL_HEIGHT, BANK_WALL_LEN),
+		Vector3(BANK_WALL_A_CENTER_X + BANK_WALL_THICK + BANK_GAP, cy, BANK_Z_CENTER), bank_col)
 	# 朝向固定 0°：`_box()` 从 body 的 position/size 推世界 AABB，**不读旋转**，
 	# 一旦给 body 加 yaw，测试读到的包围盒就会比真实碰撞小。要转就把 AABB 一起算。
 	_mk_boulder(parent, "CreekBoulder", Vector3(-14.0, GROUND_TOP, 8.0), 0.0)
@@ -692,6 +697,46 @@ func _apply_grass_wind(inst: Node3D) -> void:
 	if applied == 0:
 		print("TOOL|grass_wind|%s|NO_LEAF_SURFACE|surfaces=%d" % [
 			inst.name, mi.mesh.get_surface_count()])
+
+
+## ART03-⑫：给某个 StaticBody3D 的 `Mesh` 子节点换 shader 材质（找不到 shader 就保持原纯色）。
+func _apply_material_override(body: StaticBody3D, shader_path: String, tag: String) -> void:
+	var shader_res := load(shader_path) as Shader
+	if shader_res == null:
+		print("TOOL|material|%s|FALLBACK_PLAIN|shader_missing=%s" % [tag, shader_path])
+		return
+	var mi := body.get_node_or_null("Mesh") as MeshInstance3D
+	if mi == null:
+		return
+	var smat := ShaderMaterial.new()
+	smat.shader = shader_res
+	mi.material_override = smat
+	print("TOOL|material|%s|shader=%s" % [tag, shader_path])
+
+
+## ART03-⑫：庭院碎屑 —— 碰撞仍是 0.6 × 0.3 × 0.6 的 BoxShape3D，视觉换成缩小的大石头。
+## 复用已有的 `sm_boulder_001.glb`，不新增资产。
+func _mk_rock_debris(parent: Node3D, nm: String, size: Vector3, pos: Vector3, color: Color,
+		scale_mul: float) -> StaticBody3D:
+	var sb := _mk_box(parent, nm, size, pos, Vector3.ZERO, color)
+	var mi := sb.get_node_or_null("Mesh") as MeshInstance3D
+	var ps: PackedScene = null
+	if ResourceLoader.exists(BOULDER_ASSET):
+		ps = load(BOULDER_ASSET) as PackedScene
+	if ps == null:
+		return sb
+	if mi != null:
+		mi.visible = false
+	var rock: Node3D = ps.instantiate() as Node3D
+	rock.name = "Rock"
+	sb.add_child(rock)
+	rock.owner = parent
+	rock.scale = Vector3.ONE * scale_mul
+	# 巨石原点在脚底；父节点在碰撞盒中心 → 下沉半个视觉高度
+	rock.position = Vector3(0.0, -size.y * 0.5 + 0.01, 0.0)
+	rock.rotation_degrees = Vector3(0.0, 37.0 + 61.0 * float(nm.length()), 0.0)
+	print("TOOL|debris_rock|%s|asset=%s|scale=%.2f" % [nm, BOULDER_ASSET, scale_mul])
+	return sb
 
 
 ## ART01：草丛掩体的**视觉**节点（glb 实例，不带任何碰撞/Area3D）。
