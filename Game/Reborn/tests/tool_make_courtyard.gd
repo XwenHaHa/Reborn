@@ -99,6 +99,20 @@ const WALL_LOW_ASSET := "res://assets/environment/sm_wall_low_001.glb"
 const WALL_LOW_LEN := 2.436584
 const WALL_LOW_H := 0.800000
 const WALL_LOW_THICK := 0.302739
+## 衬板在**敞开端**收进的量（转角端必须铺满，否则能看穿到棚内）
+const BACKING_TRIM := 0.150000
+## ART03-⑮-3：转角料石（quoin）—— 压住两片矮墙在转角处各自内缩的石排端，44 tris
+const QUOIN_ASSET := "res://assets/environment/sm_quoin_001.glb"
+const QUOIN_W := 0.360000
+const QUOIN_D := 0.360000
+const QUOIN_H := 0.400000
+## ART03-⑮-2：门框立柱（收边 + 给棚顶东侧补支撑）—— 程序化木柱，28 tris
+const SHELTER_POST_ASSET := "res://assets/environment/sm_shelter_post_001.glb"
+const SHELTER_POST_W := 0.160000
+const SHELTER_POST_D := 0.360000
+const SHELTER_POST_H := 1.620000
+## 立柱中心 x = SHELTER_X_MAX + PROUD − POST_W/2 → 东侧面向外凸出 PROUD，整片压住墙端
+const SHELTER_POST_PROUD := 0.040000
 ## 芦苇丛位置（沿溪岸一圈，避开水面中心；尺度/朝向下面对应打散）
 const REED_SPOTS := [
 	{"x": -32.0, "z": 20.9, "yaw": 12.0, "s": 0.95},
@@ -302,10 +316,24 @@ func _add_courtyard_structures(parent: Node3D) -> void:
 	# ART03-⑮：三面矮墙改用真比例矮墙模块**叠两层**（石块不再被压扁）
 	_mk_low_wall(parent, "ShelterWallWest", Vector3(FENCE_THICK, SHELTER_WALL_H, len_z),
 		Vector3(SHELTER_X_MIN + FENCE_THICK * 0.5, wall_y, cz), col)
+	# 东端（门垛）敞开 → 衬板只在这一端收进 BACKING_TRIM；转角端铺满
 	_mk_low_wall(parent, "ShelterWallNorth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
-		Vector3(cx, wall_y, SHELTER_Z_MAX - FENCE_THICK * 0.5), col)
+		Vector3(cx, wall_y, SHELTER_Z_MAX - FENCE_THICK * 0.5), col, 1)
 	_mk_low_wall(parent, "ShelterWallSouth", Vector3(len_x, SHELTER_WALL_H, FENCE_THICK),
-		Vector3(cx, wall_y, SHELTER_Z_MIN + FENCE_THICK * 0.5), col)
+		Vector3(cx, wall_y, SHELTER_Z_MIN + FENCE_THICK * 0.5), col, 1)
+	# ART03-⑮-2：门洞两侧的直立端用**门框立柱**收边（矮墙模块两端是开口壳体），
+	# 同时补上棚顶东侧的支撑 —— 原先敞开的一侧没有任何柱子，棚顶像浮空。
+	_mk_shelter_post(parent, "ShelterPostSouth",
+		Vector3(SHELTER_X_MAX + SHELTER_POST_PROUD - SHELTER_POST_W * 0.5, GROUND_TOP,
+			SHELTER_Z_MIN + FENCE_THICK * 0.5))
+	_mk_shelter_post(parent, "ShelterPostNorth",
+		Vector3(SHELTER_X_MAX + SHELTER_POST_PROUD - SHELTER_POST_W * 0.5, GROUND_TOP,
+			SHELTER_Z_MAX - FENCE_THICK * 0.5))
+	# ART03-⑮-3：两个外转角加料石（quoin），压住两片墙各自内缩的石排端与衬板竖带
+	_mk_corner_quoin(parent, "ShelterQuoinSW",
+		SHELTER_X_MIN + FENCE_THICK * 0.5, SHELTER_Z_MIN + FENCE_THICK * 0.5)
+	_mk_corner_quoin(parent, "ShelterQuoinNW",
+		SHELTER_X_MIN + FENCE_THICK * 0.5, SHELTER_Z_MAX - FENCE_THICK * 0.5)
 	# ART03-⑬：棚顶换木板条资产（228 tris，含两根托梁）；碰撞盒（3.4 × 0.2 × 3.8）不变
 	var roof := _mk_box(parent, "ShelterRoof", Vector3(len_x + 0.4, 0.2, len_z + 0.2),
 		Vector3(cx, GROUND_TOP + SHELTER_WALL_H + 0.1, cz), Vector3.ZERO, col)
@@ -836,7 +864,10 @@ func _mk_root_barrier_visual(body: StaticBody3D, nm: String) -> void:
 ## 层数 = round(段高 / 模块高)（1.6 / 0.774 → 2 层），每层按 `层高/模块高` 等比缩放，
 ## 相邻层错开半个间距形成"通缝错开"，视觉上才像砌体。
 ## 碰撞盒仍是原来的 BoxShape3D（尺寸/位置一字未改）。
-func _mk_low_wall(parent: Node3D, nm: String, size: Vector3, pos: Vector3, color: Color) -> StaticBody3D:
+## `trim_along_end`：衬板在哪一端收进 `BACKING_TRIM`（0 = 两端都不收；+1/−1 = 收 +along/−along 端）。
+## 转角处两端墙互相咬合，衬板必须**铺到端头**（否则转角能看穿到棚内）；只有敞开的门垛端才收进。
+func _mk_low_wall(parent: Node3D, nm: String, size: Vector3, pos: Vector3, color: Color,
+		trim_along_end: int = 0) -> StaticBody3D:
 	var sb := _mk_box(parent, nm, size, pos, Vector3.ZERO, color)
 	var ps: PackedScene = null
 	if ResourceLoader.exists(WALL_LOW_ASSET):
@@ -881,9 +912,14 @@ func _mk_low_wall(parent: Node3D, nm: String, size: Vector3, pos: Vector3, color
 	var backing := MeshInstance3D.new()
 	backing.name = "Backing"
 	var bm := BoxMesh.new()
-	bm.size = Vector3(size.x * 0.99, size.y * 0.99, 0.06) if along_x \
-		else Vector3(0.06, size.y * 0.99, size.z * 0.99)
+	var trim_len: float = 0.0 if trim_along_end == 0 else BACKING_TRIM
+	var run_len: float = maxf(0.30, long_len - trim_len)
+	# 只在被收进的那一端让位：衬板中心随之下移 trim_len/2
+	var run_off: float = -float(trim_along_end) * trim_len * 0.5
+	bm.size = Vector3(run_len, size.y * 0.99, 0.06) if along_x \
+		else Vector3(0.06, size.y * 0.99, run_len)
 	backing.mesh = bm
+	backing.position = Vector3(run_off, 0.0, 0.0) if along_x else Vector3(0.0, 0.0, run_off)
 	var bmat := StandardMaterial3D.new()
 	# 衬板是"灰缝"的底色，不能太黑 —— 石块接缝处透出来的应该是砂浆色而不是黑洞
 	bmat.albedo_color = Color(0.34, 0.33, 0.30)
@@ -892,10 +928,65 @@ func _mk_low_wall(parent: Node3D, nm: String, size: Vector3, pos: Vector3, color
 	backing.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	sb.add_child(backing)
 	backing.owner = parent
-	print("TOOL|low_wall|%s|asset=%s|size=(%.2f, %.2f, %.2f)|courses=%d|course_h=%.3f|n=%d|k=(%.3f, %.3f)|tiles=%d" % [
-		nm, WALL_LOW_ASSET, size.x, size.y, size.z, courses, course_h, n, k_x, k_y, total])
+	print("TOOL|low_wall|%s|asset=%s|size=(%.2f, %.2f, %.2f)|courses=%d|course_h=%.3f|n=%d|k=(%.3f, %.3f)|tiles=%d|backing_len=%.3f|backing_off=%.3f|trim=%d" % [
+		nm, WALL_LOW_ASSET, size.x, size.y, size.z, courses, course_h, n, k_x, k_y, total,
+		run_len, run_off, trim_along_end])
 	return sb
-	return sb
+
+
+## ART03-⑮-2：门框立柱 —— 把矮墙模块**开口的直立端**收边，同时给棚顶东侧补支撑。
+## 纯视觉：无碰撞、不进 `nav_source_courtyard` 组（顶到棚顶下沿，略咬进 2 cm）。
+func _mk_shelter_post(parent: Node3D, nm: String, base: Vector3) -> Node3D:
+	var holder := Node3D.new()
+	holder.name = nm
+	parent.add_child(holder)
+	holder.owner = parent
+	holder.position = base
+	var ps: PackedScene = null
+	if ResourceLoader.exists(SHELTER_POST_ASSET):
+		ps = load(SHELTER_POST_ASSET) as PackedScene
+	if ps == null:
+		print("TOOL|shelter_post|%s|FALLBACK_EMPTY|asset_missing=%s" % [nm, SHELTER_POST_ASSET])
+		return holder
+	var inst: Node3D = ps.instantiate() as Node3D
+	inst.name = "Post"
+	holder.add_child(inst)
+	inst.owner = parent
+	inst.scale = Vector3.ONE
+	inst.position = Vector3.ZERO
+	print("TOOL|shelter_post|%s|asset=%s|size=(%.2f, %.2f, %.2f)|base=%s|top=%.3f" % [
+		nm, SHELTER_POST_ASSET, SHELTER_POST_W, SHELTER_POST_D, SHELTER_POST_H, base,
+		base.y + SHELTER_POST_H])
+	return holder
+
+
+## ART03-⑮-3：转角料石 —— 两片矮墙在转角处各自的石排都会内缩，接缝会露出衬板竖带；
+## 用 4 皮方正料石（每皮转 90°）把转角整段压住。**纯视觉**：无碰撞、不进导航组。
+func _mk_corner_quoin(parent: Node3D, nm: String, cx: float, cz: float) -> Node3D:
+	var holder := Node3D.new()
+	holder.name = nm
+	parent.add_child(holder)
+	holder.owner = parent
+	holder.position = Vector3(cx, GROUND_TOP, cz)
+	var ps: PackedScene = null
+	if ResourceLoader.exists(QUOIN_ASSET):
+		ps = load(QUOIN_ASSET) as PackedScene
+	if ps == null:
+		print("TOOL|quoin|%s|FALLBACK_EMPTY|asset_missing=%s" % [nm, QUOIN_ASSET])
+		return holder
+	var courses: int = maxi(1, int(round(SHELTER_WALL_H / QUOIN_H)))
+	for c in courses:
+		var inst: Node3D = ps.instantiate() as Node3D
+		inst.name = "Q%d" % c
+		holder.add_child(inst)
+		inst.owner = parent
+		inst.position = Vector3(0.0, QUOIN_H * float(c), 0.0)
+		# 每皮转 90°，U/V 走向换一次；方块料石看不出来，但纹理不重复
+		inst.rotation_degrees = Vector3(0.0, 90.0 * float(c), 0.0)
+	print("TOOL|quoin|%s|asset=%s|size=(%.2f, %.2f, %.2f)|courses=%d|base=%s|top=%.3f" % [
+		nm, QUOIN_ASSET, QUOIN_W, QUOIN_H, QUOIN_D, courses,
+		str(holder.position), GROUND_TOP + QUOIN_H * float(courses)])
+	return holder
 
 
 ## ART01：草丛掩体的**视觉**节点（glb 实例，不带任何碰撞/Area3D）。
@@ -1188,6 +1279,67 @@ func _verify() -> void:
 			absf(ymin_low + wall_box.y * 0.5) < 1e-4 and absf(ymax_low - wall_box.y * 0.5) < 1e-4)
 		var low_backing := scene.get_node_or_null("%s/Backing" % s) as MeshInstance3D
 		_check("%s_tiles_backing_exists" % sid, low_backing != null)
+		# 衬板只在**门垛端**收进 BACKING_TRIM，转角端必须铺满（否则转角能看穿到棚内）
+		var bk_mesh := low_backing.mesh as BoxMesh if low_backing != null else null
+		var bk_run: float = maxf(bk_mesh.size.x, bk_mesh.size.z) if bk_mesh != null else 0.0
+		var bk_off: float = (absf(low_backing.position.x) + absf(low_backing.position.z)) \
+			if low_backing != null else 0.0
+		var trimmed: bool = sid == "shelterwallnorth" or sid == "shelterwallsouth"
+		var want_run: float = long_len_low - (BACKING_TRIM if trimmed else 0.0)
+		var want_off: float = (BACKING_TRIM * 0.5) if trimmed else 0.0
+		_check("%s_tiles_backing_inset" % sid,
+			bk_mesh != null and absf(bk_run - want_run) < 1e-3)
+		_check("%s_tiles_backing_shift" % sid, absf(bk_off - want_off) < 1e-3)
+
+	# ART03-⑮-2：门洞两侧的门框立柱（收边 + 棚顶支撑）
+	for p in ["ShelterPostSouth", "ShelterPostNorth"]:
+		var pid: String = str(p).to_lower()
+		var pn := scene.get_node_or_null(p) as Node3D
+		if not _check("%s_exists" % pid, pn != null):
+			continue
+		_check("%s_single_post" % pid, pn.get_child_count() == 1)
+		_check("%s_no_collision" % pid, _count_collision_shapes(pn) == 0)
+		_check("%s_not_nav_source" % pid, not pn.is_in_group("nav_source_courtyard"))
+		var p0 := pn.get_child(0) as Node3D
+		_check("%s_is_asset" % pid,
+			p0 != null and p0.scene_file_path == SHELTER_POST_ASSET)
+		# 踩在地面、贴着门垛外沿（沿 +X 不越过 0.1 m，避免挡门洞）
+		_check("%s_at_jamb_x" % pid,
+			absf(pn.position.x - (SHELTER_X_MAX + SHELTER_POST_PROUD - SHELTER_POST_W * 0.5)) < 1e-3)
+		# 柱顶要顶到棚顶下沿（1.70）并且不穿出棚顶（≤ 1.72）
+		var p_top: float = pn.position.y + SHELTER_POST_H
+		_check("%s_reaches_roof" % pid, p_top >= 1.70 - 1e-3 and p_top <= 1.72 + 1e-3)
+		# 立柱面宽要盖住"墙厚 + 两侧石块外凸"（0.20 + 2×(0.30−0.20)/2 = 0.30）
+		_check("%s_covers_stone_protrusion" % pid,
+			SHELTER_POST_D >= FENCE_THICK + WALL_LOW_THICK - FENCE_THICK + 1e-3)
+		var p_zin: float = minf(absf(pn.position.z - (SHELTER_Z_MIN + FENCE_THICK * 0.5)),
+			absf(pn.position.z - (SHELTER_Z_MAX - FENCE_THICK * 0.5)))
+		_check("%s_on_wall_axis" % pid, p_zin < 1e-3)
+
+	# ART03-⑮-3：两个外转角的料石（quoin）
+	for q in [{"n": "ShelterQuoinSW", "z": SHELTER_Z_MIN + FENCE_THICK * 0.5},
+			{"n": "ShelterQuoinNW", "z": SHELTER_Z_MAX - FENCE_THICK * 0.5}]:
+		var qid: String = str(q["n"]).to_lower()
+		var qn := scene.get_node_or_null(q["n"]) as Node3D
+		if not _check("%s_exists" % qid, qn != null):
+			continue
+		var q_courses: int = maxi(1, int(round(SHELTER_WALL_H / QUOIN_H)))
+		_check("%s_courses" % qid, qn.get_child_count() == q_courses)
+		_check("%s_no_collision" % qid, _count_collision_shapes(qn) == 0)
+		_check("%s_not_nav_source" % qid, not qn.is_in_group("nav_source_courtyard"))
+		var q0 := qn.get_child(0) as Node3D
+		_check("%s_is_asset" % qid, q0 != null and q0.scene_file_path == QUOIN_ASSET)
+		_check("%s_on_corner_x" % qid,
+			absf(qn.position.x - (SHELTER_X_MIN + FENCE_THICK * 0.5)) < 1e-3)
+		_check("%s_on_corner_z" % qid, absf(qn.position.z - float(q["z"])) < 1e-3)
+		_check("%s_grounded" % qid, absf(qn.position.y - GROUND_TOP) < 1e-3)
+		var q_top: float = qn.position.y + QUOIN_H * float(q_courses)
+		_check("%s_spans_wall_height" % qid,
+			absf(q_top - (GROUND_TOP + SHELTER_WALL_H)) < 1e-3)
+		# 料石要盖住整片墙厚（含两侧石块外凸），但不许变成一根粗柱子
+		_check("%s_covers_wall_thickness" % qid, QUOIN_W + 1e-6 >= WALL_LOW_THICK)
+		_check("%s_protrusion_within_5cm" % qid,
+			QUOIN_W * 0.5 - WALL_LOW_THICK * 0.5 <= 0.05)
 
 	# B 四区域：恰好铺满可玩矩形
 	var area_sum := 0.0

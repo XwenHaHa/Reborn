@@ -20,6 +20,10 @@ const VIEWS := [
 	{"tag": "art06_shelter", "pos": Vector3(-11.6, 1.35, 27.3), "look": Vector3(-8.0, 0.90, 27.3), "fov": 60.0},
 	{"tag": "art06_shelter_q34", "pos": Vector3(-12.4, 1.75, 22.6), "look": Vector3(-8.2, 0.85, 27.2), "fov": 55.0},
 	{"tag": "art06_shelter_face", "pos": Vector3(-8.0, 1.00, 23.2), "look": Vector3(-8.0, 0.80, 25.7), "fov": 55.0},
+	{"tag": "art06_shelter_corner_sw", "pos": Vector3(-11.1, 1.15, 24.3), "look": Vector3(-9.35, 0.80, 25.85), "fov": 55.0},
+	{"tag": "art06_shelter_jamb", "pos": Vector3(-4.4, 1.15, 24.5), "look": Vector3(-6.6, 0.80, 25.85), "fov": 55.0},
+	# NW 角：庇护棚北侧只剩 1 m 空隙（外面就是围栏），所以从棚内门口回望西北角
+	{"tag": "art06_shelter_corner_nw", "pos": Vector3(-6.9, 1.30, 26.9), "look": Vector3(-9.30, 0.95, 28.80), "fov": 60.0},
 ]
 
 
