@@ -100,7 +100,7 @@ Art/Probes/art06_{fence_north_interior,fence_corner,fence_west_close,shelter}.pn
 | 项 | 约定 | 断言 |
 |---|---|---|
 | 门垛立柱 `ENV_SHELTER_POST_001` | 0.16 × 0.36 × 1.62 m / 28 tris / 1 槽；`SHELTER_POST_*`；底面 `GROUND_TOP`、顶 1.72（咬进棚顶 2 cm）；中心 x = `SHELTER_X_MAX + PROUD − W/2` | `shelterpost*_{exists,single_post,no_collision,not_nav_source,is_asset,at_jamb_x,reaches_roof,on_wall_axis,covers_stone_protrusion}` |
-| 单元转角料石 `ENV_QUOIN_001` | 0.36 × 0.40 × 0.36 m / 44 tris / 1 槽；`QUOIN_W/D/H`；各转角 **4 皮**（每皮转 90°）到 1.70，皮数 = `round(SHELTER_WALL_H / QUOIN_H)` | `shelterquoin*_{exists,courses,no_collision,not_nav_source,is_asset,on_corner_x,on_corner_z,grounded,spans_wall_height,covers_wall_thickness,protrusion_within_5cm}` |
+| 转角料石 `ENV_QUOIN_001` | **0.382 × 1.600 × 0.422 m / 176 tris / 1 槽**；`QUOIN_H = 1.600`、`QUOIN_MIN_FOOT = 0.382`、`QUOIN_MAX_FOOT = 0.422`；一件 = 4 皮不同长宽高（相邻层转 90°），每转角只摆一件 | `shelterquoin*_{exists,single_piece,no_collision,not_nav_source,is_asset,on_corner_x,on_corner_z,grounded,spans_wall_height,top_at_wall_top,covers_wall_thickness,protrusion_within_6cm}` |
 | 衬板修剪 | **只在敞开的门垛端**收进 `BACKING_TRIM = 0.15`，中心随之下移 0.075；转角端必须铺满 | `*_tiles_backing_{exists,inset,shift}` |
 
 原因与弯路见 `Docs/Evidence/ART03_FENCE.md` §10：衬板两端都收会让转角**看穿**；

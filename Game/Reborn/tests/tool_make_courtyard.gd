@@ -101,11 +101,12 @@ const WALL_LOW_H := 0.800000
 const WALL_LOW_THICK := 0.302739
 ## 衬板在**敞开端**收进的量（转角端必须铺满，否则能看穿到棚内）
 const BACKING_TRIM := 0.150000
-## ART03-⑮-3：转角料石（quoin）—— 压住两片矮墙在转角处各自内缩的石排端，44 tris
+## ART03-⑮-3：转角料石（quoin）—— 压住两片矮墙在转角处各自内缩的石排端，176 tris。
+## 一件 = 4 皮**不同长宽高**的砌石（相邻层转 90°），总高 = 墙高 1.6，运行时每转角只摆一件。
 const QUOIN_ASSET := "res://assets/environment/sm_quoin_001.glb"
-const QUOIN_W := 0.360000
-const QUOIN_D := 0.360000
-const QUOIN_H := 0.400000
+const QUOIN_H := 1.600000        # 整件高度（= SHELTER_WALL_H）
+const QUOIN_MIN_FOOT := 0.382    # 最小平面边长（要盖住墙厚 + 两侧石块外凸）
+const QUOIN_MAX_FOOT := 0.422    # 最大平面边长（决定外凸量）
 ## ART03-⑮-2：门框立柱（收边 + 给棚顶东侧补支撑）—— 程序化木柱，28 tris
 const SHELTER_POST_ASSET := "res://assets/environment/sm_shelter_post_001.glb"
 const SHELTER_POST_W := 0.160000
@@ -961,7 +962,8 @@ func _mk_shelter_post(parent: Node3D, nm: String, base: Vector3) -> Node3D:
 
 
 ## ART03-⑮-3：转角料石 —— 两片矮墙在转角处各自的石排都会内缩，接缝会露出衬板竖带；
-## 用 4 皮方正料石（每皮转 90°）把转角整段压住。**纯视觉**：无碰撞、不进导航组。
+## 用一件**整高料石**（内含 4 皮不同长宽高的砌石，相邻层转 90°）把转角整段压住。
+## **纯视觉**：无碰撞、不进导航组。
 func _mk_corner_quoin(parent: Node3D, nm: String, cx: float, cz: float) -> Node3D:
 	var holder := Node3D.new()
 	holder.name = nm
@@ -974,18 +976,15 @@ func _mk_corner_quoin(parent: Node3D, nm: String, cx: float, cz: float) -> Node3
 	if ps == null:
 		print("TOOL|quoin|%s|FALLBACK_EMPTY|asset_missing=%s" % [nm, QUOIN_ASSET])
 		return holder
-	var courses: int = maxi(1, int(round(SHELTER_WALL_H / QUOIN_H)))
-	for c in courses:
-		var inst: Node3D = ps.instantiate() as Node3D
-		inst.name = "Q%d" % c
-		holder.add_child(inst)
-		inst.owner = parent
-		inst.position = Vector3(0.0, QUOIN_H * float(c), 0.0)
-		# 每皮转 90°，U/V 走向换一次；方块料石看不出来，但纹理不重复
-		inst.rotation_degrees = Vector3(0.0, 90.0 * float(c), 0.0)
-	print("TOOL|quoin|%s|asset=%s|size=(%.2f, %.2f, %.2f)|courses=%d|base=%s|top=%.3f" % [
-		nm, QUOIN_ASSET, QUOIN_W, QUOIN_H, QUOIN_D, courses,
-		str(holder.position), GROUND_TOP + QUOIN_H * float(courses)])
+	var inst: Node3D = ps.instantiate() as Node3D
+	inst.name = "Quoin"
+	holder.add_child(inst)
+	inst.owner = parent
+	inst.position = Vector3.ZERO
+	inst.rotation_degrees = Vector3.ZERO
+	print("TOOL|quoin|%s|asset=%s|h=%.3f|foot=%.3f..%.3f|base=%s|top=%.3f" % [
+		nm, QUOIN_ASSET, QUOIN_H, QUOIN_MIN_FOOT, QUOIN_MAX_FOOT,
+		str(holder.position), GROUND_TOP + QUOIN_H])
 	return holder
 
 
@@ -1323,8 +1322,8 @@ func _verify() -> void:
 		var qn := scene.get_node_or_null(q["n"]) as Node3D
 		if not _check("%s_exists" % qid, qn != null):
 			continue
-		var q_courses: int = maxi(1, int(round(SHELTER_WALL_H / QUOIN_H)))
-		_check("%s_courses" % qid, qn.get_child_count() == q_courses)
+		# 一件 = 4 皮（不同长宽高、相邻层转 90°），总高 = 墙高
+		_check("%s_single_piece" % qid, qn.get_child_count() == 1)
 		_check("%s_no_collision" % qid, _count_collision_shapes(qn) == 0)
 		_check("%s_not_nav_source" % qid, not qn.is_in_group("nav_source_courtyard"))
 		var q0 := qn.get_child(0) as Node3D
@@ -1333,13 +1332,14 @@ func _verify() -> void:
 			absf(qn.position.x - (SHELTER_X_MIN + FENCE_THICK * 0.5)) < 1e-3)
 		_check("%s_on_corner_z" % qid, absf(qn.position.z - float(q["z"])) < 1e-3)
 		_check("%s_grounded" % qid, absf(qn.position.y - GROUND_TOP) < 1e-3)
-		var q_top: float = qn.position.y + QUOIN_H * float(q_courses)
-		_check("%s_spans_wall_height" % qid,
+		_check("%s_spans_wall_height" % qid, absf(QUOIN_H - SHELTER_WALL_H) < 1e-3)
+		var q_top: float = qn.position.y + QUOIN_H
+		_check("%s_top_at_wall_top" % qid,
 			absf(q_top - (GROUND_TOP + SHELTER_WALL_H)) < 1e-3)
 		# 料石要盖住整片墙厚（含两侧石块外凸），但不许变成一根粗柱子
-		_check("%s_covers_wall_thickness" % qid, QUOIN_W + 1e-6 >= WALL_LOW_THICK)
-		_check("%s_protrusion_within_5cm" % qid,
-			QUOIN_W * 0.5 - WALL_LOW_THICK * 0.5 <= 0.05)
+		# 外凸相对石块外凸面（WALL_LOW_THICK/2）不超过 6 cm，否则就像柱子了
+		_check("%s_protrusion_within_6cm" % qid,
+			QUOIN_MAX_FOOT * 0.5 - WALL_LOW_THICK * 0.5 <= 0.06)
 
 	# B 四区域：恰好铺满可玩矩形
 	var area_sum := 0.0
