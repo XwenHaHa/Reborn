@@ -164,3 +164,40 @@ windows_release_x86_64_console.exe  0.2 MB
 命令事实以 `Docs/Commands.md` 为准，该文件区分 VERIFIED 与 PENDING，不得把 PENDING 写成可执行示例。路径含空格时 PowerShell 用调用运算符 `&`。
 
 **Godot 无头运行一律加 `--quit-after <N>`**：脚本加载失败时 `get_tree().quit()` 不会被调用，进程会挂死（已实测，180 s 超时）。
+
+## 启动游戏（有窗口，2026-10-23 实测）
+
+双击 `Tools\RunGame.cmd` 即可（`Tools\OpenEditor.cmd` 是打开编辑器版）。手动等价命令：
+
+```powershell
+& 'E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64.exe' `
+    --path 'E:\Reborn\Game\Reborn'
+```
+
+实测启动日志（Vulkan Forward+，1280×720）：
+
+```
+Godot Engine v4.7.2.stable.official.ed1daf0bf
+Vulkan 1.4.303 - Forward+ - Using Device #0: NVIDIA - NVIDIA T600 Laptop GPU
+ENTRY|ready|species=2|test_mode=true|unlocked=[&"Mouse", &"Cat"]
+```
+
+**从 AI 会话里拉起时注意**：`Start-Process` / `cmd /c start` 起的子进程会随会话命令结束被杀；
+要让它留在桌面上，用 WMI 创建（脱离进程树）：
+
+```powershell
+$cmd = '"E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64.exe" --path "E:\Reborn\Game\Reborn"'
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd }
+```
+
+### 默认按键（取自 `project.godot` 的 input map）
+
+| 动作 | 键 |
+|---|---|
+| 移动 / 跳 | `WASD` / `Space` |
+| 冲刺 / 蹲伏 | `Shift` / `Ctrl` |
+| 交互（进食、饮水） | `E` |
+| 猫扑击 | **鼠标左键** |
+| 暂停 | `Esc` |
+| 结算/物种选择 | `1` / `2`（`life_select_1/2`） |
+| 调试 | `F1` 切猫 / `F2` 切鼠 / `F3` 碰撞线框 / `F4` 导航路径 / `F5` 调试 HUD / `F6` 重开 |
