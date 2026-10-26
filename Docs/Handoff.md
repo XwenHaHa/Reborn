@@ -420,11 +420,11 @@ $proj = 'E:\Reborn\Game\Reborn'
 | 事项 | 说明 |
 |---|---|
 | **ART04 的两个待决（已由 ART05 落实）** | ① 玩家自己的模型顶在镜头前 → **已做第三人称**（`camera_mode`，臂长撞墙收臂）；② 设置不持久化 → **已做** `GameSettings`（`user://settings.cfg`）。仍未做：第三人称镜头平滑、撞墙实拍帧、其它设置项 |
-| **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T010 → `8140d6f`，T011 → `1f71f46`，T012 → `2968909`，T013 → `89ac039`，T014 → `b6351d9`，T015 → `79f2bbd`，T016 → `692fe9a`，T017 → `ab6225e`，T018 → `a2070bc`，T019 → `5bfb1c7`，T020 → `38be427`，T021 → `c36fff2`，T022 → `5b922be`，T023 → `899444c`，T024 → `cd66a9f`，T025 → `80b7eba`，T026 → `2769811`，T027 → `3ae16b9`，T028 → `d8374b3`，**T029 → `36d5944`**）；当前 `main` 比 `origin/main` **ahead 以 `git rev-list --count origin/main..main` 为准（当时累计 50 个提交未推送，含 T029 / T030）；**已于 2026-10-27 推送成功：`origin/main` = `8da9eeb`，ahead=0 / behind=0，LFS 54/54 对象（10 MB）已上传** |
-| **Git 推送 / 发布** | **推送于 2026-10-27 已打通并执行**（`origin/main` = `8da9eeb`）。原因与修法：① 直连 github.com 超时 → 需代理 `127.0.0.1:7897`；② 远端 LFS locking API 经该代理不可达 → 必须关掉锁校验。两项都已写在**仓库本地配置**（不动全局），见"关键环境事实"。**对外发布（新构建给别人）仍需负责人确认** |
+| **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T010 → `8140d6f` … T029 → `36d5944`；**ART04 → `61615dd`；ART05 → `cc81d62`**）。`origin/main` 已于 2026-10-26 与 `art/modeling-pipeline` **快进合并**并推送 = **`cc81d62`**（`ahead=0 / behind=0`），LFS 98/98 对象（62 MB）已上传 |
+| **Git 推送 / 发布** | **推送通道**（2026-10-26 再次实测可用）：① 直连 github.com 超时 → 用**仓库本地**代理配置 `http(s).proxy = http://127.0.0.1:7897`；② 远端 LFS locking API 经该代理不可达 → `lfs.https://github.com/XwenHaHa/Reborn.git/info/lfs.locksverify=false`。两项都只写在**仓库本地**（不动全局）。**本轮已把 `main` 快进到 `cc81d62` 并推送**；**对外发布（把构建发给别人）仍需负责人确认** |
 | 是否发布新构建 | `Builds/P0-Win64/` 已按 **ART05** 重新导出两个预设（`export-debug`，exit 0）：`Reborn.pck` **30,044,160 B** / `RebornSelfTest.pck` **30,834,120 B**（体积原因见上「打包体积」；包内 t002 18/18、t008 107/107、t018 73/73、t030 111/111、art02 72/72、art05_settings 20/20）。**发布动作本身仍需负责人确认**，且**建议先定体积策略再对外发** |
-| 真实按键输入验证方式 | 需受审查的输入自动化工具（**需授权**），或真人操作录像。**不要盲发按键** |
-| 相机轴语义 D1 / 蹲姿高度 D2 | 见上方"关键事实"：D1 已按竖直偏移实现并断言锁定；D2 需并入 `Parameters.md` 正式起测值 |
+| 真实按键输入验证方式 | **已部分解决（ART05）**：引擎内注入（`Input.parse_input_event` + `root.push_input`）走真实 InputMap/GUI 路径，`tests/run_art05_input.gd` **20/20**，**但必须非 headless**（无头根视口 64×64 无 hover，按钮不发 `pressed`）。**OS 级真实按键自动化仍无受审查工具**（不要盲发按键到别的窗口）；真人录像仍是最终口径 |
+| 相机轴语义 D1 / 蹲姿高度 D2 | 见上方"关键事实"：D1 已按竖直偏移实现并断言锁定；D2（`crouch_half_height` 猫 0.15 / 鼠 0.06）需并入 `Parameters.md` 正式起测值 |
 | **T020 感知新增的 4 个默认值** | `footstep_interval_base` 0.5 s、`flee_timeout` 3.0 s、`reach_tolerance` 0.5 m、`hide_arrive_radius` 0.30 m —— `Parameters.md` 原本没有，需负责人并入正式起测值（`Docs/Evidence/T020.md` §8） |
 | **T021 捕获食物默认值** | 捕获食物 `nutrition` 现取物种营养表默认 **35.0**（`Parameters.md` 未给捕获食物专门值）；另「恢复期 0.6 s 是否锁俯仰/姿态」待确认（`Docs/Evidence/T021.md` §8） |
 | **T023 新增的 5 个巡游/接近默认值** | `patrol_radius` 6.0 / `patrol_pause` 1.0 / `patrol_min_move` 0.5 / `patrol_retry_wait` 1.0 / `approach_repath_interval` 0.5 —— `Parameters.md` 无对应行，需负责人并入正式起测值；**猫的巡逻点位布置属 T027**（`Docs/Evidence/T023.md` §7） |
