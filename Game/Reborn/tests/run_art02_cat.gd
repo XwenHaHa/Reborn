@@ -41,6 +41,7 @@ func _initialize() -> void:
 	_check_asset_layer()
 	await _check_integration_layer()
 	await _check_runtime_layer()
+	await _check_turn_limit()
 	_finish()
 
 
@@ -106,7 +107,30 @@ func _check_asset_layer() -> void:
 			_assert("surface_1_is_detail", "MAT_Cat_Detail", String(mat.resource_name),
 				String(mat.resource_name) == "MAT_Cat_Detail")
 			_assert_near("surface_1_roughness", EXPECT_DETAIL_ROUGH, mat.roughness, 0.03)
-	_assert("asset_materials_textured", "2", str(tex_count), tex_count == EXPECT_SURFACES)
+	# 贴图契约（ART02-ext）：毛发槽必须有 albedo + normal；眼睛槽是**纯色**
+	# （art15 重建材质时不再挂 eye 贴图 —— 旧版 eye_3.png 只在旧 glb 里，改为 (0.03,0.03,0.03) 纯色）
+	_assert("asset_fur_albedo_textured", "texture", str(_surface_albedo(inst, 0) != null),
+		_surface_albedo(inst, 0) != null)
+	_assert("asset_fur_normal_textured", "texture", str(_surface_normal(inst, 0) != null),
+		_surface_normal(inst, 0) != null)
+	_assert("asset_detail_slot_is_flat", "no albedo tex", str(_surface_albedo(inst, 1) == null),
+		_surface_albedo(inst, 1) == null)
+	# 动画契约（ART02-ext）：33 骨在、Idle/Walk/Run 三段在（原先只有骨架没有动作）
+	var ap := _find_player(inst)
+	if _assert("animation_player_exists", "AnimationPlayer", str(ap != null), ap != null):
+		var anim_names := ap.get_animation_list()
+		print("ASSET|anims=%s" % str(anim_names))
+		_assert("anim_count_3", "3", str(anim_names.size()), anim_names.size() == 3)
+		for want in ["Idle", "Walk", "Run"]:
+			var wid := String(want).to_lower()
+			_assert("anim_%s_present" % wid, want, str(anim_names.has(want)),
+				anim_names.has(want))
+			if anim_names.has(want):
+				var a := ap.get_animation(want)
+				_assert("anim_%s_length" % wid, "> 0.2 s", "%.3f" % a.length, a.length > 0.2)
+				# 导入器带 `remove_immutable_tracks=true`：33 骨里只有真会动的那批保留 → 实测 18 条轨
+				_assert("anim_%s_tracks" % wid, "≥ 12 条轨", str(a.get_track_count()),
+					a.get_track_count() >= 12)
 	_assert("asset_has_no_collision", "0", str(_count_collision(inst)), _count_collision(inst) == 0)
 	inst.free()
 
@@ -245,8 +269,102 @@ func _check_runtime_layer() -> void:
 	_assert("runtime_visual_not_stretched", "scale.y=1",
 		"%.3f" % (visual.scale.y if visual != null else -1.0),
 		visual != null and absf(visual.scale.y - 1.0) <= 1e-4)
+
+	# ART02-ext：动画按**实际水平速度**切换（Idle → Walk → Run → Idle），并且走过/跑过要有速度差
+	if not _assert("runtime_anim_bound", "true", str(body.visual_anim_active),
+			body.visual_anim_active):
+		level.queue_free()
+		return
+	_assert("runtime_anim_idle_when_still", "Idle", str(body.visual_anim_current),
+		body.visual_anim_current == &"Idle")
+	body.move_intent = Vector2(0.0, -1.0)
+	body.want_sprint = false
+	for i in 30:
+		await physics_frame
+	_assert("runtime_anim_walk_when_moving", "Walk", str(body.visual_anim_current),
+		body.visual_anim_current == &"Walk")
+	var walk_spd := body.horizontal_speed()
+	body.want_sprint = true
+	for i in 40:
+		await physics_frame
+	_assert("runtime_anim_run_when_sprinting", "Run", str(body.visual_anim_current),
+		body.visual_anim_current == &"Run")
+	var run_spd := body.horizontal_speed()
+	_assert("runtime_anim_run_faster", "run > walk", "%.3f > %.3f" % [run_spd, walk_spd],
+		run_spd > walk_spd)
+	body.move_intent = Vector2.ZERO
+	body.want_sprint = false
+	for i in 40:
+		await physics_frame
+	_assert("runtime_anim_idle_after_stop", "Idle", str(body.visual_anim_current),
+		body.visual_anim_current == &"Idle")
+	print("MEASURE|anim_switch|walk=%.3f|run=%.3f|clip=%s" % [
+		walk_spd, run_spd, body.visual_anim_current])
 	level.queue_free()
 
+
+
+## ART02-ext：NPC 转向限速。以前 `animal_ai.gd` 每帧 `body.look_at(...)` 硬切朝向 →
+## 配上当时"静止姿势平移"的猫，看起来就是道具在滑。这里直接驱动转向函数逐帧采样。
+func _check_turn_limit() -> void:
+	var packed: PackedScene = load(LEVEL)
+	if packed == null:
+		_assert("turn_level_loads", "true", "false", false)
+		return
+	var level: Node3D = packed.instantiate() as Node3D
+	root.add_child(level)
+	await physics_frame
+
+	var cat := load(CAT_CFG) as SpeciesConfig
+	var body := (load(BODY_SCENE) as PackedScene).instantiate() as AnimalBody
+	body.species_config = cat
+	body.player_controlled = false
+	# 只测"转向限速"这一件事：**不开** body 的 AI 自动 tick（否则巡逻逻辑会同时改朝向，混在一起）
+	body.ai_enabled = false
+	level.add_child(body)
+	body.global_position = Vector3(-2.0, GROUND_TOP + 0.60, 18.0)
+	for i in 30:
+		await physics_frame
+	var ai := CatAI.new()
+	level.add_child(ai)
+	ai.setup(body)
+	ai.patrol_enabled = false
+	_assert("turn_ai_present", "CatAI", str(ai.body == body), ai.body == body)
+
+	body.rotation.y = 0.0                       # 当前朝 -Z
+	var dt := 1.0 / float(Engine.physics_ticks_per_second)
+	var max_step := deg_to_rad(AnimalAI.NPC_TURN_RATE_DEG_PER_SEC) * dt + deg_to_rad(2.0)
+	var prev := body.rotation.y
+	var worst := 0.0
+	var frames_to_align := -1
+	var move_zero_while_turning := false
+	var moved_after_align := false
+	# 想朝 +Z（要掉头 180°）
+	for i in 40:
+		ai._face_and_move(Vector3(0.0, 0.0, 1.0))
+		if i == 0:
+			move_zero_while_turning = body.move_intent == Vector2.ZERO
+		var cur := body.rotation.y
+		worst = maxf(worst, absf(wrapf(cur - prev, -PI, PI)))
+		prev = cur
+		await physics_frame
+		if frames_to_align < 0 and absf(wrapf(cur - PI, -PI, PI)) <= deg_to_rad(5.0):
+			frames_to_align = i + 1
+	var final_gap := absf(wrapf(body.rotation.y - PI, -PI, PI))
+	moved_after_align = absf(body.move_intent.y) > 0.5
+	print("MEASURE|turn|end=%.1f°|worst_step=%.2f°|max_step=%.2f°|frames=%d|gap=%.2f°" % [
+		rad_to_deg(body.rotation.y), rad_to_deg(worst), rad_to_deg(max_step),
+		frames_to_align, rad_to_deg(final_gap)])
+	_assert("turn_rate_limited", "每帧 ≤ %.2f°" % rad_to_deg(max_step),
+		"%.2f°" % rad_to_deg(worst), worst <= max_step)
+	_assert("turn_not_instant", "≥ 3 帧", str(frames_to_align), frames_to_align >= 3)
+	_assert("turn_reaches_target", "≤ 5°", "%.2f°" % rad_to_deg(final_gap),
+		final_gap <= deg_to_rad(5.0))
+	_assert("turn_stops_while_rotating", "move_intent == ZERO",
+		str(move_zero_while_turning), move_zero_while_turning)
+	_assert("turn_moves_after_aligned", "move_intent != ZERO",
+		str(moved_after_align), moved_after_align)
+	level.queue_free()
 
 # ---------------------------------------------------------------------------
 # 小工具
@@ -260,6 +378,34 @@ func _find_mesh(node: Node) -> MeshInstance3D:
 		if r != null:
 			return r
 	return null
+
+
+## ART02-ext：找 glb 里的 AnimationPlayer（导入后挂在 Armature 下面）
+func _find_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for c in node.get_children():
+		var r := _find_player(c)
+		if r != null:
+			return r
+	return null
+
+
+func _surface_material(inst: Node, idx: int) -> StandardMaterial3D:
+	var mi := _find_mesh(inst)
+	if mi == null or mi.mesh == null or idx >= mi.mesh.get_surface_count():
+		return null
+	return mi.get_active_material(idx) as StandardMaterial3D
+
+
+func _surface_albedo(inst: Node, idx: int) -> Texture2D:
+	var m := _surface_material(inst, idx)
+	return m.albedo_texture if m != null else null
+
+
+func _surface_normal(inst: Node, idx: int) -> Texture2D:
+	var m := _surface_material(inst, idx)
+	return m.normal_texture if m != null else null
 
 
 func _count_collision(node: Node) -> int:

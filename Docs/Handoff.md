@@ -66,7 +66,10 @@
 | ART03-⑮ | **done（2026-10-22，系统时钟；未 approved）** | `Docs/Evidence/ART03_FENCE.md` §9、`Docs/Tasks/ART03_FENCE.md` §8、`Tools/Blender/art12_short_wall.py`、`SM_Wall_Low_001.glb`（663 tris）、`tests/tool_make_courtyard.gd`（`_mk_low_wall`）、`tests/tool_capture_low_wall.gd` | 庇护棚矮墙换专用模块（取 `wall_stone` 最上面 0.8 m，2 皮叠成 1.6 m，`k_y=1.0` 不压扁；横向精确贴合）；碰撞未动；全量 30 套 3,173 条全绿；层缝"找平线"已把封口石板收进砌体压掉；两端台阶与横向拉伸未处理 |
 | ART03-⑮-2 / ⑮-3 | **done（2026-10-22，系统时钟；未 approved）** | `Docs/Evidence/ART03_FENCE.md` §10、`Docs/Tasks/ART03_FENCE.md` §9、`Tools/Blender/art13_shelter_post.py`（接手时已在工作区）、`Tools/Blender/art14_quoin.py`、`SM_Shelter_Post_001.glb`（28 tris）、`SM_Quoin_001.glb`（176 tris） | 庇护棚收边：门垛木立柱（同时补棚顶东侧支撑）+ 两个外转角各一件整高料石（4 皮不同长宽高、相邻层转 90°）压住各内缩 ±7 cm 的石排端；衬板改为只在门垛端收进 0.15 m；全部零碰撞；全量 30 套 3,173 条全绿；料石仍比毛石墙略浅略规整 |
 
+| ART02-ext | **done（2026-10-26，系统时钟；未 approved）** | `Docs/Evidence/ART02.md` §8、`Tools/Blender/art15_cat_anim.py`（接手时已在工作区）、`Art/Exports/Cat/SM_Cat_002.glb`、`scripts/ai/animal_ai.gd`、`tests/run_art02_cat.gd`、`tests/tool_capture_cat_anim.gd` | 猫接入 Idle/Walk/Run（33 骨、无动画旧档已换掉）+ NPC 转向限速 540°/s；全量 30 套 3,198 条全绿；仍缺 AttackCue/扑击姿态 |
+
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
+
 
 **T030 的边界声明**：① 只做生命周期与记录，**没做**结算页美术/动效（P6/T032）、存档（T037）、正式解锁条件（T031）；② `MainEntry.test_mode = true` 是**临时开发态**，正式解锁接入后必须改 `false`；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。
 **P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 进行中（T030 done）** → **下一步 T031 地点发现和老鼠解锁**。

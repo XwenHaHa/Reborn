@@ -319,6 +319,38 @@ func has_destination() -> bool:
 	return _has_destination
 
 
+## ART02-ext：**转向限速**。以前这里每帧 `body.look_at(...)` 硬切朝向 → NPC 转身是"啪"的一下，
+## 再加上猫当时没有动画（静止姿势平移），看起来完全像道具在漂移。
+## 现在按角速度上限平滑转身；偏差 > 75° 时先站定转身，避免朝旧方向倒着冲出去。
+## 只改**表现朝向**（`rotation.y`）；路径点选择、到达判定、视线与攻击朝向判定仍读同一份真实朝向，
+## 只是它现在连续变化（540°/s ≈ 掉头 0.33 s）。
+const NPC_TURN_RATE_DEG_PER_SEC := 540.0
+const NPC_TURN_STOP_ANGLE := 75.0
+
+
+func _face_and_move(dir: Vector3) -> void:
+	if body == null or not is_instance_valid(body):
+		return
+	var flat := Vector3(dir.x, 0.0, dir.z)
+	if flat.length_squared() < 1e-8:
+		body.move_intent = Vector2.ZERO
+		return
+	flat = flat.normalized()
+	# Godot 里模型朝 -Z：-Z 经 Ry(θ) 旋转后 = (-sinθ, 0, -cosθ)
+	var want := atan2(-flat.x, -flat.z)
+	var diff := wrapf(want - body.rotation.y, -PI, PI)
+	var step := deg_to_rad(NPC_TURN_RATE_DEG_PER_SEC) \
+		* maxf(body.get_physics_process_delta_time(), 0.0)
+	if absf(diff) <= step:
+		body.rotation.y = want
+	else:
+		body.rotation.y = body.rotation.y + signf(diff) * step
+	if absf(wrapf(want - body.rotation.y, -PI, PI)) > deg_to_rad(NPC_TURN_STOP_ANGLE):
+		body.move_intent = Vector2.ZERO      # 还在大角度转身：先站定
+	else:
+		body.move_intent = Vector2(0.0, -1.0)
+
+
 ## 沿导航路径推进：读 `get_next_path_position()` → 转向 + 向前（**不瞬移**）
 ## 无路径 / 已到终点时**必须清空意图**，否则会残留上一帧的方向继续走（实测会让"不可达"看起来像走通了）
 func _advance_along_path() -> void:
@@ -345,11 +377,9 @@ func _advance_along_path() -> void:
 		if to_goal.length() < 0.01:
 			body.move_intent = Vector2.ZERO
 			return
-		body.look_at(body.global_position + to_goal.normalized(), Vector3.UP)
-		body.move_intent = Vector2(0.0, -1.0)
+		_face_and_move(to_goal)
 		return
-	body.look_at(body.global_position + to_next.normalized(), Vector3.UP)
-	body.move_intent = Vector2(0.0, -1.0)
+	_face_and_move(to_next)
 
 
 func _reset_progress_window() -> void:

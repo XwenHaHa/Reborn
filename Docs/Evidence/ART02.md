@@ -143,9 +143,68 @@ run_t027_ecology.gd 300000 | run_art01_bush.gd 20000
    - **方案 B**：请美术在 Blender 里手工雕刻 + 拓扑（本仓库已能自动导链、断言、出图，美术只需交付基底）；
    - **方案 C**：继续程序化，但改用**雕刻式位移贴图 + 多层毛发壳**（面数与渲染成本都会显著上升，
      且仍需专业基础形体，否则只是把"塑料"变成"毛塑料"）。
-2. **没有骨骼/动画**：`Idle/Walk/Run/AttackCue` 属 **P6 阶段门**。目前蹲姿靠竖向压缩（0.625×）近似，
-   冲刺/扑击没有姿态变化 —— 这是"看起来僵硬"的另一半原因，不是网格本身能解决的。
+2. ~~**没有骨骼/动画**~~ → **已部分解决（见 §8，2026-10-26）**：33 骨在 ART03-① 就有了，
+   本轮补了程序化的 `Idle/Walk/Run` 并接进游戏；仍缺 `AttackCue` / 扑击姿态 / 蹲伏姿态，
+   蹲姿目前仍靠竖向压缩（0.625×）近似。
 3. **胶囊与四足的包络不匹配**：视觉长 0.60 m，碰撞是 0.32 m 直径的竖直胶囊。
    改胶囊会牵动导航烘焙（`tool_make_courtyard_nav.gd`）与玩法数值 → **需负责人决定**（建议 T031 之后单独评估）。
 4. **接触阴影**：灰盒关卡没有实时阴影配置，模型"落地感弱"部分是场景光照问题，不在资产侧。
 5. **鼠仍是胶囊**：按 `modeling2.md` §五，试点验收通过前不批量替换。
+
+---
+
+## 8. ART02-ext（2026-10-26）：猫有了 Idle/Walk/Run + NPC 转向限速
+
+### 现象与两个根因（用户反馈"猫的动作生硬、不自然"）
+1. **猫一段动画都没有**：`sm_cat_002.glb` 有 33 骨、有 skin，但 `animations=0`；
+   而鼠有 4 段（Idle/Walk/Run/Eat）→ 猫是"摆好的姿势贴地平移"，对比之下尤其假。
+2. **NPC 朝向每帧硬切**：`animal_ai.gd` 用 `body.look_at(...)` 直接设朝向，没有角速度上限，
+   转身一帧到位 → 配静止姿势 = 道具在滑。
+
+### 谁做的（重要）
+`Tools/Blender/art15_cat_anim.py` 与"带动画的 `SM_Cat_002.glb`"**接手时已在工作区未提交，非本次所写**。
+本轮做的是：复核 → 把动画**接进游戏**（游戏里那份还是 10/21 的无动画旧档）→ 补断言 → 转向限速。
+
+### 资产（`Art/Exports/Cat/SM_Cat_002.glb`，art15 产出）
+- 网格/材质与 ART02 完全一致：**8,376 tris / 2 槽 / AABB 0.304614 × 0.310051 × 0.542281**（回归里逐条复验）
+- 新增 **3 段动画**：`Idle`(48 帧) / `Walk`(24 帧) / `Run`(16 帧)，各 **99 通道**（33 骨 × TRS）
+- 导入后每段保留 **18 条轨道**（导入设置 `remove_immutable_tracks=true` 会丢掉恒定不变的骨骼轨）
+- 材质变化：眼睛槽由"贴图"变成**纯色** (0.03, 0.03, 0.03)、roughness 0.28（art15 重建材质时不再挂 `eye_3.png`）。
+  因此把原来那条粗断言 `asset_materials_textured == 2` 换成三条更精确的：
+  `asset_fur_albedo_textured` / `asset_fur_normal_textured` / `asset_detail_slot_is_flat`。
+
+### 接线（游戏侧）
+- 把 Art/Exports 的导出覆盖到 `Game/Reborn/assets/characters/cat/sm_cat_002.glb`（旧档 10/21、无动画），
+  删 `.godot/imported/sm_cat_002*` 后**连跑两次 `--import`**（第一次只重建贴图，`.scn` 仍缺）。
+- `animal_body.gd` 的接线本来就按名字找 `Idle/Walk/Run` 并按实际速度调 `speed_scale`，无需改代码。
+
+### 转向限速（`scripts/ai/animal_ai.gd`）
+```gdscript
+const NPC_TURN_RATE_DEG_PER_SEC := 540.0   # 实现默认，待并入 Docs/Parameters.md
+const NPC_TURN_STOP_ANGLE := 75.0          # 偏差大于它先站定转身，避免倒着冲
+func _face_and_move(dir: Vector3) -> void  # 逐帧按角速度上限逼近目标 yaw
+```
+- 只改**表现朝向**（`rotation.y`）；路径点选择、到达判定、视线与攻击朝向仍读同一份真实朝向，只是连续变化。
+- 540°/s ⇒ 掉头 180° 约 **0.33 s（20 帧 @60 Hz）**，正常巡视的小角度转向几乎无感。
+
+### 新增断言（`run_art02_cat.gd`：47 → **72** 条）
+- 资产层：`animation_player_exists` / `anim_count_3` / 三段各自 `present + length + track(≥12)`；
+- 运行时：`runtime_anim_bound`、`Idle→Walk→Run→Idle` 切换、`run > walk`；
+- 转向：`turn_rate_limited`（每帧 ≤ 540°/s·dt）、`turn_not_instant`（≥ 3 帧）、
+  `turn_reaches_target`（≤ 5°）、`turn_stops_while_rotating`、`turn_moves_after_aligned`。
+- 实测：`MEASURE|anim_switch|walk=1.800|run=4.500`；
+  `MEASURE|turn|end=180.0°|worst_step=9.00°|max_step=11.00°|frames=20|gap=0.00°`。
+
+### 证据图
+`tests/tool_capture_cat_anim.gd`（新）→ `Art/Probes/catanim_walk_0..3.png`（一个步行周期的 4 个相位）、
+`catanim_run_0..1.png`、`catanim_turn.png`。直接 Read 复核：四个相位里**前后爪位置互换、尾巴角度变化**，
+猫沿地面推进 —— 不是静止滑行。
+
+### 回归
+全量 **30 套 / 3,198 条 / 0 失败 / 每套 EXIT=0 / `SCRIPT ERROR` 0**（较上轮 +25 条，全部来自 `run_art02_cat`）。
+
+### 仍未做
+- `AttackCue`、扑击/蹲伏姿态：没有专门 clip（蹲姿仍靠竖向压缩）；
+- `Run` 是"加速版 Walk"（不是真正的 gallop），`Idle` 没有耳朵/眨眼等细节；
+- 转向没有身体侧倾（视觉打磨项）；
+- 转向角速度是**新的实现默认值**，未并入 `Docs/Parameters.md`（需负责人确认）。

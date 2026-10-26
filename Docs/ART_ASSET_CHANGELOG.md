@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-10-26 · ART02-ext 猫的动作：Idle / Walk / Run + NPC 转向限速
+
+**变更类型**：角色动画补齐（**零玩法数值改动**；朝向表现改为连续变化）。
+
+- 资产 `SM_Cat_002.glb` 由 `Tools/Blender/art15_cat_anim.py` 重新导出：网格/材质/AABB 与 ART02 完全一致
+  （8,376 tris / 2 槽 / 0.304614 × 0.310051 × 0.542281），新增 3 段程序化动画
+  `Idle`(48f) / `Walk`(24f) / `Run`(16f)，各 99 通道（33 骨 × TRS）。
+  该脚本与带动画的导出**接手时已在工作区未提交，非本次所写**。
+- 关键事实：游戏里那份 `Game/Reborn/assets/characters/cat/sm_cat_002.glb` 一直是 10/21 的**无动画旧档**
+  （`animations=0`）→ 猫永远保持一个姿势贴地平移；鼠有 4 段 clip，所以对比特别明显。
+- 材质变化：眼睛槽从贴图改为**纯色** (0.03, 0.03, 0.03) / roughness 0.28（art15 重建材质时不再挂 `eye_3.png`）。
+  断言随之从 `asset_materials_textured == 2` 改成三条更精确的（毛发 albedo / 毛发 normal / 眼睛纯色）。
+- 表现层：`animal_ai.gd` 的 `body.look_at(...)`（每帧硬切朝向）换成 `_face_and_move()` ——
+  **540°/s 角速度上限**、偏差 > 75° 时先站定转身；只改 `rotation.y`，玩法判定不变。
+- 回归：全量 **30 套 / 3,198 条 / 0 失败**；`run_art02_cat` 47 → **72** 条（新增动画与转向断言）。
+- 证据：`Art/Probes/catanim_walk_0..3.png` / `catanim_run_0..1.png` / `catanim_turn.png`。
+- 仍未做：`AttackCue`、扑击/蹲伏姿态、真正的 gallop、转向侧倾；转向 540°/s 是**实现默认**，
+  未并入 `Docs/Parameters.md`，需负责人确认后固化。
+- 未由负责人视觉验收（不写 approved）；未推送、未发布。
+
+---
+
 ## 2026-10-22 · ART03-⑮-2 / ⑮-3 庇护棚收边：门垛立柱 + 转角料石
 
 **变更类型**：环境视觉补件（**零玩法改动**，三面墙碰撞盒与导航一字未动）。
