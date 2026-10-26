@@ -68,6 +68,8 @@
 
 | ART02-ext | **done（2026-10-26，系统时钟；未 approved）** | `Docs/Evidence/ART02.md` §8、`Tools/Blender/art15_cat_anim.py`（接手时已在工作区）、`Art/Exports/Cat/SM_Cat_002.glb`、`scripts/ai/animal_ai.gd`、`tests/run_art02_cat.gd`、`tests/tool_capture_cat_anim.gd` | 猫接入 Idle/Walk/Run（33 骨、无动画旧档已换掉）+ NPC 转向限速 540°/s；全量 30 套 3,198 条全绿；仍缺 AttackCue/扑击姿态 |
 
+| ART04 | **done（2026-10-28，系统时钟；未 approved）** | `Docs/Tasks/ART04.md`、`Docs/Evidence/ART04.md`、`scripts/ui/main_menu.gd`（新）、`scripts/core/main_entry.gd`、`scripts/ui/hud.gd`、`scripts/characters/animal_body.gd`、`scripts/data/species_config.gd`、`resources/species/{cat,mouse}.tres`、`tests/tool_capture_art04.gd`、`Art/Probes/art04_*.png` | **开场/物种选择从"一行文字"变正式界面**（`配套要求.md` §2）：菜单相机 + 猫鼠展示模型 + 菜单补光 + 标题/按钮 + 数据驱动物种卡（每物种 `SubViewport` 实时 3D 缩略图）；HUD 换四条指标条（原文字标签保留 → T018 不变）；Idle↔Walk↔Run 交叉淡入；**31 套 / 3,525 条全绿、0 条 SCRIPT ERROR**；`tool_t028_walkthrough` 的 W4 失败**改前基线同样失败**（既有缺陷） |
+
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
 
 
@@ -250,6 +252,31 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **导航代理要挂在"脚下"**（T023 实测缺陷）：`NavigationAgent3D` 继承 `Node`（**没有自己的变换**），位置取自**父节点**。挂在胶囊中心时，与导航面的垂直差会超过 `path_desired_distance`(0.10)，`get_next_path_position()` **永远**返回"脚下的投影起点"（水平差 ≈ 0）→ **高个子物种原地抖、零位移**（猫 0.24 m 中招、鼠 0.09 m 侥幸没事）。现在统一挂到 `AnimalBody/NavOrigin`（`Marker3D`，本地 y = −`capsule_half_height`）。
 - **"有目的地"≠"会动"，"到不了"≠"走了直线"**：`_advance_along_path()` 的"下一点在脚下 → 朝目标走"兜底**只在 `get_current_navigation_path()` 非空时**生效；否则"不可达目标"会被走成"可达"（T019/T022 各挂 4/7 条断言就是踩在这里）。
 
+## 主菜单 / 物种选择 / HUD 条（ART04，2026-10-28）
+
+- **选物种画面现在由 `MainMenu`（`scripts/ui/main_menu.gd`，`Control`，运行期构建）负责**：
+  两页（主菜单 / 物种选择）+ 数据驱动物种卡 + 设置面板 + 键盘 `1`/`2` 选中、`Enter` 进入、`Esc` 返回。
+  `main.tscn` 仍是"只有根节点 + `MainEntry`"（T030 A15/A16 断言不变）：**不要**为了加 UI 在 `main.tscn` 里塞 `CanvasLayer`。
+- **选物种必须有相机，否则真实运行是默认清屏色**（改前就是这样，取证图的相机是工具临时建的）。
+  `MainEntry._build_menu_camera()` 在关卡里建 `MenuCamera`（`MENU_FOCUS = (-10.5, 0.10, 16.0)` 溪东岸 + `MENU_CAM_OFFSET`），
+  并挂一盏**只在菜单点亮**的 `MenuFill` 补光。改关卡几何后要重新取景验证。
+- **卡片预览是每物种一个 `SubViewport`（`own_world_3d`）**，直接实例化 `SpeciesConfig.visual_scene`。
+  两个坑都已修：① 建立时卡片**还没入树**，`Camera3D.look_at()` 与 `global_transform` 都会报
+  `Node not inside tree` 并返回单位变换 → 现在手算 `Basis`（`MainMenu._look_transform()`）；
+  ② 取景**不用模型 AABB**，用 `SpeciesConfig.capsule_height()`（猫 0.48 / 鼠 0.18 m），两卡里动物一样大。
+- **物种界面文案是真源字段**：`SpeciesConfig.display_name/display_tagline/display_note` + `display_title()`。
+  新增物种只改 `.tres`；**UI 里不许出现 `"Cat"`/`"Mouse"` 字面量**。
+- **菜单展示模型**（`MainEntry._build_showcase()`）沿相机右方向并排、`look_at` 相机、播 `Idle`，
+  并按体型差 `depth = (h_max − h) × 1.10` 往相机前移（否则鼠只有十几像素）；出生时 `_clear_showcase()` 释放。
+- **HUD 四条指标条**（`hud.gd` 的 `VitalsBars`）挂在 `Margin/VBox` 第 0 位；
+  `VitalLabel` 仍在、仍随 `status_lines()` 更新，但 `visible=false` —— **T018 的 73 条断言与 `hud_text()` 不受影响**。
+- **动画交叉淡入**用 `AnimationPlayer.play(name, blend)`：站↔走/跑 0.18 s、走↔跑 0.10 s。
+  `speed_scale` 仍按实际速度算，**淡入不影响位移**。
+- 取证：`tests/tool_capture_art04.gd -- art04`（**非 headless**）→ `user://art04_*.png` → 拷到 `Art/Probes/`。
+- **`tool_t028_walkthrough.gd` 的 `W4_players_survived` 是既有失败**：ART04 完成后重跑为 FAIL，`git stash` 掉全部改动再跑**同样 FAIL**
+  （鼠进洞后仍被咬死）→ 对应 T029 §6 ①「鼠洞不是安全区」，属待决策项，**不要**当成 ART04 的回归。
+
+
 ## 美术流水线（ART01 已打通，2026-10-21）
 
 - **Blender 侧**：`Tools/Blender/art01_bush_001.py`（确定性 seed、程序化建模、无外部贴图）→
@@ -368,6 +395,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 | 事项 | 说明 |
 |---|---|
+| **ART04 的两个待决** | ① **玩家自己的模型顶在镜头前**（第一人称）：改法 A = 第一人称隐藏自己模型（`SpeciesConfig` 加 `hide_visual_in_first_person`，会影响 `tool_capture_art02/art08` 的既有取证图）；改法 B = 做第三人称相机（要动 T009 的相机断言，属独立任务）。② 菜单设置项（灵敏度/FOV）**不持久化**，等 T037 存档一起做 |
 | **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T010 → `8140d6f`，T011 → `1f71f46`，T012 → `2968909`，T013 → `89ac039`，T014 → `b6351d9`，T015 → `79f2bbd`，T016 → `692fe9a`，T017 → `ab6225e`，T018 → `a2070bc`，T019 → `5bfb1c7`，T020 → `38be427`，T021 → `c36fff2`，T022 → `5b922be`，T023 → `899444c`，T024 → `cd66a9f`，T025 → `80b7eba`，T026 → `2769811`，T027 → `3ae16b9`，T028 → `d8374b3`，**T029 → `36d5944`**）；当前 `main` 比 `origin/main` **ahead 以 `git rev-list --count origin/main..main` 为准（当时累计 50 个提交未推送，含 T029 / T030）；**已于 2026-10-27 推送成功：`origin/main` = `8da9eeb`，ahead=0 / behind=0，LFS 54/54 对象（10 MB）已上传** |
 | **Git 推送 / 发布** | **推送于 2026-10-27 已打通并执行**（`origin/main` = `8da9eeb`）。原因与修法：① 直连 github.com 超时 → 需代理 `127.0.0.1:7897`；② 远端 LFS locking API 经该代理不可达 → 必须关掉锁校验。两项都已写在**仓库本地配置**（不动全局），见"关键环境事实"。**对外发布（新构建给别人）仍需负责人确认** |
 | 是否发布新构建 | `Builds/P0-Win64/` 已按 T029 改动**重新导出两个预设并再复验**：发布包 `Reborn.pck` **263,436 B**（+384 = 两个生产脚本改动）、自检包 `RebornSelfTest.pck` **921,704 B**（包内 T002 18/18、T019 72/72、T020 164/164、T023 178/178、T024 136/136、T025 174/174、T026 96/96、T027 96/96、T028 走查 4/4、**T029 39/39**）；**发布动作本身仍需负责人确认**（发布节奏未定） |

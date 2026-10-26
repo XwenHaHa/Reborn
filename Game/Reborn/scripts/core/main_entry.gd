@@ -15,6 +15,17 @@ const BODY_SCENE_PATH := "res://scenes/characters/animal_body.tscn"
 const HUD_SCENE_PATH := "res://scenes/ui/hud.tscn"
 const SPECIES_DIR := "res://resources/species"
 
+## 菜单展示区（ART04）：溪东岸的干燥地。相机与展示模型都**相对这个点**摆位，
+## 关卡几何若变，只改这里并重新取景验证（`Docs/Evidence/ART04.md` §取景）。
+const MENU_FOCUS := Vector3(-10.5, 0.10, 16.0)
+const MENU_CAM_OFFSET := Vector3(0.86, 0.42, 0.80)
+const MENU_CAM_LOOK := Vector3(0.0, 0.15, 0.0)
+const MENU_CAM_FOV := 58.0
+## 把展示主体推到画面右侧，左侧留给标题与按钮（负值 = 视线右移）
+const MENU_CAM_H_OFFSET := -0.05
+## 两个物种展示模型的横向间隔（米，沿相机右方向排开）
+const MENU_SHOWCASE_SPREAD := 0.36
+
 const ACTION_SELECT_1 := "life_select_1"
 const ACTION_SELECT_2 := "life_select_2"
 const SELECT_ACTIONS: Array[StringName] = [ACTION_SELECT_1, ACTION_SELECT_2]
@@ -35,6 +46,18 @@ var player: AnimalBody = null
 var ecology: EcologySpawner = null
 var status_label: Label = null
 
+## 主菜单 / 物种选择界面（ART04）。**运行期建立**；`main.tscn` 仍是"只有根节点 + 本脚本"。
+var menu: MainMenu = null
+## 选物种时的展示相机（挂在关卡里）；玩家出生后由玩家相机接管
+var menu_camera: Camera3D = null
+## 菜单补光（挂在菜单相机下、不投阴影）：展示动物的正脸常被主光甩进阴影，加一盏只用于菜单的补光
+var menu_fill: DirectionalLight3D = null
+## 菜单里展示的物种模型（每个物种一个）：只在选物种/结算时存在，出生即释放
+var _showcase: Array[Node3D] = []
+## 设置项（ART04）：灵敏度倍数、视野覆盖。本轮**只作用于本次运行**，持久化属后续任务
+var sensitivity_scale := 1.0
+## `0.0` = 不覆盖物种配置里的 `fov`；玩家动过滑块才写成具体值
+var fov_override := 0.0
 var _configs: Array[SpeciesConfig] = []
 var _frame := 0
 var _last_hunger := NAN
@@ -51,6 +74,7 @@ func _ready() -> void:
 	_build_ecology()
 	_build_hud()
 	_build_status()
+	_build_menu()
 	_build_lifecycle()
 	_enter_select()
 	print("ENTRY|ready|species=%d|test_mode=%s|unlocked=%s" % [
@@ -297,6 +321,43 @@ func _enter_select() -> void:
 		return
 	lifecycle.request_select()
 	_refresh_status()
+	_present_menu()
+
+
+## 进入"选物种"画面（ART04）：显示菜单 + 展示模型 + 菜单相机，隐藏 HUD 与状态文字。
+## 只改**呈现**，不改 `LifeCycle` 的任何状态（状态迁移仍由 `request_select()` 负责）。
+func _present_menu() -> void:
+	if menu != null:
+		menu.open_menu(_previous_record_text())
+	if hud != null:
+		hud.visible = false
+	if status_label != null:
+		status_label.visible = false
+	_build_showcase()
+	if menu_camera != null:
+		menu_camera.current = true
+	if menu_fill != null:
+		menu_fill.visible = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+## 离开菜单（出生那一刻）：释放展示模型、交还相机、恢复 HUD
+func _dismiss_menu() -> void:
+	if menu != null:
+		menu.close_menu()
+	if hud != null:
+		hud.visible = true
+	_clear_showcase()
+	if menu_fill != null:
+		menu_fill.visible = false
+
+
+func _previous_record_text() -> String:
+	var gs := _game_state()
+	if gs == null or _last_record.is_empty():
+		return ""
+	var line := String(gs.call("archive_line", _last_record))
+	return "上一世：%s" % line
 
 
 # ---------------------------------------------------------------------------
@@ -337,9 +398,12 @@ func _spawn_player(species_id: StringName) -> void:
 	body.species_config = cfg       # 入树前赋值：`_ready` 里会 apply_config()
 	body.player_controlled = true
 	body.make_camera_current = true
+	# ART04：出生即离开菜单（释放展示模型、恢复 HUD）。相机由 `make_camera_current` 接管。
+	_dismiss_menu()
 	level.add_child(body)
 	var spawn := _spawn_position(cfg)
 	body.global_position = spawn
+	_apply_settings_to(body)
 	body.velocity = Vector3.ZERO
 	if body.climb != null:
 		body.climb.reset_base()
@@ -510,3 +574,157 @@ func _wd() -> Node:
 func _tree_root() -> Node:
 	var ml := Engine.get_main_loop()
 	return (ml as SceneTree).root if ml is SceneTree else null
+
+
+# ---------------------------------------------------------------------------
+# 主菜单 / 物种选择（ART04）
+# ---------------------------------------------------------------------------
+
+## 建立菜单与"选物种"用的展示相机。两者都在**运行期**建立：
+## `main.tscn` 保持"只有根节点 + 本脚本"（T030 A15/A16 的断言不变）。
+func _build_menu() -> void:
+	menu = MainMenu.new()
+	menu.name = "MainMenu"
+	add_child(menu)
+	# 入树之后再 build：卡片预览要用 `World3D` 与 `look_at`
+	menu.build(_configs)
+	menu.species_committed.connect(_on_menu_species_committed)
+	menu.setting_changed.connect(_on_menu_setting_changed)
+	menu.quit_requested.connect(_on_menu_quit)
+	_build_menu_camera()
+
+
+func _build_menu_camera() -> void:
+	if level == null or _configs.is_empty():
+		return
+	var focus := _menu_focus_ground()
+	menu_camera = Camera3D.new()
+	menu_camera.name = "MenuCamera"
+	menu_camera.fov = MENU_CAM_FOV
+	menu_camera.near = 0.05
+	level.add_child(menu_camera)
+	menu_camera.global_position = focus + MENU_CAM_OFFSET
+	menu_camera.look_at(focus + MENU_CAM_LOOK, Vector3.UP)
+	menu_camera.h_offset = MENU_CAM_H_OFFSET
+	menu_camera.current = false
+	# 菜单补光：只在选物种/结算时点亮，出生后立刻关掉，**不改动关卡原有光照**
+	menu_fill = DirectionalLight3D.new()
+	menu_fill.name = "MenuFill"
+	menu_fill.light_energy = 0.55
+	menu_fill.light_color = Color(1.0, 0.97, 0.90)
+	menu_fill.shadow_enabled = false
+	menu_fill.rotation_degrees = Vector3(-14.0, 0.0, 0.0)
+	menu_fill.visible = false
+	menu_camera.add_child(menu_fill)
+
+
+## 展示点吸附到地面：向下打一条射线；打不到就用常数高度（关卡变化时的兜底）
+func _menu_focus_ground() -> Vector3:
+	var from := MENU_FOCUS + Vector3.UP * 2.0
+	var to := MENU_FOCUS - Vector3.UP * 4.0
+	var space := get_world_3d().direct_space_state if is_inside_tree() else null
+	if space != null:
+		var q := PhysicsRayQueryParameters3D.create(from, to)
+		q.collision_mask = 1        # world_static
+		var hit := space.intersect_ray(q)
+		if not hit.is_empty():
+			return hit.get("position", MENU_FOCUS)
+	return MENU_FOCUS
+
+
+## 展示模型：每个有 `visual_scene` 的物种一个，沿相机右方向并排，面朝相机。
+## 全部来自 `SpeciesConfig` —— 新增物种自动出现在展示里，本函数不用改。
+func _build_showcase() -> void:
+	_clear_showcase()
+	if level == null or menu_camera == null or _configs.is_empty():
+		return
+	var focus := _menu_focus_ground()
+	var right := menu_camera.global_transform.basis.x
+	right.y = 0.0
+	right = right.normalized() if right.length() > 0.001 else Vector3.RIGHT
+	var shown: Array[SpeciesConfig] = []
+	for cfg in _configs:
+		if cfg.visual_scene != null:
+			shown.append(cfg)
+	if shown.is_empty():
+		return
+	var camera_pos := menu_camera.global_position
+	# 小物种往相机方向挪一点（按体型差）：真按同一深度摆，鼠在菜单里只有十几个像素高
+	var h_max := 0.0
+	for cfg in shown:
+		h_max = maxf(h_max, cfg.capsule_height())
+	var to_camera := camera_pos - focus
+	to_camera.y = 0.0
+	to_camera = to_camera.normalized()
+	for i in shown.size():
+		var inst := shown[i].visual_scene.instantiate() as Node3D
+		if inst == null:
+			continue
+		inst.name = "Showcase_%s" % String(shown[i].species_id)
+		level.add_child(inst)
+		var t := float(i) - (float(shown.size()) - 1.0) * 0.5
+		var depth := (h_max - shown[i].capsule_height()) * 1.10
+		var pos := focus + right * (t * MENU_SHOWCASE_SPREAD) + to_camera * depth
+		pos.y = focus.y
+		inst.global_position = pos
+		# 模型本地面朝 −Z：`look_at` 让 −Z 指向相机 → 正好朝观众
+		inst.look_at(Vector3(camera_pos.x, pos.y, camera_pos.z), Vector3.UP)
+		_showcase_idle(inst)
+		_showcase.append(inst)
+
+
+func _clear_showcase() -> void:
+	for node in _showcase:
+		if node != null and is_instance_valid(node):
+			node.queue_free()
+	_showcase.clear()
+
+
+## 展示模型播 Idle（有动画才播；模型没有动画时完全不受影响）
+func _showcase_idle(root: Node) -> void:
+	var player := _find_anim_player(root)
+	if player == null:
+		return
+	for candidate in [&"Idle", &"idle", &"Walk", &"walk"]:
+		if player.has_animation(candidate):
+			var anim := player.get_animation(candidate)
+			if anim != null:
+				anim.loop_mode = Animation.LOOP_LINEAR
+			player.play(candidate)
+			return
+
+
+func _find_anim_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for child in node.get_children():
+		var found := _find_anim_player(child)
+		if found != null:
+			return found
+	return null
+
+
+## 设置项落到玩家身体上（灵敏度按倍数、FOV 直接覆盖物种默认值）
+func _apply_settings_to(body: AnimalBody) -> void:
+	if body == null or not is_instance_valid(body):
+		return
+	body.mouse_sensitivity = MainMenu.SENSITIVITY_BASE * sensitivity_scale
+	if fov_override > 0.0 and body.camera != null:
+		body.camera.fov = fov_override
+
+
+func _on_menu_species_committed(species_id: StringName) -> void:
+	select_species(species_id)
+
+
+func _on_menu_setting_changed(key: StringName, value: float) -> void:
+	if key == &"sensitivity":
+		sensitivity_scale = value
+	elif key == &"fov":
+		fov_override = value
+
+
+func _on_menu_quit() -> void:
+	if lifecycle != null and not lifecycle.is_alive():
+		print("ENTRY|quit|requested")
+		get_tree().quit()

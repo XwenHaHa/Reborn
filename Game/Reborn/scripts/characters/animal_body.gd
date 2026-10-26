@@ -448,6 +448,9 @@ const VISUAL_ANIM_WALK := &"Walk"
 const VISUAL_ANIM_RUN := &"Run"
 const VISUAL_ANIM_MOVE_EPS := 0.05          # 低于这个速度算"站着"
 const VISUAL_ANIM_SPRINT_RATIO := 1.15      # 超过 walk 速度的 1.15 倍就切 Run
+## 交叉淡入时长（秒）：站↔走/跑 用长一点，走↔跑 短一点（两者本身是连续步态）
+const VISUAL_ANIM_BLEND := 0.18
+const VISUAL_ANIM_BLEND_STEP := 0.10
 var visual_anim: AnimationPlayer = null
 var visual_anim_current := &""
 
@@ -493,7 +496,12 @@ func _update_visual_animation(speed: float) -> void:
 	if not visual_anim.has_animation(want):
 		return
 	if want != visual_anim_current:
-		visual_anim.play(want)
+		# ART04：状态切换做交叉淡入（`play()` 的第二个参数是自定义混合秒数）。
+		# 之前直接 `play()` → Idle↔Walk↔Run 会**硬切**，看起来"动作生硬"（配套要求 §3）。
+		var from_walk_like: bool = visual_anim_current in [VISUAL_ANIM_WALK, VISUAL_ANIM_RUN]
+		var to_walk_like: bool = want in [VISUAL_ANIM_WALK, VISUAL_ANIM_RUN]
+		var blend := VISUAL_ANIM_BLEND_STEP if (from_walk_like and to_walk_like) else VISUAL_ANIM_BLEND
+		visual_anim.play(want, blend)
 		visual_anim_current = want
 	var rate := 1.0
 	if want == VISUAL_ANIM_WALK:

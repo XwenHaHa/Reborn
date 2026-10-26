@@ -138,7 +138,21 @@ enum FoodType { MEAT, SEED }
 @export var visual_scene: PackedScene = null
 
 
+## 界面显示（ART04）：物种选择卡片与主菜单用的**文字**。留空时回退到 `species_id`，
+## 因此新增物种只需要在 `.tres` 里补三条文字，**不需要改 UI 代码**。
+@export_group("Display")
+## 显示名（中文，例如「猫」）
+@export var display_name: String = ""
+## 一行定位语（卡片第二行，例如「敏捷的捕食者」）
+@export var display_tagline: String = ""
+## 一行习性补充（卡片第三行，例如「擅长攀爬与伏击」）
+@export var display_note: String = ""
+
 ## Godot 的 `CapsuleShape3D.height` 是含两端半球的总高
+
+## 界面用标题：优先 `display_name`，否则回退 `species_id`（**UI 不写物种名**）
+func display_title() -> String:
+	return display_name if not display_name.is_empty() else String(species_id)
 func capsule_height() -> float:
 	return capsule_half_height * 2.0
 

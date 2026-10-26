@@ -22,6 +22,18 @@ const ACTION_NAMES := {
 	&"drink": "饮水",
 }
 
+## 四项指标条（ART04）：名字 → 颜色。顺序固定 = 界面顺序。
+## 颜色对齐概念展板（生命 红 / 饥饿 橙 / 水分 蓝 / 体力 绿）。
+const VITAL_ROWS := [
+	{"key": &"health", "name": "生命", "color": Color(0.851, 0.325, 0.310)},
+	{"key": &"hunger", "name": "饥饿", "color": Color(0.878, 0.651, 0.227)},
+	{"key": &"thirst", "name": "水分", "color": Color(0.239, 0.608, 0.878)},
+	{"key": &"stamina", "name": "体力", "color": Color(0.553, 0.761, 0.290)},
+]
+const BAR_WIDTH := 132.0
+## 只在「未绑定」时才需要显示的占位值
+const BAR_UNBOUND := -1.0
+
 ## 可选：场景里直接指向一个身体（留空则用 `bind_player()`）
 @export var player_path: NodePath = NodePath("")
 
@@ -29,6 +41,8 @@ var _player: AnimalBody = null
 var _vital_label: Label = null
 var _warning_label: Label = null
 var _interact_label: Label = null
+## `key` → {bar: ProgressBar, value: Label}（ART04 的条状显示）
+var _bars: Dictionary = {}
 
 
 func _ready() -> void:
@@ -36,6 +50,7 @@ func _ready() -> void:
 	_warning_label = get_node_or_null("Margin/VBox/WarningLabel") as Label
 	_interact_label = get_node_or_null("Margin/VBox/InteractLabel") as Label
 	_style_labels()
+	_build_vitals_bars()
 	if not player_path.is_empty():
 		var p := get_node_or_null(player_path)
 		if p is AnimalBody:
@@ -216,7 +231,7 @@ func _on_interaction_changed(_a: Variant = null, _b: Variant = null, _c: Variant
 func _refresh_vitals() -> void:
 	if _vital_label != null:
 		_vital_label.text = "\n".join(status_lines())
-
+	_refresh_bars()
 
 func _refresh_warning() -> void:
 	if _warning_label == null:
@@ -280,3 +295,122 @@ func _style_labels() -> void:
 		_warning_label.add_theme_color_override("font_color", Color(1.0, 0.62, 0.30))
 	if _interact_label != null:
 		_interact_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.55))
+
+
+# ---------------------------------------------------------------------------
+# 四项指标条（ART04）
+# ---------------------------------------------------------------------------
+
+## 在 `Margin/VBox` 里、四行文字**之前**插入一排指标条。
+## 文字标签保留（`status_lines()` 与断言继续可用），但视觉上由条承担，避免同一信息重复两遍。
+func _build_vitals_bars() -> void:
+	if _vital_label == null:
+		return
+	var holder := _vital_label.get_parent()
+	if holder == null:
+		return
+	var box := VBoxContainer.new()
+	box.name = "VitalsBars"
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_theme_constant_override("separation", 3)
+	holder.add_child(box)
+	holder.move_child(box, 0)
+
+	for row in VITAL_ROWS:
+		var key: StringName = row["key"]
+		var line := HBoxContainer.new()
+		line.name = "Row_%s" % String(key)
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		line.add_theme_constant_override("separation", 6)
+		box.add_child(line)
+
+		var name_label := Label.new()
+		name_label.text = String(row["name"])
+		name_label.custom_minimum_size = Vector2(30.0, 0.0)
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name_label.add_theme_font_size_override("font_size", 12)
+		name_label.add_theme_color_override("font_color", Color(0.878, 0.898, 0.867))
+		name_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0))
+		name_label.add_theme_constant_override("outline_size", 3)
+		line.add_child(name_label)
+
+		var bar := ProgressBar.new()
+		bar.name = "Bar_%s" % String(key)
+		bar.custom_minimum_size = Vector2(BAR_WIDTH, 9.0)
+		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		bar.show_percentage = false
+		bar.min_value = 0.0
+		bar.max_value = 100.0
+		bar.value = 0.0
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bar.add_theme_stylebox_override("background", _bar_style(Color(0.0, 0.0, 0.0, 0.55)))
+		bar.add_theme_stylebox_override("fill", _bar_style(row["color"]))
+		line.add_child(bar)
+
+		var value_label := Label.new()
+		value_label.name = "Value_%s" % String(key)
+		value_label.text = "—"
+		value_label.custom_minimum_size = Vector2(46.0, 0.0)
+		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		value_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		value_label.add_theme_font_size_override("font_size", 12)
+		value_label.add_theme_color_override("font_color", Color(0.906, 0.918, 0.882))
+		value_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0))
+		value_label.add_theme_constant_override("outline_size", 3)
+		line.add_child(value_label)
+
+		_bars[key] = {"bar": bar, "value": value_label}
+
+	# 原来的四行纯文字退到幕后（内容仍随 `status_lines()` 更新，断言与 `hud_text()` 不受影响）
+	_vital_label.visible = false
+
+
+func _bar_style(color: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color
+	sb.corner_radius_top_left = 2
+	sb.corner_radius_top_right = 2
+	sb.corner_radius_bottom_left = 2
+	sb.corner_radius_bottom_right = 2
+	sb.content_margin_left = 0.0
+	sb.content_margin_right = 0.0
+	sb.content_margin_top = 0.0
+	sb.content_margin_bottom = 0.0
+	return sb
+
+
+## 四条指标的当前值/上限（`BAR_UNBOUND` = 未绑定，显示占位符）
+func _vital_pairs() -> Dictionary:
+	var out := {}
+	if not is_bound() or _player.survival == null:
+		return out
+	var st: SurvivalState = _player.survival.state
+	var cfg: SpeciesConfig = _player.survival.config
+	out[&"health"] = [st.health, cfg.max_health]
+	out[&"hunger"] = [st.hunger, cfg.max_hunger]
+	out[&"thirst"] = [st.thirst, cfg.max_thirst]
+	out[&"stamina"] = [st.stamina, cfg.max_stamina]
+	return out
+
+
+func _refresh_bars() -> void:
+	if _bars.is_empty():
+		return
+	var pairs := _vital_pairs()
+	for row in VITAL_ROWS:
+		var key: StringName = row["key"]
+		var entry: Dictionary = _bars.get(key, {})
+		var bar := entry.get("bar") as ProgressBar
+		var value_label := entry.get("value") as Label
+		if bar == null or value_label == null:
+			continue
+		if not pairs.has(key):
+			bar.value = 0.0
+			value_label.text = "—"
+			continue
+		var pair: Array = pairs[key]
+		var cur := float(pair[0])
+		var max_v := maxf(0.0001, float(pair[1]))
+		bar.max_value = max_v
+		bar.value = clampf(cur, 0.0, max_v)
+		value_label.text = "%.0f" % cur

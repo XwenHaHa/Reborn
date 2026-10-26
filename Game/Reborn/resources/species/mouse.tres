@@ -62,3 +62,7 @@ attack_facing_half_angle_deg = 0.0
 ; 行为（T019）：鼠有觅食+警戒状态机；猫留空（T023 再做）
 ai_script = ExtResource("2_ai")
 visual_scene = ExtResource("3_vis")
+; 界面显示（ART04）：物种选择卡片文字。改文案只改这里，UI 代码不写物种名
+display_name = "鼠"
+display_tagline = "灵活的生存者"
+display_note = "善于躲藏与探索"
