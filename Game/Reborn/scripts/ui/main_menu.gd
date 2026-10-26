@@ -70,6 +70,10 @@ var _settings_panel: PanelContainer = null
 var _cards: Dictionary = {}
 ## 预览用的慢速自转速度（弧度/秒）：让卡片看起来是活的，但不足以分散注意力
 var _spin_speed := 0.35
+## 已存盘的设置（`GameSettings` 读出来的）；只用于回填滑块初值
+var _initial_settings: Dictionary = {}
+## 设置滑块的当前值（`settings_values()` 读它，证据/断言用）
+var _sliders: Dictionary = {}
 
 
 ## 灵敏度基准（= `AnimalBody.mouse_sensitivity` 的默认值）；设置里的滑块是**倍数**
@@ -88,9 +92,11 @@ func _ready() -> void:
 # 对外
 # ---------------------------------------------------------------------------
 
-## 建立界面（必须在**入树之后**调用：卡片预览要用 `look_at` 与 `World3D`）
-func build(configs: Array[SpeciesConfig]) -> void:
+## 建立界面（必须在**入树之后**调用：卡片预览要用 `look_at` 与 `World3D`）。
+## `initial_settings` 来自 `GameSettings`（已存盘的灵敏度/FOV），只用来回填滑块初值。
+func build(configs: Array[SpeciesConfig], initial_settings: Dictionary = {}) -> void:
 	_configs = configs.duplicate()
+	_initial_settings = initial_settings.duplicate()
 	_clear()
 
 	_build_scrim()
@@ -198,6 +204,24 @@ func open_settings(on: bool) -> void:
 	if _settings_panel == null:
 		return
 	_settings_panel.visible = on and visible
+
+
+## 设置滑块的当前值（键与 `GameSettings` 一致；证据/断言用）
+func settings_values() -> Dictionary:
+	var out := {}
+	for key in _sliders.keys():
+		out[key] = float((_sliders[key] as HSlider).value)
+	return out
+
+
+## 程序化改设置（设置面板/测试共用一条路径：改滑块 → 发 `setting_changed`）
+func set_setting(key: StringName, value: float) -> void:
+	if not _sliders.has(key):
+		return
+	var slider := _sliders[key] as HSlider
+	if slider != null:
+		slider.value = value
+
 # ---------------------------------------------------------------------------
 # 输入
 # ---------------------------------------------------------------------------
@@ -660,8 +684,14 @@ func _build_settings() -> void:
 	column.add_theme_constant_override("separation", 10)
 	margin.add_child(column)
 	column.add_child(_label("设置", 20, COLOR_ACCENT))
-	column.add_child(_slider_row("鼠标灵敏度", &"sensitivity", 0.4, 3.0, SETTINGS_SENSITIVITY))
-	column.add_child(_slider_row("视野 (FOV)", &"fov", 60.0, 110.0, SETTINGS_FOV))
+	# 初值来自 `GameSettings`（存盘值）；FOV 存的是 0 = 不覆盖 → 滑块从物种默认 90 起步
+	var sens := float(_initial_settings.get(
+		GameSettings.KEY_SENSITIVITY, SETTINGS_SENSITIVITY))
+	var fov := float(_initial_settings.get(GameSettings.KEY_FOV, 0.0))
+	if fov <= 0.0:
+		fov = SETTINGS_FOV
+	column.add_child(_slider_row("鼠标灵敏度", &"sensitivity", 0.4, 3.0, sens))
+	column.add_child(_slider_row("视野 (FOV)", &"fov", 60.0, 110.0, fov))
 
 	var close := _button("关闭", false)
 	close.pressed.connect(func() -> void: _settings_panel.visible = false)
@@ -697,6 +727,7 @@ func _slider_row(label_text: String, key: StringName, min_v: float, max_v: float
 		value_label.text = _format_setting(key, v)
 		setting_changed.emit(key, v)
 	)
+	_sliders[key] = slider
 	row.add_child(slider)
 	return row
 

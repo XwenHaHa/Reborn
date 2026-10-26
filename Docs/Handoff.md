@@ -70,6 +70,8 @@
 
 | ART04 | **done（2026-10-28，系统时钟；未 approved）** | `Docs/Tasks/ART04.md`、`Docs/Evidence/ART04.md`、`scripts/ui/main_menu.gd`（新）、`scripts/core/main_entry.gd`、`scripts/ui/hud.gd`、`scripts/characters/animal_body.gd`、`scripts/data/species_config.gd`、`resources/species/{cat,mouse}.tres`、`tests/tool_capture_art04.gd`、`Art/Probes/art04_*.png` | **开场/物种选择从"一行文字"变正式界面**（`配套要求.md` §2）：菜单相机 + 猫鼠展示模型 + 菜单补光 + 标题/按钮 + 数据驱动物种卡（每物种 `SubViewport` 实时 3D 缩略图）；HUD 换四条指标条（原文字标签保留 → T018 不变）；Idle↔Walk↔Run 交叉淡入；**31 套 / 3,525 条全绿、0 条 SCRIPT ERROR**；`tool_t028_walkthrough` 的 W4 失败**改前基线同样失败**（既有缺陷） |
 
+| ART05 | **done（2026-10-26，系统时钟；未 approved）** | `Docs/Tasks/ART05.md`、`Docs/Evidence/ART05.md`、`scripts/core/game_settings.gd`（新）、`scripts/data/species_config.gd`、`scripts/characters/animal_body.gd`、`scripts/core/main_entry.gd`、`scripts/ui/main_menu.gd`、`resources/species/{cat,mouse}.tres`、`tests/run_art05_{settings,input}.gd`、`tests/tool_capture_tp.gd`、`Art/Probes/art05_tp_*.png` | **第三人称成为正式视角**（数据驱动：`camera_mode` + `third_person_distance/aim_height/down_tilt`；撞墙射线收臂 1.30→0.289，不穿墙；第一人称契约保留并让 T009/T010/T013 显式钉住它）+ **`eye_position()` 与相机解耦**（修 T016 夹具缺陷，118/118 恢复）+ **设置持久化**（`user://settings.cfg`，出生后 FOV/灵敏度真的生效）+ **输入链路 20/20**（真实 InputMap/GUI 路径；**必须非 headless**，无头根视口 64×64 无 hover）+ **打包复验**（两预设 exit 0，包内 6 套全绿）。全量 34 套 3,566 条 0 失败。**体积警告**：`Reborn.pck` 289,832 → 30,044,160 B（`export_filter=all_resources` 把 `.glb`/贴图源文件也打进去了，非本轮引入，需负责人定预设策略） |
+
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
 
 
@@ -277,6 +279,28 @@ $proj = 'E:\Reborn\Game\Reborn'
   （鼠进洞后仍被咬死）→ 对应 T029 §6 ①「鼠洞不是安全区」，属待决策项，**不要**当成 ART04 的回归。
 
 
+## 第三人称 / 设置 / 输入验证 / 打包（ART05，2026-10-26）
+
+- **第三人称是数据**：`SpeciesConfig.camera_mode`（`CAMERA_FIRST_PERSON=0` / `CAMERA_THIRD_PERSON=1`）+
+  `third_person_distance / third_person_aim_height / third_person_down_tilt_deg / third_person_pitch_{min,max}_deg`。
+  `AnimalBody._update_third_person_camera(with_collision)` 每物理帧刷新，并沿 `world_static` 射一条臂长射线收臂
+  （下限 `MIN_THIRD_PERSON_ARM = 0.28`、留白 `THIRD_PERSON_WALL_MARGIN = 0.12`）。**改视角不要写物种名分支**。
+- **`eye_position()` 已与相机解耦**：= `global_transform * (0, camera_offset_z [− crouch_drop], 0)`。
+  第一人称时恰好等于相机位置（T016/T017 旧口径不变）；第三人称时相机在身后，
+  "用相机位置摆测试夹具"的老写法会错位（`run_t016` 的 `_eye()` 就是这么发现的）。
+- **第一人称契约仍要能过**：`run_t009` / `run_t010` / `run_t013` ×2 会在加载配置后
+  `cfg.camera_mode = SpeciesConfig.CAMERA_FIRST_PERSON` 再跑；`run_t008` 按 `camera_mode` 分支断言。
+- **设置真源**：`GameSettings`（`ConfigFile` → `user://settings.cfg`；键 `sensitivity` 倍数（基准 0.0025）/ `fov`（0 = 不覆盖物种值））。
+  `MainEntry.settings_path` 可指向临时文件；`MainEntry.current_settings()` 是回填与写盘的唯一来源。
+- **输入验证必须给窗口**：`tests/run_art05_input.gd` **不能加 `--headless`**。
+  无头根视口只有 64×64 且没有鼠标进入事件，`BaseButton` 只在 `is_hovered()` 时发 `pressed` → 按钮点击必挂；
+  卡片用 `gui_input`，两种模式都能命中。键盘用 `Input.parse_input_event` 时**要同时给 `keycode` 与 `physical_keycode`**
+  （内置动作按 keycode 匹配、项目自定义动作按 physical 匹配）。
+- **打包体积（未解决）**：`export_filter="all_resources"` 会把 `assets/` 里的 `.glb`/贴图**源文件**一起打进 `.pck`，
+  所以 10-20 之后的构建从 289,832 B 变成 **30,044,160 B**。瘦身要改预设（`resources` 模式或排除 `*.glb`），**需负责人拍板**。
+- 取证：`tests/tool_capture_tp.gd -- tp`（**非 headless**）→ `user://tp_*.png` → `Art/Probes/art05_tp_*.png`。
+
+
 ## 美术流水线（ART01 已打通，2026-10-21）
 
 - **Blender 侧**：`Tools/Blender/art01_bush_001.py`（确定性 seed、程序化建模、无外部贴图）→
@@ -395,10 +419,10 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 | 事项 | 说明 |
 |---|---|
-| **ART04 的两个待决** | ① **玩家自己的模型顶在镜头前**（第一人称）：改法 A = 第一人称隐藏自己模型（`SpeciesConfig` 加 `hide_visual_in_first_person`，会影响 `tool_capture_art02/art08` 的既有取证图）；改法 B = 做第三人称相机（要动 T009 的相机断言，属独立任务）。② 菜单设置项（灵敏度/FOV）**不持久化**，等 T037 存档一起做 |
+| **ART04 的两个待决（已由 ART05 落实）** | ① 玩家自己的模型顶在镜头前 → **已做第三人称**（`camera_mode`，臂长撞墙收臂）；② 设置不持久化 → **已做** `GameSettings`（`user://settings.cfg`）。仍未做：第三人称镜头平滑、撞墙实拍帧、其它设置项 |
 | **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T010 → `8140d6f`，T011 → `1f71f46`，T012 → `2968909`，T013 → `89ac039`，T014 → `b6351d9`，T015 → `79f2bbd`，T016 → `692fe9a`，T017 → `ab6225e`，T018 → `a2070bc`，T019 → `5bfb1c7`，T020 → `38be427`，T021 → `c36fff2`，T022 → `5b922be`，T023 → `899444c`，T024 → `cd66a9f`，T025 → `80b7eba`，T026 → `2769811`，T027 → `3ae16b9`，T028 → `d8374b3`，**T029 → `36d5944`**）；当前 `main` 比 `origin/main` **ahead 以 `git rev-list --count origin/main..main` 为准（当时累计 50 个提交未推送，含 T029 / T030）；**已于 2026-10-27 推送成功：`origin/main` = `8da9eeb`，ahead=0 / behind=0，LFS 54/54 对象（10 MB）已上传** |
 | **Git 推送 / 发布** | **推送于 2026-10-27 已打通并执行**（`origin/main` = `8da9eeb`）。原因与修法：① 直连 github.com 超时 → 需代理 `127.0.0.1:7897`；② 远端 LFS locking API 经该代理不可达 → 必须关掉锁校验。两项都已写在**仓库本地配置**（不动全局），见"关键环境事实"。**对外发布（新构建给别人）仍需负责人确认** |
-| 是否发布新构建 | `Builds/P0-Win64/` 已按 T029 改动**重新导出两个预设并再复验**：发布包 `Reborn.pck` **263,436 B**（+384 = 两个生产脚本改动）、自检包 `RebornSelfTest.pck` **921,704 B**（包内 T002 18/18、T019 72/72、T020 164/164、T023 178/178、T024 136/136、T025 174/174、T026 96/96、T027 96/96、T028 走查 4/4、**T029 39/39**）；**发布动作本身仍需负责人确认**（发布节奏未定） |
+| 是否发布新构建 | `Builds/P0-Win64/` 已按 **ART05** 重新导出两个预设（`export-debug`，exit 0）：`Reborn.pck` **30,044,160 B** / `RebornSelfTest.pck` **30,834,120 B**（体积原因见上「打包体积」；包内 t002 18/18、t008 107/107、t018 73/73、t030 111/111、art02 72/72、art05_settings 20/20）。**发布动作本身仍需负责人确认**，且**建议先定体积策略再对外发** |
 | 真实按键输入验证方式 | 需受审查的输入自动化工具（**需授权**），或真人操作录像。**不要盲发按键** |
 | 相机轴语义 D1 / 蹲姿高度 D2 | 见上方"关键事实"：D1 已按竖直偏移实现并断言锁定；D2 需并入 `Parameters.md` 正式起测值 |
 | **T020 感知新增的 4 个默认值** | `footstep_interval_base` 0.5 s、`flee_timeout` 3.0 s、`reach_tolerance` 0.5 m、`hide_arrive_radius` 0.30 m —— `Parameters.md` 原本没有，需负责人并入正式起测值（`Docs/Evidence/T020.md` §8） |

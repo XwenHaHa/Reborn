@@ -69,6 +69,9 @@ func _initialize() -> void:
 	])
 	_cat = load(CAT) as SpeciesConfig
 	_mouse = load(MOUSE) as SpeciesConfig
+	# ART05：本套断言比较 `camera.position.y == camera_offset_z`（第一人称口径）→ 钉住第一人称
+	_cat.camera_mode = SpeciesConfig.CAMERA_FIRST_PERSON
+	_mouse.camera_mode = SpeciesConfig.CAMERA_FIRST_PERSON
 
 	await _phase_flat_gears()
 	await _phase_steps()

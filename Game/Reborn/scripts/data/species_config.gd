@@ -37,6 +37,25 @@ enum FoodType { MEAT, SEED }
 ## 字段名沿用契约（`TechnicalDesign.md` §3），只改轴向语义。见 `Docs/Tasks/T009.md` §4.1。
 @export var camera_offset_z: float = 0.0
 @export var fov: float = 90.0
+## 相机模式（第三人称）：物种自己选视角，**不写物种名分支**。
+## - `CAMERA_FIRST_PERSON`：T009 契约（相机在胶囊内、`camera_offset_z` 是竖直眼高），行为一字未改；
+## - `CAMERA_THIRD_PERSON`：肩后臂相机（`third_person_distance` 沿本地 +Z，撞墙时射线缩短）。
+## 为什么两套都留着：第一人称是已验收的物理/通道基线（T009/T010/T013 用它断言"相机不出胶囊"），
+## 而代言生物的游戏体验需要看见自己的身体与步态。
+const CAMERA_FIRST_PERSON := 0
+const CAMERA_THIRD_PERSON := 1
+
+@export_group("Camera Mode")
+@export var camera_mode: int = CAMERA_THIRD_PERSON
+## 第三人称臂长（米，从视线枢轴沿本地 +Z 向后）
+@export var third_person_distance: float = 1.50
+## 第三人称视线枢轴相对身体中心的竖直偏移（米）——一般取接近眼高的值
+@export var third_person_aim_height: float = 0.16
+## 第三人称固定下俯角（度）：相机略高于动物看下去，避免整块背影占满屏幕
+@export var third_person_down_tilt_deg: float = 12.0
+## 第三人称俯仰限制（度）：下限 = 往下看最多，上限 = 往上看最多
+@export var third_person_pitch_min_deg: float = -35.0
+@export var third_person_pitch_max_deg: float = 55.0
 
 @export_group("Perception")
 ## 视距（米）
@@ -185,6 +204,11 @@ func pounce_speed() -> float:
 ## 只检查"必须成立"的量，不做平衡判断。
 func validate_config() -> PackedStringArray:
 	var problems := PackedStringArray()
+	# 相机模式（第三人称）：模式取值必须合法；第三人称还要有臂长，否则相机贴在身上
+	if camera_mode != CAMERA_FIRST_PERSON and camera_mode != CAMERA_THIRD_PERSON:
+		problems.append("camera_mode 只能是 CAMERA_FIRST_PERSON / CAMERA_THIRD_PERSON")
+	if camera_mode == CAMERA_THIRD_PERSON and third_person_distance <= 0.0:
+		problems.append("第三人称时 third_person_distance 必须 > 0")
 	if species_id == &"":
 		problems.append("species_id 为空")
 	if capsule_radius <= 0.0 or not is_finite(capsule_radius):

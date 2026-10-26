@@ -50,6 +50,9 @@ func _initialize() -> void:
 
 	_mouse = load(MOUSE) as SpeciesConfig
 	_cat = load(CAT) as SpeciesConfig
+	# ART05：本套断言测第一人称的窄缝/低顶相机几何 → 钉住第一人称（正式配置已切成第三人称）
+	_mouse.camera_mode = SpeciesConfig.CAMERA_FIRST_PERSON
+	_cat.camera_mode = SpeciesConfig.CAMERA_FIRST_PERSON
 	var packed: PackedScene = load(FIXTURES)
 	if _mouse == null or _cat == null or packed == null:
 		_assert("fixtures_and_configs_load", "all", "mouse=%s cat=%s fixtures=%s" % [

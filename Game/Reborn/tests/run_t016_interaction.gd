@@ -640,13 +640,12 @@ func _free_world() -> void:
 	_body = null
 
 
+## 交互判定原点 = `AnimalBody.eye_position()`（身体中心 + 眼高，与相机模式无关）。
+## 旧写法读相机位置：第一人称下两者等价，第三人称下会差一个臂长 → 夹具会摆错位置（ART05 修）。
 func _eye() -> Vector3:
 	if _body == null:
 		return Vector3.ZERO
-	var cam = _body.get("camera")
-	if cam != null and cam is Camera3D:
-		return (cam as Camera3D).global_position
-	return _body.global_position
+	return _body.eye_position()
 
 
 func _add_target(id: String, dist: float, opts: Dictionary = {}) -> Interactable:

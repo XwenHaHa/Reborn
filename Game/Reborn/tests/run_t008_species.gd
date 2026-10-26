@@ -194,13 +194,21 @@ func _check_body_applies(key: String, cfg: SpeciesConfig) -> void:
 	_assert("body_%s_is_character_body" % key, "CharacterBody3D", body.get_class(), body is CharacterBody3D)
 	_assert_near("body_%s_capsule_radius" % key, cfg.capsule_radius, float(state["capsule_radius"]), EPS)
 	_assert_near("body_%s_capsule_height" % key, cfg.capsule_height(), float(state["capsule_height"]), EPS)
-	_assert_near("body_%s_camera_offset_z" % key, cfg.camera_offset_z, float(state["camera_offset_z"]), EPS)
+	# 相机（ART05）：第一人称断言"竖直眼高、无水平分量"；第三人称断言"相机在身后、臂长 = 配置值"
+	var cam_local: Vector3 = state["camera_local_position"]
+	if cfg.camera_mode == SpeciesConfig.CAMERA_THIRD_PERSON:
+		var arm := cam_local - Vector3(0.0, cfg.third_person_aim_height, 0.0)
+		_assert("body_%s_camera_tp_behind" % key, "z > 0（相机在身后）", "z=%.4f" % arm.z, arm.z > 0.0)
+		_assert_near("body_%s_camera_tp_arm" % key, cfg.third_person_distance, arm.length(), 0.05)
+	else:
+		_assert_near("body_%s_camera_offset_z" % key, cfg.camera_offset_z, float(state["camera_offset_z"]), EPS)
+		# 相机偏移的轴向（T009 决策 D1）：必须是**竖直**偏移，不是 +Z；且没有水平分量
+		_assert("body_%s_camera_no_horizontal_offset" % key, "|x|,|z| < 0.001",
+			"x=%.4f z=%.4f" % [cam_local.x, cam_local.z],
+			absf(cam_local.x) < 0.001 and absf(cam_local.z) < 0.001)
 	# 相机偏移的轴向（T009 决策 D1）：必须是**竖直**偏移，不是 +Z；且没有水平分量
 	_assert("body_%s_camera_offset_axis" % key, "y (vertical)", str(state["camera_offset_axis"]),
 		str(state["camera_offset_axis"]) == "y")
-	var cam_local: Vector3 = state["camera_local_position"]
-	_assert("body_%s_camera_no_horizontal_offset" % key, "|x|,|z| < 0.001",
-		"x=%.4f z=%.4f" % [cam_local.x, cam_local.z], absf(cam_local.x) < 0.001 and absf(cam_local.z) < 0.001)
 	_assert_near("body_%s_fov" % key, cfg.fov, float(state["fov"]), EPS)
 
 	# 碰撞层：animal(2) 检测 world_static(1)（不新增未验证层）
@@ -208,6 +216,27 @@ func _check_body_applies(key: String, cfg: SpeciesConfig) -> void:
 	_assert("body_%s_collision_mask" % key, "1 (world_static)", str(body.collision_mask), body.collision_mask == AnimalBody.LAYER_WORLD_STATIC)
 
 	# 台阶上限来自配置
+	# ART05：第三人称撞墙收臂（身后 0.5 m 放一堵墙 → 臂长必须缩短，且不小于下限）
+	if cfg.camera_mode == SpeciesConfig.CAMERA_THIRD_PERSON:
+		var wall := StaticBody3D.new()
+		wall.name = "T008BackWall"
+		wall.collision_layer = 1
+		var cs := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(2.0, 2.0, 0.2)
+		cs.shape = box
+		wall.add_child(cs)
+		world.add_child(wall)
+		wall.global_position = body.global_position + Vector3(0.0, cfg.capsule_half_height, 0.5)
+		await process_frame
+		body._update_third_person_camera(true)
+		_assert("body_%s_camera_tp_wall_shrinks" % key, "< 配置臂长 %.2f" % cfg.third_person_distance,
+			"arm=%.3f" % body.third_person_arm,
+			body.third_person_arm < cfg.third_person_distance - 0.05)
+		_assert("body_%s_camera_tp_wall_floor" % key, ">= 0.28（不贴脸）",
+			"arm=%.3f" % body.third_person_arm, body.third_person_arm >= 0.28 - EPS)
+		wall.queue_free()
+		await process_frame
 	var has_climb: bool = body.climb != null
 	_assert("body_%s_has_step_climb" % key, "StepClimb", "null" if not has_climb else "StepClimb", has_climb)
 	if has_climb:

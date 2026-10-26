@@ -43,6 +43,9 @@ const HEADROOM_SHRINK := 0.005
 const HEADROOM_MARGIN := 0.005
 ## 俯仰上限（弧度）
 const MAX_PITCH := 1.4
+## 第三人称相机（ART05）：撞墙时臂长至少留这么长，且停在命中点前这么多米
+const MIN_THIRD_PERSON_ARM := 0.28
+const THIRD_PERSON_WALL_MARGIN := 0.12
 
 ## 脚步间隔的钳制范围（秒）：避免极端速度把节奏推到不合理值
 const FOOTSTEP_INTERVAL_MIN := 0.1
@@ -99,6 +102,8 @@ var visual_root: Node3D = null
 @onready var camera: Camera3D = $Camera3D
 
 var _pitch: float = 0.0
+## 第三人称当前实际臂长（米；诊断/断言用：撞墙时会小于 `third_person_distance`）
+var third_person_arm := 0.0
 ## 生存状态推进器（T014）。由 `apply_config()` 建立
 var survival: SurvivalController = null
 ## 交互检测与动作接口（T016）。由 `apply_config()` 建立
@@ -208,8 +213,14 @@ func apply_look(yaw_delta: float, pitch_delta: float) -> void:
 	# 扑击期间锁定朝向（T021 D8）：忽略偏航，但俯仰仍生效（观察用）
 	if not is_pouncing():
 		rotate_y(yaw_delta)
-	_pitch = clampf(_pitch + pitch_delta, -MAX_PITCH, MAX_PITCH)
-	if camera != null:
+	var limit_lo := -MAX_PITCH
+	var limit_hi := MAX_PITCH
+	if is_third_person():
+		# 第三人称的俯仰范围来自配置：往下看会被地面/身体挡住，往上看会被天空浪费
+		limit_lo = deg_to_rad(species_config.third_person_pitch_min_deg)
+		limit_hi = deg_to_rad(species_config.third_person_pitch_max_deg)
+	_pitch = clampf(_pitch + pitch_delta, limit_lo, limit_hi)
+	if camera != null and not is_third_person():
 		camera.rotation.x = _pitch
 
 
@@ -289,6 +300,9 @@ func _physics_process(delta: float) -> void:
 		climb.step_or_slide(motion, delta)
 	else:
 		move_and_slide()
+	# 第三人称相机每物理帧跟着身体与俯仰刷新，并做撞墙收臂（俯仰在 `apply_look` 里变，位置在移动后才准）
+	if is_third_person():
+		_update_third_person_camera(true)
 
 
 ## 当前档位速度（米/秒）。蹲姿优先于奔跑（与 T002 灰盒的选择顺序一致）
@@ -332,13 +346,21 @@ func _update_interact_input() -> void:
 	_interact_was_down = want_interact
 
 
-## 交互判定原点（"眼睛"）：相机全局位置；没有相机时退回"胶囊中心 + 半高"
+## 交互判定原点（"眼睛"）= 身体中心 + `camera_offset_z`（蹲下时按 `crouch_drop()` 降低）。
+## 与相机模式**无关**：第一人称时它恰好就是相机位置（T016/T017 的口径未变）；
+## 第三人称时相机在身后 1.3 m，若拿相机判交互会把身后的东西也测进来 —— 所以用眼高，不用相机。
 func eye_position() -> Vector3:
-	if camera != null:
-		return camera.global_position
 	var half := species_config.capsule_half_height if species_config != null else 0.0
-	return global_position + Vector3(0.0, half, 0.0)
+	var offset := species_config.camera_offset_z if species_config != null else half
+	if is_crouching and species_config != null:
+		offset -= species_config.crouch_drop()
+	return global_transform * Vector3(0.0, offset, 0.0)
 
+
+## 当前是否第三人称（配置驱动，不写物种名）
+func is_third_person() -> bool:
+	return species_config != null \
+		and species_config.camera_mode == SpeciesConfig.CAMERA_THIRD_PERSON
 
 ## 蹲/站切换：只有"想蹲"或"想站且头顶够"才真的切换
 func _apply_stance() -> void:
@@ -511,13 +533,53 @@ func _update_visual_animation(speed: float) -> void:
 	visual_anim.speed_scale = rate
 
 
-## 相机：竖直偏移 = 配置值；蹲下时按 crouch_drop() 降低视线（视线跟着身体变低）
+## 相机（ART05）：按 `camera_mode` 分派。
+## - 第一人称：竖直偏移 = 配置值；蹲下时按 crouch_drop() 降低视线（T009 契约，行为未变）；
+## - 第三人称：肩后臂，见 `_update_third_person_camera()`。
 func _update_camera() -> void:
 	if camera == null:
+		return
+	if is_third_person():
+		camera.fov = species_config.fov
+		_update_third_person_camera(false)
 		return
 	var drop: float = species_config.crouch_drop() if is_crouching else 0.0
 	camera.position = Vector3(0.0, species_config.camera_offset_z - drop, 0.0)
 	camera.fov = species_config.fov
+
+
+## 第三人称相机（每物理帧刷新：俯仰与碰撞都在变）
+## 枢轴 = 身体中心 + `third_person_aim_height`（蹲下一起降低）；
+## 相机 = 枢轴 + 臂长 × 方向（本地 +Z 向后，绕本地 X 轴按俯仰与固定下俯角旋转）。
+## 撞到 `world_static` 时臂长缩到命中点前 `THIRD_PERSON_WALL_MARGIN`，避免穿墙看背面。
+func _update_third_person_camera(with_collision: bool) -> void:
+	if camera == null or species_config == null:
+		return
+	var drop: float = species_config.crouch_drop() if is_crouching else 0.0
+	var pivot_local := Vector3(0.0, species_config.third_person_aim_height - drop, 0.0)
+	var pitch := clampf(
+		_pitch - deg_to_rad(species_config.third_person_down_tilt_deg),
+		deg_to_rad(-70.0), deg_to_rad(45.0)
+	)
+	# 从枢轴指向相机（本地空间；相机在身后 = +Z）
+	var direction := Vector3(0.0, -sin(pitch), cos(pitch))
+	var want: float = species_config.third_person_distance * (0.72 if is_crouching else 1.0)
+	var allowed := want
+	if with_collision and is_inside_tree():
+		var space := get_world_3d().direct_space_state
+		if space != null:
+			var from: Vector3 = global_transform * pivot_local
+			var to: Vector3 = global_transform * (pivot_local + direction * want)
+			var q := PhysicsRayQueryParameters3D.create(from, to)
+			q.collision_mask = LAYER_WORLD_STATIC
+			q.exclude = [get_rid()]
+			var hit := space.intersect_ray(q)
+			if not hit.is_empty():
+				var hit_pos: Vector3 = hit.get("position", to)
+				allowed = maxf(MIN_THIRD_PERSON_ARM, from.distance_to(hit_pos) - THIRD_PERSON_WALL_MARGIN)
+	third_person_arm = allowed
+	camera.position = pivot_local + direction * allowed
+	camera.rotation = Vector3(pitch, 0.0, 0.0)
 
 
 ## 头顶是否有站起来的空间（真实物理查询，不是改 scale）。

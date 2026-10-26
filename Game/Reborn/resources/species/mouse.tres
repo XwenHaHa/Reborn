@@ -66,3 +66,11 @@ visual_scene = ExtResource("3_vis")
 display_name = "鼠"
 display_tagline = "灵活的生存者"
 display_note = "善于躲藏与探索"
+
+; 相机（ART05 第三人称）：鼠很小，臂长 0.55 m、枢轴高 0.08 m，否则身体只有几十像素
+camera_mode = 1
+third_person_distance = 0.55
+third_person_aim_height = 0.08
+third_person_down_tilt_deg = 11.0
+third_person_pitch_min_deg = -30.0
+third_person_pitch_max_deg = 55.0

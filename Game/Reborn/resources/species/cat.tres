@@ -76,3 +76,11 @@ ai_script = ExtResource("2_ai")
 display_name = "猫"
 display_tagline = "敏捷的捕食者"
 display_note = "擅长攀爬与伏击"
+
+; 相机（ART05 第三人称）：肩后臂 1.30 m、枢轴比身体中心高 0.18 m、固定下俯 12°
+camera_mode = 1
+third_person_distance = 1.30
+third_person_aim_height = 0.18
+third_person_down_tilt_deg = 12.0
+third_person_pitch_min_deg = -35.0
+third_person_pitch_max_deg = 55.0

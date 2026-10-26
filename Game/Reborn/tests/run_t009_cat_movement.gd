@@ -52,6 +52,9 @@ func _initialize() -> void:
 	print("TEST|physics_ticks_per_second=%d" % Engine.physics_ticks_per_second)
 
 	_cat = load(CAT) as SpeciesConfig
+	# ART05：本套断言测的是**第一人称**相机契约（相机在胶囊内、眼高 = `camera_offset_z`）。
+	# 正式配置已切成第三人称 → 这里显式钉住第一人称，断言口径不改。
+	_cat.camera_mode = SpeciesConfig.CAMERA_FIRST_PERSON
 	var packed: PackedScene = load(FIXTURES)
 	if _cat == null or packed == null:
 		_assert("fixtures_and_config_load", "both", "cat=%s fixtures=%s" % [_cat != null, packed != null], false)

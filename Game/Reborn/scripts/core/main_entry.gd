@@ -54,10 +54,12 @@ var menu_camera: Camera3D = null
 var menu_fill: DirectionalLight3D = null
 ## 菜单里展示的物种模型（每个物种一个）：只在选物种/结算时存在，出生即释放
 var _showcase: Array[Node3D] = []
-## 设置项（ART04）：灵敏度倍数、视野覆盖。本轮**只作用于本次运行**，持久化属后续任务
+## 设置项（ART04/ART05）：灵敏度倍数、视野覆盖。真源在 `user://settings.cfg`（见 `GameSettings`）
 var sensitivity_scale := 1.0
 ## `0.0` = 不覆盖物种配置里的 `fov`；玩家动过滑块才写成具体值
 var fov_override := 0.0
+## 设置文件路径（测试可指向临时文件，不污染真实 `user://settings.cfg`）
+@export var settings_path: String = GameSettings.DEFAULT_PATH
 var _configs: Array[SpeciesConfig] = []
 var _frame := 0
 var _last_hunger := NAN
@@ -69,6 +71,7 @@ var _wd_capture_hooked := false
 
 func _ready() -> void:
 	_configs = _discover_configs()
+	_load_settings()
 	_setup_long_term()
 	_build_level()
 	_build_ecology()
@@ -587,7 +590,7 @@ func _build_menu() -> void:
 	menu.name = "MainMenu"
 	add_child(menu)
 	# 入树之后再 build：卡片预览要用 `World3D` 与 `look_at`
-	menu.build(_configs)
+	menu.build(_configs, current_settings())
 	menu.species_committed.connect(_on_menu_species_committed)
 	menu.setting_changed.connect(_on_menu_setting_changed)
 	menu.quit_requested.connect(_on_menu_quit)
@@ -717,11 +720,36 @@ func _on_menu_species_committed(species_id: StringName) -> void:
 	select_species(species_id)
 
 
+## 菜单设置改动：立刻落到本局 + 立刻写 `user://settings.cfg`（真源见 `GameSettings`）
 func _on_menu_setting_changed(key: StringName, value: float) -> void:
 	if key == &"sensitivity":
 		sensitivity_scale = value
 	elif key == &"fov":
 		fov_override = value
+	else:
+		return
+	var ok := GameSettings.save_to(current_settings(), settings_path)
+	print("ENTRY|settings|%s=%.3f|saved=%s|path=%s" % [
+		String(key), value, str(ok), settings_path
+	])
+
+
+## 当前生效的设置（菜单回填与写盘都用这一份）
+func current_settings() -> Dictionary:
+	return {
+		GameSettings.KEY_SENSITIVITY: sensitivity_scale,
+		GameSettings.KEY_FOV: fov_override,
+	}
+
+
+## 从 `settings_path` 读设置；缺失/损坏时回落默认值（不崩）
+func _load_settings() -> void:
+	var s := GameSettings.load_from(settings_path)
+	sensitivity_scale = float(s[GameSettings.KEY_SENSITIVITY])
+	fov_override = float(s[GameSettings.KEY_FOV])
+	print("ENTRY|settings_loaded|sensitivity=%.2f|fov=%.1f|path=%s" % [
+		sensitivity_scale, fov_override, settings_path
+	])
 
 
 func _on_menu_quit() -> void:

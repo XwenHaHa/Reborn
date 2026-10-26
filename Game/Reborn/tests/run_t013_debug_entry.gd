@@ -71,6 +71,9 @@ func _initialize() -> void:
 	print("TEST|run_t013_debug_entry|engine=%s" % Engine.get_version_info().string)
 	_cat = load(CAT) as SpeciesConfig
 	_mouse = load(MOUSE) as SpeciesConfig
+	# ART05：本套断言比较 `camera.position.y == camera_offset_z`（第一人称口径）→ 钉住第一人称
+	_cat.camera_mode = SpeciesConfig.CAMERA_FIRST_PERSON
+	_mouse.camera_mode = SpeciesConfig.CAMERA_FIRST_PERSON
 
 	await _section_a_scene_and_separation()
 	_section_b_input_map()
