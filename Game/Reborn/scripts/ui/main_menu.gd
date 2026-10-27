@@ -66,6 +66,7 @@ var _record_label: Label = null
 var _hint_label: Label = null
 var _cards_box: VBoxContainer = null
 var _settings_panel: PanelContainer = null
+var _center_showcase: Control = null
 
 ## `species_id` → {card, name_label, viewport, pivot, animation}
 var _cards: Dictionary = {}
@@ -283,16 +284,15 @@ func _build_scrim() -> void:
 	left_shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(left_shade)
 
-
 func _build_left_column() -> void:
 	var margin := MarginContainer.new()
-	margin.name = "LeftColumn"
+	margin.name = "LeftPanel"
 	margin.anchor_bottom = 1.0
 	margin.offset_right = 480.0
 	margin.add_theme_constant_override("margin_left", 64)
-	margin.add_theme_constant_override("margin_top", 56)
+	margin.add_theme_constant_override("margin_top", 46)
 	margin.add_theme_constant_override("margin_right", 32)
-	margin.add_theme_constant_override("margin_bottom", 48)
+	margin.add_theme_constant_override("margin_bottom", 40)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(margin)
 	_left_column = margin
@@ -303,19 +303,20 @@ func _build_left_column() -> void:
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(column)
 
-	var title := _label(PAGE_TITLE, 84, COLOR_TEXT)
-	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.65))
+	var title := _label(PAGE_TITLE, 80, COLOR_TEXT)
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.72))
 	title.add_theme_constant_override("shadow_offset_x", 2)
 	title.add_theme_constant_override("shadow_offset_y", 3)
 	column.add_child(title)
 
-	column.add_child(_label(PAGE_SUBTITLE, 22, COLOR_ACCENT))
-	column.add_child(_spacer(10))
-	column.add_child(_label(TAGLINE, 19, Color(0.827, 0.804, 0.741)))
+	column.add_child(_label(PAGE_SUBTITLE, 21, COLOR_ACCENT))
+	column.add_child(_spacer(16))
+	column.add_child(_label(TAGLINE, 18, Color(0.827, 0.804, 0.741)))
 	column.add_child(_label(TAGLINE_2, 14, COLOR_DIM))
-	column.add_child(_spacer(26))
+	column.add_child(_spacer(30))
 
 	_main_buttons = _button_column()
+	_main_buttons.name = "MainButtons"
 	column.add_child(_main_buttons)
 	var start := _button("开始游戏", true)
 	start.pressed.connect(func() -> void: commit())
@@ -331,6 +332,7 @@ func _build_left_column() -> void:
 	_main_buttons.add_child(quit)
 
 	_species_buttons = _button_column()
+	_species_buttons.name = "SpeciesButtons"
 	_species_buttons.visible = false
 	column.add_child(_species_buttons)
 	var enter := _button("进入世界", true)
@@ -350,20 +352,19 @@ func _build_left_column() -> void:
 	_record_label.visible = false
 	_record_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_record_label)
-
 	column.add_child(_label(VERSION_TAG, 12, COLOR_FAINT))
 
 
 func _build_right_column() -> void:
 	var margin := MarginContainer.new()
-	margin.name = "RightColumn"
+	margin.name = "SpeciesRail"
 	margin.anchor_left = 1.0
 	margin.anchor_right = 1.0
 	margin.anchor_bottom = 1.0
 	margin.offset_left = -452.0
-	margin.offset_right = -40.0
-	margin.add_theme_constant_override("margin_top", 48)
-	margin.add_theme_constant_override("margin_bottom", 48)
+	margin.offset_right = -28.0
+	margin.add_theme_constant_override("margin_top", 34)
+	margin.add_theme_constant_override("margin_bottom", 34)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(margin)
 	_right_column = margin
@@ -418,11 +419,6 @@ func _refresh_hint() -> void:
 		_hint_label.text = "1 / 2 选择物种 · Enter 进入世界 · Esc 返回"
 	else:
 		_hint_label.text = "Enter 开始 · 鼠标点击卡片选择物种 · Esc 返回"
-
-
-# ---------------------------------------------------------------------------
-# 构建：卡片
-# ---------------------------------------------------------------------------
 
 func _make_species_card(cfg: SpeciesConfig) -> PanelContainer:
 	var card := PanelContainer.new()

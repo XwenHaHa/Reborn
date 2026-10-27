@@ -1,5 +1,5 @@
 extends SceneTree
-## ART08 展板视觉基线取证；必须使用非 headless Godot。
+## ART08 展板视觉取证；必须使用非 headless Godot。
 
 const RES := Vector2i(1280, 720)
 const SETTLE := 20
@@ -11,6 +11,7 @@ func _initialize() -> void:
 		print("CAP|board|ERROR|need_arg|pass '-- board'")
 		quit(1)
 		return
+	print("CAP|board|begin")
 	await _run()
 	print("CAP|board|done")
 	quit(0)
