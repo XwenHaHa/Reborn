@@ -18,13 +18,16 @@ const SPECIES_DIR := "res://resources/species"
 ## 菜单展示区（ART04）：溪东岸的干燥地。相机与展示模型都**相对这个点**摆位，
 ## 关卡几何若变，只改这里并重新取景验证（`Docs/Evidence/ART04.md` §取景）。
 const MENU_FOCUS := Vector3(-10.5, 0.10, 16.0)
-const MENU_CAM_OFFSET := Vector3(0.86, 0.42, 0.80)
-const MENU_CAM_LOOK := Vector3(0.0, 0.15, 0.0)
+## ART06：收益最高的改动是**机位更近**（0.86/0.42/0.80 → 0.66/0.42/0.61，相机到主体 1.26 → 0.992 m），
+## 主体占屏高 0.363 → **0.467**（胶囊契约高度的脚点/头点投影，见 `Docs/Evidence/ART06.md` §3）。改这里要重跑取证。
+const MENU_CAM_OFFSET := Vector3(0.66, 0.42, 0.61)
+const MENU_CAM_LOOK := Vector3(0.0, 0.18, 0.0)
 const MENU_CAM_FOV := 58.0
-## 把展示主体推到画面右侧，左侧留给标题与按钮（负值 = 视线右移）
+## ART06：机位右移量。0 = 主体在画面中线；负值把主体推右（给左侧标题/按钮让位）。
+## 实测（脚点投影）：-0.16 → 猫的脚点 cx=746（右栏卡片从 828 开始，会压到卡片）；-0.05 → cx≈672。
 const MENU_CAM_H_OFFSET := -0.05
-## 两个物种展示模型的横向间隔（米，沿相机右方向排开）
-const MENU_SHOWCASE_SPREAD := 0.36
+## 小体型物种（鼠）按体型差往相机方向前移的总深度系数：不这么做，鼠选进主视觉时只有十几个像素高
+const MENU_SHOWCASE_DEPTH_SCALE := 1.10
 
 const ACTION_SELECT_1 := "life_select_1"
 const ACTION_SELECT_2 := "life_select_2"
@@ -166,6 +169,11 @@ func species_configs() -> Array[SpeciesConfig]:
 func world_time_now() -> float:
 	var wd := _wd()
 	return float(wd.get("world_time")) if wd != null else 0.0
+
+
+## 菜单展示模型（ART06 取证用：**只读**；不改变任何展示状态）
+func showcase_nodes() -> Array[Node3D]:
+	return _showcase
 
 
 # ---------------------------------------------------------------------------
@@ -589,6 +597,8 @@ func _build_menu() -> void:
 	menu = MainMenu.new()
 	menu.name = "MainMenu"
 	add_child(menu)
+	# 选中项变化 → 主视觉换人（ART06：主视觉跟着选中的物种走）
+	menu.selection_changed.connect(_on_menu_selection_changed)
 	# 入树之后再 build：卡片预览要用 `World3D` 与 `look_at`
 	menu.build(_configs, current_settings())
 	menu.species_committed.connect(_on_menu_species_committed)
@@ -635,45 +645,58 @@ func _menu_focus_ground() -> Vector3:
 	return MENU_FOCUS
 
 
-## 展示模型：每个有 `visual_scene` 的物种一个，沿相机右方向并排，面朝相机。
-## 全部来自 `SpeciesConfig` —— 新增物种自动出现在展示里，本函数不用改。
+## 主视觉展示（ART06）：菜单里**只展示当前选中的物种**，把它放在画面中央当主视觉；
+## 其余物种不再挤在同一个机位里（ART04 是两只并排，鼠只占屏高约 2%，实际读不出体态），
+## 由右侧卡片各自的实时 3D 预览承担（`MainMenu._make_preview()`），鼠仍是可选卡片。
+##
+## 选中项来自 `MainMenu.selected_species()`（数据驱动）：本文件不出现物种名，也不写死数量。
+## 默认选中 = 物种配置排序后的第一个（当前数据下就是猫），所以默认主视觉是猫。
 func _build_showcase() -> void:
 	_clear_showcase()
 	if level == null or menu_camera == null or _configs.is_empty():
 		return
-	var focus := _menu_focus_ground()
-	var right := menu_camera.global_transform.basis.x
-	right.y = 0.0
-	right = right.normalized() if right.length() > 0.001 else Vector3.RIGHT
-	var shown: Array[SpeciesConfig] = []
-	for cfg in _configs:
-		if cfg.visual_scene != null:
-			shown.append(cfg)
-	if shown.is_empty():
+	var hero := _hero_config()
+	if hero == null:
 		return
+	var focus := _menu_focus_ground()
 	var camera_pos := menu_camera.global_position
-	# 小物种往相机方向挪一点（按体型差）：真按同一深度摆，鼠在菜单里只有十几个像素高
-	var h_max := 0.0
-	for cfg in shown:
-		h_max = maxf(h_max, cfg.capsule_height())
+	var inst := hero.visual_scene.instantiate() as Node3D
+	if inst == null:
+		return
+	inst.name = "Showcase_%s" % String(hero.species_id)
+	level.add_child(inst)
+	# 体型差补偿（沿用 ART04 的做法）：小体型物种沿"朝向相机"方向前移，否则鼠选进来只有十几个像素高。
 	var to_camera := camera_pos - focus
 	to_camera.y = 0.0
 	to_camera = to_camera.normalized()
-	for i in shown.size():
-		var inst := shown[i].visual_scene.instantiate() as Node3D
-		if inst == null:
-			continue
-		inst.name = "Showcase_%s" % String(shown[i].species_id)
-		level.add_child(inst)
-		var t := float(i) - (float(shown.size()) - 1.0) * 0.5
-		var depth := (h_max - shown[i].capsule_height()) * 1.10
-		var pos := focus + right * (t * MENU_SHOWCASE_SPREAD) + to_camera * depth
-		pos.y = focus.y
-		inst.global_position = pos
-		# 模型本地面朝 −Z：`look_at` 让 −Z 指向相机 → 正好朝观众
-		inst.look_at(Vector3(camera_pos.x, pos.y, camera_pos.z), Vector3.UP)
-		_showcase_idle(inst)
-		_showcase.append(inst)
+	var depth := (_max_capsule_height() - hero.capsule_height()) * MENU_SHOWCASE_DEPTH_SCALE
+	var pos := focus + to_camera * depth
+	pos.y = focus.y
+	inst.global_position = pos
+	# 模型本地面朝 −Z：`look_at` 让 −Z 指向相机 → 正好朝观众
+	inst.look_at(Vector3(camera_pos.x, pos.y, camera_pos.z), Vector3.UP)
+	_showcase_idle(inst)
+	_showcase.append(inst)
+
+
+## 主视觉物种：优先当前选中项；没有选中或它没有视觉资产时退回"第一个有视觉资产的物种"。
+func _hero_config() -> SpeciesConfig:
+	var selected: StringName = menu.selected_species() if menu != null else &""
+	var picked := _config_for(selected)
+	if picked != null and picked.visual_scene != null:
+		return picked
+	for cfg in _configs:
+		if cfg.visual_scene != null:
+			return cfg
+	return null
+
+
+## 配置里最大的胶囊高度（体型差补偿的基准；没有物种时给 0）
+func _max_capsule_height() -> float:
+	var h := 0.0
+	for cfg in _configs:
+		h = maxf(h, cfg.capsule_height())
+	return h
 
 
 func _clear_showcase() -> void:
@@ -756,3 +779,10 @@ func _on_menu_quit() -> void:
 	if lifecycle != null and not lifecycle.is_alive():
 		print("ENTRY|quit|requested")
 		get_tree().quit()
+
+
+## 菜单选中项变了 → 换主视觉（ART06）。只在菜单可见时重建：出生后再改选中状态不动场景。
+func _on_menu_selection_changed(_species_id: StringName) -> void:
+	if menu == null or not menu.visible:
+		return
+	_build_showcase()

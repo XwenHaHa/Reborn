@@ -71,6 +71,7 @@
 | ART04 | **done（2026-10-28，系统时钟；未 approved）** | `Docs/Tasks/ART04.md`、`Docs/Evidence/ART04.md`、`scripts/ui/main_menu.gd`（新）、`scripts/core/main_entry.gd`、`scripts/ui/hud.gd`、`scripts/characters/animal_body.gd`、`scripts/data/species_config.gd`、`resources/species/{cat,mouse}.tres`、`tests/tool_capture_art04.gd`、`Art/Probes/art04_*.png` | **开场/物种选择从"一行文字"变正式界面**（`配套要求.md` §2）：菜单相机 + 猫鼠展示模型 + 菜单补光 + 标题/按钮 + 数据驱动物种卡（每物种 `SubViewport` 实时 3D 缩略图）；HUD 换四条指标条（原文字标签保留 → T018 不变）；Idle↔Walk↔Run 交叉淡入；**31 套 / 3,525 条全绿、0 条 SCRIPT ERROR**；`tool_t028_walkthrough` 的 W4 失败**改前基线同样失败**（既有缺陷） |
 
 | ART05 | **done（2026-10-26，系统时钟；未 approved）** | `Docs/Tasks/ART05.md`、`Docs/Evidence/ART05.md`、`scripts/core/game_settings.gd`（新）、`scripts/data/species_config.gd`、`scripts/characters/animal_body.gd`、`scripts/core/main_entry.gd`、`scripts/ui/main_menu.gd`、`resources/species/{cat,mouse}.tres`、`tests/run_art05_{settings,input}.gd`、`tests/tool_capture_tp.gd`、`Art/Probes/art05_tp_*.png` | **第三人称成为正式视角**（数据驱动：`camera_mode` + `third_person_distance/aim_height/down_tilt`；撞墙射线收臂 1.30→0.289，不穿墙；第一人称契约保留并让 T009/T010/T013 显式钉住它）+ **`eye_position()` 与相机解耦**（修 T016 夹具缺陷，118/118 恢复）+ **设置持久化**（`user://settings.cfg`，出生后 FOV/灵敏度真的生效）+ **输入链路 20/20**（真实 InputMap/GUI 路径；**必须非 headless**，无头根视口 64×64 无 hover）+ **打包复验**（两预设 exit 0，包内 6 套全绿）。全量 34 套 3,566 条 0 失败。**体积警告**：`Reborn.pck` 289,832 → 30,044,160 B（`export_filter=all_resources` 把 `.glb`/贴图源文件也打进去了，非本轮引入，需负责人定预设策略） |
+| ART06 | **done（2026-10-27，系统时钟；未 approved）** | `Docs/Tasks/ART06.md`、`Docs/Evidence/ART06.md`、`scripts/core/main_entry.gd`、`scripts/ui/main_menu.gd`、`tests/tool_capture_art04.gd`、`Art/Probes/menu_cat_first_*.png` | **菜单猫主视觉**（纵向切片第一个视觉增量）：展示模型从"每物种一个并排"改成**只展示当前选中物种**（默认猫），鼠保留可选卡片（卡片自带实时 3D 预览）；机位 1.26 → 0.992 m，猫占屏高（胶囊契约投影）**0.363 → 0.467**、脚点 x 572 → 673 落进左栏与卡片空档；右栏 3 张未来占位卡收成一行小字。非 headless 实拍 + vision 判读：**1 只 3D 猫居中、无遮挡、标题与四按钮完整、猫鼠卡片都在、无排版缺陷**。回归 **15 套 / 1,463 条全绿**（含非 headless `run_art05_input` 20/20）、0 条 `SCRIPT ERROR`。**NOT-VERIFIED**：鼠作主视觉时的模型朝向（正反两机位判读互相矛盾，不作结论）；**NOT-RUN**：真实按键、未触碰其路径的其余套件。未改 `.tres`/玩法/关卡/光照/动画、未切 `sm_cat_004`、未提交未推送 |
 
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
 
@@ -299,6 +300,18 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **打包体积（未解决）**：`export_filter="all_resources"` 会把 `assets/` 里的 `.glb`/贴图**源文件**一起打进 `.pck`，
   所以 10-20 之后的构建从 289,832 B 变成 **30,044,160 B**。瘦身要改预设（`resources` 模式或排除 `*.glb`），**需负责人拍板**。
 - 取证：`tests/tool_capture_tp.gd -- tp`（**非 headless**）→ `user://tp_*.png` → `Art/Probes/art05_tp_*.png`。
+
+## 菜单猫主视觉（ART06，2026-10-27）
+
+- **菜单里现在只有 1 个展示模型 = 当前选中的物种**（`MainEntry._build_showcase()` → `_hero_config()`）；选中项变了（`MainMenu.selection_changed`）就重建成新主视觉，默认选中 = 物种配置排序第一 = 猫。
+- 鼠**不再**并排站在同一个机位里（ART04 那样它只有 2% 屏高、什么也看不出），它的信息由**卡片自带的实时 3D 预览**承担。
+- **机位值改过就要重新取证**：`MENU_CAM_OFFSET=(0.66,0.42,0.61)`（相机到主体 0.992 m）、`MENU_CAM_LOOK y=0.18`、`MENU_CAM_H_OFFSET=-0.05`。
+- 实测 `h_offset=-0.16` 会把猫的脚点推到 `cx=746`（右栏卡片从 `x=828` 开始，会压到卡片）→ **不要凭感觉调 `h_offset`**，用取证工具的 `CAP|art04|<tag>|showcase|` 行读 `feet/head/px_h/in_gap`。
+- **取景量口径**：`px_h` 是 `SpeciesConfig.capsule_height()` 的投影（猫 0.48 m），实际模型只 0.31 m，所以真实像素高 ≈ `px_h × 0.31/0.48`。**不要**用网格 AABB 投影：蒙皮网格节点 AABB 带骨骼缩放（实测把 0.31 m 的猫算成 1 cm）。
+- **右栏**：3 张「未来开放」占位卡已收成一行小字（`_make_future_row()`）；物种数文案按 `_configs.size()` 推。
+- 取证：`tests/tool_capture_art04.gd -- art04`（**非 headless**）→ `user://art04_*.png` → `Art/Probes/menu_cat_first_*.png`；`art04_species_second_mirror` 是把相机镜像到另一侧拍的朝向核对帧。
+- **NOT-VERIFIED**：鼠作主视觉时的模型朝向（vision 对正反两个机位都答「背对」，自相矛盾 → 不作结论）。
+- 回归证据：`Docs/Evidence/ART06.md` §5（15 套 / 1,463 条全绿，含非 headless `run_art05_input`）。
 
 
 ## 美术流水线（ART01 已打通，2026-10-21）

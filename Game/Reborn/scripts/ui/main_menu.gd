@@ -23,6 +23,8 @@ signal species_committed(species_id: StringName)
 signal quit_requested
 ## 设置项变化（`key` 只有 `sensitivity` / `fov`；是否持久化属后续任务，本轮只作用于本局）
 signal setting_changed(key: StringName, value: float)
+## 当前选中的物种变了（ART06：`MainEntry` 用它换菜单主视觉；只发选中，不触发出生）
+signal selection_changed(species_id: StringName)
 
 enum Page { MAIN, SPECIES }
 
@@ -47,7 +49,6 @@ const COLOR_ACCENT := Color(0.851, 0.588, 0.227)
 const COLOR_ACCENT_DIM := Color(0.431, 0.325, 0.157)
 const COLOR_PANEL := Color(0.043, 0.071, 0.078, 0.780)
 const COLOR_PANEL_SEL := Color(0.086, 0.133, 0.145, 0.900)
-const COLOR_CARD_LOCKED := Color(0.043, 0.059, 0.063, 0.560)
 
 const PREVIEW_PX := 96
 const PREVIEW_SUPERSAMPLE := 2
@@ -146,9 +147,11 @@ func show_page(page: int) -> void:
 func select_species(species_id: StringName) -> void:
 	if _index_of(species_id) < 0:
 		return
+	var changed := _selected != species_id
 	_selected = species_id
 	_refresh_cards()
-
+	if changed:
+		selection_changed.emit(_selected)
 
 func selected_species() -> StringName:
 	return _selected
@@ -372,7 +375,9 @@ func _build_right_column() -> void:
 	margin.add_child(column)
 
 	column.add_child(_label("可玩物种", 15, COLOR_ACCENT))
-	column.add_child(_label("MVP Demo：2 个物种，其余按数据接入", 12, COLOR_FAINT))
+	# 数量由配置推出，不写死（新增物种只加 .tres）
+	column.add_child(_label(
+		"MVP Demo：%d 个物种，其余按数据接入" % _configs.size(), 12, COLOR_FAINT))
 	column.add_child(_spacer(6))
 
 	_cards_box = VBoxContainer.new()
@@ -384,10 +389,11 @@ func _build_right_column() -> void:
 	for cfg in _configs:
 		_cards_box.add_child(_make_species_card(cfg))
 
-	_cards_box.add_child(_spacer(4))
-	_cards_box.add_child(_label("未来开放", 13, COLOR_FAINT))
-	for entry in FUTURE_SPECIES:
-		_cards_box.add_child(_make_locked_card(entry))
+	# ART06：未来物种收成一行小字。原来 3 张 72 px 的占位卡把右栏塞满，
+	# 视线被一排暗色块分走，主视觉（猫）反而抢不到注意力。
+	_cards_box.add_child(_spacer(6))
+	_cards_box.add_child(_label("未来开放", 11, COLOR_FAINT))
+	_cards_box.add_child(_make_future_row())
 
 
 func _build_hint() -> void:
@@ -468,36 +474,22 @@ func _make_species_card(cfg: SpeciesConfig) -> PanelContainer:
 	return card
 
 
-func _make_locked_card(entry: Dictionary) -> PanelContainer:
-	var card := PanelContainer.new()
-	card.name = "Locked_%s" % String(entry.get("name", "?"))
-	card.custom_minimum_size = Vector2(0.0, 72.0)
-	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := _card_style(false)
-	style.bg_color = COLOR_CARD_LOCKED
-	card.add_theme_stylebox_override("panel", style)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	card.add_child(row)
-
-	var badge := Label.new()
-	badge.text = String(entry.get("name", "?"))
-	badge.custom_minimum_size = Vector2(PREVIEW_PX, 0.0)
-	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	badge.add_theme_font_size_override("font_size", 26)
-	badge.add_theme_color_override("font_color", COLOR_FAINT)
-	row.add_child(badge)
-
-	var text := VBoxContainer.new()
-	text.add_theme_constant_override("separation", 2)
-	text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(text)
-	var tag := _label("%s · 未来开放" % String(entry.get("tagline", "")), 13, COLOR_FAINT)
-	text.add_child(tag)
-	text.add_child(_label(String(entry.get("note", "")), 11, COLOR_FAINT))
-	return card
+## 未来物种：一行低调的"名字 + 定位语"小标签（`HFlowContainer` 自动换行）。
+## 仍然**只占位**、不可点：真源是 `resources/species/*.tres`，一旦落地就出现在上面的卡片里。
+func _make_future_row() -> Control:
+	var flow := HFlowContainer.new()
+	flow.name = "FutureSpecies"
+	flow.add_theme_constant_override("h_separation", 10)
+	flow.add_theme_constant_override("v_separation", 2)
+	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for entry in FUTURE_SPECIES:
+		var chip := _label("%s（%s）" % [
+			String(entry.get("name", "?")), String(entry.get("tagline", "")),
+		], 11, COLOR_FAINT)
+		chip.name = "Locked_%s" % String(entry.get("name", "?"))
+		chip.tooltip_text = String(entry.get("note", ""))
+		flow.add_child(chip)
+	return flow
 
 
 func _refresh_cards() -> void:
