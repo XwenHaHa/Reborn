@@ -72,6 +72,8 @@
 
 | ART05 | **done（2026-10-26，系统时钟；未 approved）** | `Docs/Tasks/ART05.md`、`Docs/Evidence/ART05.md`、`scripts/core/game_settings.gd`（新）、`scripts/data/species_config.gd`、`scripts/characters/animal_body.gd`、`scripts/core/main_entry.gd`、`scripts/ui/main_menu.gd`、`resources/species/{cat,mouse}.tres`、`tests/run_art05_{settings,input}.gd`、`tests/tool_capture_tp.gd`、`Art/Probes/art05_tp_*.png` | **第三人称成为正式视角**（数据驱动：`camera_mode` + `third_person_distance/aim_height/down_tilt`；撞墙射线收臂 1.30→0.289，不穿墙；第一人称契约保留并让 T009/T010/T013 显式钉住它）+ **`eye_position()` 与相机解耦**（修 T016 夹具缺陷，118/118 恢复）+ **设置持久化**（`user://settings.cfg`，出生后 FOV/灵敏度真的生效）+ **输入链路 20/20**（真实 InputMap/GUI 路径；**必须非 headless**，无头根视口 64×64 无 hover）+ **打包复验**（两预设 exit 0，包内 6 套全绿）。全量 34 套 3,566 条 0 失败。**体积警告**：`Reborn.pck` 289,832 → 30,044,160 B（`export_filter=all_resources` 把 `.glb`/贴图源文件也打进去了，非本轮引入，需负责人定预设策略） |
 | ART06 | **done（2026-10-27，系统时钟；未 approved）** | `Docs/Tasks/ART06.md`、`Docs/Evidence/ART06.md`、`scripts/core/main_entry.gd`、`scripts/ui/main_menu.gd`、`tests/tool_capture_art04.gd`、`Art/Probes/menu_cat_first_*.png` | **菜单猫主视觉**（纵向切片第一个视觉增量）：展示模型从"每物种一个并排"改成**只展示当前选中物种**（默认猫），鼠保留可选卡片（卡片自带实时 3D 预览）；机位 1.26 → 0.992 m，猫占屏高（胶囊契约投影）**0.363 → 0.467**、脚点 x 572 → 673 落进左栏与卡片空档；右栏 3 张未来占位卡收成一行小字。非 headless 实拍 + vision 判读：**1 只 3D 猫居中、无遮挡、标题与四按钮完整、猫鼠卡片都在、无排版缺陷**。回归 **15 套 / 1,463 条全绿**（含非 headless `run_art05_input` 20/20）、0 条 `SCRIPT ERROR`。**NOT-VERIFIED**：鼠作主视觉时的模型朝向（正反两机位判读互相矛盾，不作结论）；**NOT-RUN**：真实按键、未触碰其路径的其余套件。未改 `.tres`/玩法/关卡/光照/动画、未切 `sm_cat_004`、未提交未推送 |
+| ART07 | **awaiting-review（2026-10-28；不是正式美术 approved）** | `Docs/Tasks/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`、`Docs/Evidence/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`、`Game/Reborn/tests/tool_make_courtyard.gd`、`Game/Reborn/shaders/grass_wind.gdshader`、`Game/Reborn/scenes/maps/l_courtyard.tscn`、`tests/run_t011_greybox.gd`、`Art/Probes/art07_{before,after}/` | 只复用现有资产的庭院表现层试作：16 株背景草簇、6 溪心石、3 庭院石、5 泥舌半岛、31 无碰撞阴影；草根明暗/实例差异、SSAO/ACES；指数雾关闭，远景 depth fog 参数保留但关闭；`CreekRock05` 移离溪缝机位视线。几何/碰撞/导航不变量未改。生成器装饰断言 229/229；回归 T011 229、T012 79、T020 164、T026 96、T027 96，全绿共 664 条；nav `.tres` 无 diff。视觉：overview 已无均匀雾幕、地标清楚但背景层次弱；溪缝清晰；courtyard/grass 仍有草石贴纸感/接地感不足。最后一轮窗口取证超时，当前截图对最后 shader 状态的对应关系未能复核；A5/A7 未通过，不提交为完成。P6/T053 未完成；**下一任务仍回到 T031** |
+| ART08 | **awaiting-review（2026-10-28；不是正式美术 approved）** | `Docs/Tasks/ART08_BOARD_BASELINE.md`、`Docs/Tasks/ART08_MENU.md`、`Docs/Tasks/ART08_CHARACTER_PIPELINE.md`、`Docs/Tasks/ART08_ENVIRONMENT_BOARD.md`、`Docs/Tasks/ART08_INTEGRATION.md`；`Docs/Evidence/ART08_*.md`；整合图 `Art/Probes/art08_integration/` | 按批准的视觉纵切片完成菜单结构、真实截图、角色资产授权门和环境不变量保护。ART08 契约 9/9、角色 15/15、环境 9/9；菜单/角色/环境/玩法相关回归全绿。**展板整体视觉 FAIL**：当前仍为庭院围墙与直线溪水，猫鼠仍用 `sm_cat_002` / `sm_mouse_002`，未新增猫扑击/鼠逃跑动作，右栏仍是实时 3D 卡片；非 headless 截图已留，但外部 vision 判读 NOT-RUN。提交 `d493cc6` / `c0ae0e9` / `6090559` / `07c1bc5`，未 push。**后续需要负责人逐项授权猫鼠新模型/动作及环境资产来源/许可**，再继续真正的美术替换；ART07 原有未提交改动仍保留，A5/A7 未通过。|
 
 **未完成**：游戏玩法实现（T031 起：地点发现 / 档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T031～T063 全部 pending。**
 
@@ -312,6 +314,16 @@ $proj = 'E:\Reborn\Game\Reborn'
 - 取证：`tests/tool_capture_art04.gd -- art04`（**非 headless**）→ `user://art04_*.png` → `Art/Probes/menu_cat_first_*.png`；`art04_species_second_mirror` 是把相机镜像到另一侧拍的朝向核对帧。
 - **NOT-VERIFIED**：鼠作主视觉时的模型朝向（vision 对正反两个机位都答「背对」，自相矛盾 → 不作结论）。
 - 回归证据：`Docs/Evidence/ART06.md` §5（15 套 / 1,463 条全绿，含非 headless `run_art05_input`）。
+
+## 庭院构图 / 接触感 / 背光试作（ART07，2026-10-28）
+
+- 任务规格 `Docs/Tasks/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`（临时视觉试作，不是正式 T/P6/T053）；证据 `Docs/Evidence/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`；状态 **awaiting-review**，不是 done/approved。
+- 当前表现层：16 株背景草簇、31 个无碰撞阴影、草风 shader 根部明暗/实例差异、SSAO + ACES；指数雾关闭，备选 depth fog 参数留在生成器但关闭。`SkyFill` 0.45→0.62。溪心装饰石已避开溪缝固定视线。
+- **生成顺序**：`tool_make_courtyard.gd` → `tool_make_courtyard_nav.gd` → 回归 → 窗口取证。生成器重建会清掉两张 `NavigationRegion3D` 和 `nav_source_courtyard` 组，漏掉 nav 工具会造成 T012/T020/T026/T027 大量失败。本次 nav 重烤后 `.tres` 无 diff：鼠 228 polys、猫 180 polys。
+- 当前无头回归：生成器自检 229/229；T011 229/229、T012 79/79、T020 164/164、T026 96/96、T027 96/96（总计 664），0 条 `SCRIPT ERROR`。鼠洞 0.24×0.30、溪缝 0.24、20 个 StaticBody、四区域、cover volumes 和猫鼠路线不变。
+- 视觉判读：现有 overview 图显示均匀雾幕消失、地标可辨但背景层次偏弱；溪缝清晰。courtyard/grass 仍被判草石像贴纸、接地阴影弱、危险区/路线表达不清。A5/A7 未通过，A6 仅溪缝机位确认。
+- 最后一轮非 headless 窗口取证调用超时（240 s），因此不能证明 `art07_after` 全部截图对应最后一次 shader/生成参数。证据文档已明确此限制；需在可完成窗口取证的条件下重拍并复核，之后再决定是否请求负责人验收。
+- **下一任务**：视觉试作记录后回到 T031（地点发现与老鼠解锁）；正式环境资产仍受 P6/T053 依赖与负责人美术批准约束。
 
 
 ## 美术流水线（ART01 已打通，2026-10-21）
