@@ -557,3 +557,27 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **仍 FAIL**：卡内没有动物大图（展板放在卡内右侧，这里由中央 3D 主视觉承担——菜单相机是世界空间节点，
   塞进 `Control` 会破坏 `MenuCamera` / `MenuFill` 契约）；背景仍是庭院几何（阶段 E 才有 `l_ravine_board`）。
 - **下一步**：阶段 D（HUD 图标 / 右下技能环 / 右上罗盘），注意 T018 的 `hud_text()`、`status_lines()` 契约不能改。
+
+### ART09-D（HUD 图标 / 技能环 / 罗盘，2026-10-29，done / 视觉部分达标）
+
+- **四条状态搬到右侧中部**：`VitalsBars` 现在是 HUD 自己的锚点容器（`anchor 1/0.5`，`offset_right = -24`），
+  **不再挂在 `Margin/VBox` 下**；每行 `Row_<key>` = `Icon_<key>` + `Name_<key>` + `Bar_<key>`(108×8) + `Value_<key>`。
+- **T018 契约原样**：`Margin/VBox/{VitalLabel,WarningLabel,InteractLabel}` 三条路径、`hud_text()`、
+  `status_lines()`、`interaction_visible()` 全未改，`VitalLabel` 仍 `visible = false`；T018 改后 **73/73**。
+- **图标是程序化绘制的**（`_draw_vital_icon()`：圆 + 多边形 + 线，心/肉/水滴/闪电），不是图片素材，
+  换正式图标只改这一个函数，断言不受影响。
+- **技能环是「指示器」不是按钮**：`Skill_sprint/crouch/pounce` 都是 `Panel` + `MOUSE_FILTER_IGNORE`，
+  左键必须留给真实扑击；高亮读 `want_sprint` / `is_crouching` / `action_state()==POUNCING`；
+  物种没能力（鼠无扑击）时提示改「不可用」+ tooltip `NOT-AVAILABLE：该物种不能扑击`。
+  **踩过的坑**：`_apply_skill()` 只在不可用时改文字，换回猫时不还原 → 现在把原始按键提示存 `hint_text`。
+- **罗盘**：`Game/Reborn/scripts/ui/compass_dial.gd`（`extends Control`，无 `class_name`，用 `load()` 实例化），
+  `hud.gd` 每帧 `call("set_heading", -玩家偏航)`；没有玩家时指针朝上。
+- **实测口径**：`run_art09_hud_layout` **63/63**；T018 73/73、T022 168/168、T030 111/111、
+  art09 菜单/物种/令牌 42/42 + 59/59 + 15/15；`tool_capture_render -- t018` 两帧 `save_result=OK`
+  → `Art/Probes/art09_hud_after/`。
+- **未验证**：真实按键高亮（用 `want_sprint=true` 程序验证，禁止盲发按键）；罗盘在真实鼠标转身下的观感；
+  960×540 下的 HUD 位置。
+- **仍 FAIL**：图标是几何近似不是美术图标；技能位不可点/无冷却（展板暗示可操作，本轮不做玩法）；
+  罗盘没有小地图。
+- **下一步**：阶段 E —— `tool_make_ravine_board.gd` → `l_ravine_board.tscn`（独立展示关，不碰 `l_courtyard`）
+  + 后处理（DOF/雾/曝光）+ 第三人称构图；写实素材仍卡在资产授权。
