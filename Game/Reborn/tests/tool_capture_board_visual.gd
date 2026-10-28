@@ -43,6 +43,13 @@ func _run() -> void:
 		await _save("board_species_mouse")
 	entry.menu.open_settings(true)
 	await _save("board_settings")
+	entry.menu.open_settings(false)
+	# ART09-C：960×540 下的物种选择页（大卡要收进视口，不能压出下边界）
+	entry.menu.show_page(MainMenu.Page.SPECIES)
+	root.size = Vector2i(960, 540)
+	await _save("board_species_narrow")
+	root.size = RES
+	entry.menu.show_page(MainMenu.Page.MAIN)
 	main.queue_free()
 	for i in 4:
 		await process_frame

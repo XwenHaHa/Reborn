@@ -78,6 +78,22 @@ const THUMB := 64.0
 const THUMB_SUPERSAMPLE := 2
 const TITLE_RULE_W := 240.0
 
+## 物种选择页的大卡（展板第二块）与底部缩略图行
+const SPECIES_CARD_X := 40.0
+const SPECIES_CARD_Y := 96.0
+const SPECIES_CARD_W := 430.0
+const SPECIES_CARD_H := 468.0
+const STRIP_SLOT := 64.0
+
+## 四条状态：键/显示名/颜色。与 `hud.gd` 的四条 bar 同色同序（HUD 真源见 `hud.gd` VITALS 常量）。
+## 这里只用于**菜单卡片**的初始值展示（出生即满），不参与任何生存计算。
+const VITAL_ROWS := [
+	{"key": &"health", "name": "生命", "color": Color(0.851, 0.325, 0.310)},
+	{"key": &"hunger", "name": "饥饿", "color": Color(0.878, 0.651, 0.227)},
+	{"key": &"thirst", "name": "水分", "color": Color(0.239, 0.608, 0.878)},
+	{"key": &"stamina", "name": "体力", "color": Color(0.553, 0.761, 0.290)},
+]
+
 # ---------------------------------------------------------------------------
 # 字体
 # ---------------------------------------------------------------------------

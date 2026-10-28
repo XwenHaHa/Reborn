@@ -539,3 +539,21 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **下一步**：阶段 C（物种选择页：左侧大卡 + 底部 5 缩略图 + 金色开始按钮）→ D（HUD 图标 / 技能环 / 罗盘）→
   E（`tool_make_ravine_board.gd` → `l_ravine_board.tscn` + 后处理 + 第三人称构图）→ F（`sm_cat_004` 评估、四态展示条）。
 - **待负责人**：cat/mouse 肖像图（照片或渲染）走哪条来源；`menu_creek.png` 是否删除；ART07 是否接受（决定天空球何时入库）。
+
+### ART09-C（物种选择页重排，2026-10-29，done / 整体视觉仍 FAIL）
+
+- **版面**：物种页现在是左侧 `SpeciesCard`（430×468 @ 40,96）+ 中央 3D 主视觉 + 底部 5 槽 `SpeciesStrip`；
+  主菜单标题栏、右栏、`RightRailShade`、MVP 说明在本页全部隐藏（`show_page()` 统一切可见性）。
+- **卡内**：`CardName`(38 px)、`CardTagline`(金 15 px)、`CardNote`、四条状态（`Vital_*`：色块 + 名称 + 进度条 + `100 / 100`）、
+  `CardStats`（速度 · 视距 · 体力）、金色 `EnterButton`「开始游戏」+ `BackButton`「返回」。
+- **四条状态读的是 `SpeciesConfig.max_*`（初始上限，出生即满），不是运行时状态** —— 运行时看 HUD，别搞混。
+- **缩略图槽**：可玩 `Strip_<id>` 复用 `_make_preview()`（同一物种因此有两个 `SubViewport`），点击只 `select_species()`、
+  **不开局**；未来 `StripLocked_兔/鸟/狐` 为 `?` 且 `MOUSE_FILTER_IGNORE`。选中槽走 `_thumb_style(true)`（2 px 金边）。
+- **窄窗**：`_layout_species_card()` 挂在 `Viewport.size_changed`（`clampf` 到 0.72~1.0 倍），960×540 实测 430×428。
+- **实测口径**：`run_art09_species_layout` **59/59**；回归 art09 菜单 42/42、令牌 15/15、art08 契约 9/9、
+  art05 设置 20/20 + 非 headless 输入 20/20、T030 111/111；5 张窗口图 `save_result=OK`，`SCRIPT ERROR` 0。
+- **修掉的 3 个真缺陷**：① 窄窗大卡压出视口；② `RightRailShade` 是独立 Panel，只隐藏 `SpeciesRail` 时右侧会留一块暗板；
+  ③ 底部提示压住「返回」（物种页把提示左边界推到卡右侧 +16）。
+- **仍 FAIL**：卡内没有动物大图（展板放在卡内右侧，这里由中央 3D 主视觉承担——菜单相机是世界空间节点，
+  塞进 `Control` 会破坏 `MenuCamera` / `MenuFill` 契约）；背景仍是庭院几何（阶段 E 才有 `l_ravine_board`）。
+- **下一步**：阶段 D（HUD 图标 / 右下技能环 / 右上罗盘），注意 T018 的 `hud_text()`、`status_lines()` 契约不能改。

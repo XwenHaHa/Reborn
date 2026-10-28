@@ -10,7 +10,7 @@
 | 关卡策略 | 保持「`l_courtyard` 做玩法/回归关 + 新建 `l_ravine_board` 做展板展示关」 |
 | 执行授权 | 同意立即开工 A+B |
 
-进度：A `Docs/Evidence/ART09_A_TOKENS.md`（done）、B `Docs/Evidence/ART09_B_MENU.md`（done；整体展板视觉 FAIL）。
+进度：A `Docs/Evidence/ART09_A_TOKENS.md`（done）、B `Docs/Evidence/ART09_B_MENU.md`（done；整体展板视觉 FAIL）、C `Docs/Evidence/ART09_C_SPECIES.md`（done；卡内大图/背景仍 FAIL）。下一步 D（HUD 图标 / 技能环 / 罗盘）。
 
 日期：2026-10-29
 基准图：`《轮生：森林生存游戏概念展板》.png`（1536×1024）

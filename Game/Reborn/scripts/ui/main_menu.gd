@@ -60,6 +60,7 @@ var _selected: StringName = &""
 var _page: int = Page.MAIN
 
 var _scrim: ColorRect = null
+var _rail_shade: Panel = null
 var _left_column: Control = null
 var _right_column: Control = null
 var _main_buttons: VBoxContainer = null
@@ -69,6 +70,20 @@ var _hint_label: Label = null
 var _cards_box: VBoxContainer = null
 var _mvp_note: Control = null
 var _locked_box: VBoxContainer = null
+
+## 物种选择页（ART09-C）：左侧大卡 + 底部缩略图行
+var _species_card: Panel = null
+var _card_name: Label = null
+var _card_tagline: Label = null
+var _card_note: Label = null
+var _card_stats: Label = null
+var _strip: HBoxContainer = null
+## `species_id` → 卡内 ProgressBar / 数值 Label
+var _card_bars: Dictionary = {}
+## `species_id` → 缩略图槽
+var _strip_slots: Dictionary = {}
+## `species_id` → 缩略图槽里的 SubViewport（与右栏卡片分开登记：页面上两者不会同时可见）
+var _strip_previews: Dictionary = {}
 var _settings_panel: PanelContainer = null
 var _center_showcase: Control = null
 
@@ -107,6 +122,7 @@ func build(configs: Array[SpeciesConfig], initial_settings: Dictionary = {}) -> 
 
 	_build_scrim()
 	_build_left_column()
+	_build_species_card()
 	_build_right_column()
 	_build_mvp_note()
 	_build_hint()
@@ -140,10 +156,23 @@ func close_menu() -> void:
 func show_page(page: int) -> void:
 	_page = page
 	_settings_panel.visible = false
+	var main := page == Page.MAIN
 	if _main_buttons != null:
-		_main_buttons.visible = page == Page.MAIN
+		_main_buttons.visible = main
 	if _species_buttons != null:
-		_species_buttons.visible = page == Page.SPECIES
+		_species_buttons.visible = not main
+	if _species_card != null:
+		_species_card.visible = not main
+	# 物种页用左侧大卡替代原来的「标题 + 四按钮」栏
+	if _left_column != null:
+		_left_column.visible = main
+	# 展板的物种选择界面没有右栏和 MVP 说明：那两块版面留给大卡与主视觉
+	if _right_column != null:
+		_right_column.visible = main
+	if _rail_shade != null:
+		_rail_shade.visible = main
+	if _mvp_note != null:
+		_mvp_note.visible = main
 	if _cards_box != null:
 		_cards_box.visible = true
 	_refresh_cards()
@@ -314,6 +343,7 @@ func _build_scrim() -> void:
 	right_panel.add_theme_stylebox_override("panel", _rail_style())
 	right_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(right_panel)
+	_rail_shade = right_panel
 
 func _build_left_column() -> void:
 	var margin := MarginContainer.new()
@@ -386,18 +416,8 @@ func _build_left_column() -> void:
 	quit.pressed.connect(func() -> void: quit_requested.emit())
 	_main_buttons.add_child(quit)
 
-	_species_buttons = _button_column()
-	_species_buttons.name = "SpeciesButtons"
-	_species_buttons.visible = false
-	column.add_child(_species_buttons)
-	var enter := _button("进入世界", true)
-	enter.name = "EnterButton"
-	enter.pressed.connect(func() -> void: commit())
-	_species_buttons.add_child(enter)
-	var back := _button("返回", false)
-	back.name = "BackButton"
-	back.pressed.connect(func() -> void: show_page(Page.MAIN))
-	_species_buttons.add_child(back)
+	# ART09-C：物种页的按钮已搬进左侧大卡（`_build_species_card()`），
+	# 左栏只保留主菜单的四按钮，避免两套按钮组同时占位。
 
 	var filler := Control.new()
 	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -410,6 +430,266 @@ func _build_left_column() -> void:
 	_record_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_record_label)
 	column.add_child(_label(VERSION_TAG, 12, COLOR_FAINT))
+
+
+# ---------------------------------------------------------------------------
+# 构建：物种选择大卡（ART09-C，展板「物种选择界面」）
+# ---------------------------------------------------------------------------
+
+## 展板第二块：左侧一张大卡（名字 / 定位 / 一句描述 / 四条状态）+ 底部缩略图行 + 金色开始按钮。
+## 与展板的**已知偏差**：展板把动物大图放在卡内右侧；这里那张大图由 `MainEntry` 的中央 3D 主视觉承担，
+## 因为菜单相机是世界空间节点、`MenuCamera` / `MenuFill` 是 ART08 契约，不能塞进 `Control`。
+func _build_species_card() -> void:
+	var panel := Panel.new()
+	panel.name = "SpeciesCard"
+	panel.offset_left = BoardTokens.SPECIES_CARD_X
+	panel.offset_top = BoardTokens.SPECIES_CARD_Y
+	panel.offset_right = BoardTokens.SPECIES_CARD_X + BoardTokens.SPECIES_CARD_W
+	panel.offset_bottom = BoardTokens.SPECIES_CARD_Y + BoardTokens.SPECIES_CARD_H
+	panel.add_theme_stylebox_override("panel", _species_card_style())
+	panel.visible = false
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(panel)
+	_species_card = panel
+	# 窗口变窄/变矮时把大卡收回视口内（960×540 实测会压出下边界）
+	if not get_viewport().size_changed.is_connected(_layout_species_card):
+		get_viewport().size_changed.connect(_layout_species_card)
+
+	var margin := MarginContainer.new()
+	margin.name = "CardBody"
+	margin.anchor_right = 1.0
+	margin.anchor_bottom = 1.0
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_bottom", 16)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(margin)
+
+	var column := VBoxContainer.new()
+	column.name = "Column"
+	column.add_theme_constant_override("separation", 2)
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(column)
+
+	_card_name = _label("", 38, BoardTokens.TEXT)
+	_card_name.name = "CardName"
+	_card_name.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	_card_name.add_theme_constant_override("shadow_offset_x", 2)
+	_card_name.add_theme_constant_override("shadow_offset_y", 2)
+	column.add_child(_card_name)
+
+	_card_tagline = _label("", 15, BoardTokens.GOLD)
+	_card_tagline.name = "CardTagline"
+	column.add_child(_card_tagline)
+
+	_card_note = _label("", 13, BoardTokens.TEXT_DIM)
+	_card_note.name = "CardNote"
+	_card_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(_card_note)
+
+	column.add_child(_spacer(12))
+	for row in BoardTokens.VITAL_ROWS:
+		column.add_child(_vital_row(row))
+
+	column.add_child(_spacer(8))
+	_card_stats = _label("", 12, BoardTokens.TEXT_FAINT)
+	_card_stats.name = "CardStats"
+	_card_stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(_card_stats)
+
+	var filler := Control.new()
+	filler.name = "Filler"
+	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	filler.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(filler)
+
+	# 底部缩略图行（展板：5 个方图；可玩的可点，未来的加「?」且不可点）
+	_strip = HBoxContainer.new()
+	_strip.name = "SpeciesStrip"
+	_strip.add_theme_constant_override("separation", 8)
+	_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(_strip)
+	for cfg in _configs:
+		_strip.add_child(_make_strip_slot(cfg))
+	for entry in FUTURE_SPECIES:
+		_strip.add_child(_make_locked_slot(entry))
+
+	column.add_child(_spacer(8))
+	_species_buttons = _button_column()
+	_species_buttons.name = "SpeciesButtons"
+	_species_buttons.visible = false
+	column.add_child(_species_buttons)
+	var enter := _button("开始游戏", true)
+	enter.name = "EnterButton"
+	enter.pressed.connect(func() -> void: commit())
+	_species_buttons.add_child(enter)
+	var back := _button("返回", false)
+	back.name = "BackButton"
+	back.pressed.connect(func() -> void: show_page(Page.MAIN))
+	_species_buttons.add_child(back)
+	_layout_species_card()
+
+
+## 一条状态：色块 + 名称 + 进度条 + 数值。**只展示物种的初始上限**（出生即满），
+## 不读 `SurvivalState`，也不参与任何生存计算。
+func _vital_row(row: Dictionary) -> Control:
+	var key := StringName(row["key"])
+	var box := HBoxContainer.new()
+	box.name = "Vital_%s" % String(key)
+	box.add_theme_constant_override("separation", 8)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var chip := ColorRect.new()
+	chip.name = "Chip"
+	chip.color = row["color"] as Color
+	chip.custom_minimum_size = Vector2(10.0, 10.0)
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(chip)
+
+	var name_label := _label(String(row["name"]), 12, BoardTokens.TEXT_DIM)
+	name_label.name = "Name"
+	name_label.custom_minimum_size = Vector2(32.0, 0.0)
+	box.add_child(name_label)
+
+	var bar := ProgressBar.new()
+	bar.name = "Bar"
+	bar.custom_minimum_size = Vector2(140.0, 8.0)
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.show_percentage = false
+	bar.min_value = 0.0
+	bar.max_value = 100.0
+	bar.value = 100.0
+	bar.add_theme_stylebox_override("background", _bar_bg_style())
+	bar.add_theme_stylebox_override("fill", _bar_fill_style(row["color"] as Color))
+	box.add_child(bar)
+
+	var value := _label("100 / 100", 11, BoardTokens.TEXT_DIM)
+	value.name = "Value"
+	value.custom_minimum_size = Vector2(56.0, 0.0)
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	box.add_child(value)
+
+	_card_bars[key] = {"bar": bar, "value": value}
+	return box
+
+
+## 可玩物种的缩略图槽：点击只**选中**（留在本页），真正开局仍走金色「开始游戏」
+func _make_strip_slot(cfg: SpeciesConfig) -> Control:
+	var id := cfg.species_id
+	var preview := _make_preview(cfg)
+	var frame := _thumb_frame(preview, "Strip_%s" % String(id), BoardTokens.STRIP_SLOT)
+	frame.mouse_filter = Control.MOUSE_FILTER_STOP
+	frame.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	frame.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton \
+				and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT \
+				and (event as InputEventMouseButton).pressed:
+			select_species(id)
+	)
+	_strip_slots[id] = frame
+	var vp := preview.get_meta("sub_viewport", null) as SubViewport
+	if vp != null:
+		_strip_previews[id] = vp
+	return frame
+
+
+## 未来物种的缩略图槽：同样大小、内容为「?」，**不可点**
+func _make_locked_slot(entry: Dictionary) -> Control:
+	var name := String(entry.get("name", "?"))
+	var mark := _label("?", 22, BoardTokens.TEXT_FAINT)
+	mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var frame := _thumb_frame(mark, "StripLocked_%s" % name, BoardTokens.STRIP_SLOT)
+	frame.tooltip_text = "未来开放：%s" % String(entry.get("note", ""))
+	return frame
+
+
+## 选中态：名字变金 + 缩略图槽换金边
+func _refresh_species_card() -> void:
+	var cfg := selected_config()
+	if cfg == null or _species_card == null:
+		return
+	if _card_name != null:
+		_card_name.text = cfg.display_title()
+	if _card_tagline != null:
+		_card_tagline.text = cfg.display_tagline
+	if _card_note != null:
+		_card_note.text = cfg.display_note
+	if _card_stats != null:
+		_card_stats.text = _stat_line(cfg)
+	var maxima := {
+		&"health": cfg.max_health,
+		&"hunger": cfg.max_hunger,
+		&"thirst": cfg.max_thirst,
+		&"stamina": cfg.max_stamina,
+	}
+	for key in _card_bars.keys():
+		var entry: Dictionary = _card_bars[key]
+		var bar := entry.get("bar") as ProgressBar
+		var value := entry.get("value") as Label
+		var top := maxf(1.0, float(maxima.get(key, 100.0)))
+		if bar != null:
+			bar.max_value = top
+			bar.value = top
+		if value != null:
+			value.text = "%d / %d" % [int(top), int(top)]
+	for id in _strip_slots.keys():
+		var frame := _strip_slots[id] as Control
+		if frame != null:
+			frame.add_theme_stylebox_override(
+				"panel", _thumb_style(StringName(id) == _selected)
+			)
+
+
+## 把大卡收进当前视口：1280×720 用令牌常量，窄/矮窗口按可用空间收缩（不越界、不压右栏）
+func _layout_species_card() -> void:
+	if _species_card == null:
+		return
+	var vp := get_viewport_rect().size
+	var w := clampf(vp.x - BoardTokens.SPECIES_CARD_X - 16.0,
+		BoardTokens.SPECIES_CARD_W * 0.72, BoardTokens.SPECIES_CARD_W)
+	var h := clampf(vp.y - BoardTokens.SPECIES_CARD_Y - 16.0,
+		BoardTokens.SPECIES_CARD_H * 0.72, BoardTokens.SPECIES_CARD_H)
+	_species_card.offset_right = BoardTokens.SPECIES_CARD_X + w
+	_species_card.offset_bottom = BoardTokens.SPECIES_CARD_Y + h
+
+
+func _species_card_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = BoardTokens.PANEL
+	sb.border_color = BoardTokens.RAIL_BORDER
+	sb.corner_radius_top_left = 4
+	sb.corner_radius_top_right = 4
+	sb.corner_radius_bottom_left = 4
+	sb.corner_radius_bottom_right = 4
+	sb.border_width_left = 1
+	sb.border_width_top = 1
+	sb.border_width_right = 1
+	sb.border_width_bottom = 1
+	return sb
+
+
+func _bar_bg_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.0, 0.0, 0.0, 0.55)
+	sb.corner_radius_top_left = 2
+	sb.corner_radius_top_right = 2
+	sb.corner_radius_bottom_left = 2
+	sb.corner_radius_bottom_right = 2
+	return sb
+
+
+func _bar_fill_style(color: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color
+	sb.corner_radius_top_left = 2
+	sb.corner_radius_top_right = 2
+	sb.corner_radius_bottom_left = 2
+	sb.corner_radius_bottom_right = 2
+	return sb
 
 
 func _build_right_column() -> void:
@@ -492,8 +772,11 @@ func _refresh_hint() -> void:
 		return
 	if _page == Page.SPECIES:
 		_hint_label.text = "1 / 2 选择物种 · Enter 进入世界 · Esc 返回"
+		# 物种页左半屏是大卡：提示文字只占右侧剩余空间，避免压在「返回」按钮上
+		_hint_label.offset_left = BoardTokens.SPECIES_CARD_X + BoardTokens.SPECIES_CARD_W + 16.0
 	else:
 		_hint_label.text = "Enter 开始 · 鼠标点击卡片选择物种 · Esc 返回"
+		_hint_label.offset_left = 0.0
 
 
 ## 展板右上角那块「初期版本（MVP Demo）」说明：告诉玩家当前只有 1～2 个可玩物种。
@@ -647,19 +930,20 @@ func _locked_style() -> StyleBoxFlat:
 	return sb
 
 
-## 缩略图框：1 px 暗金边 + 3 px 圆角
-func _thumb_style() -> StyleBoxFlat:
+## 缩略图框：未选中 1 px 暗金边，选中 2 px 亮金边（展板里选中槽是描金框）
+func _thumb_style(is_selected: bool = false) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.020, 0.030, 0.030, 0.900)
-	sb.border_color = Color(0.560, 0.470, 0.290, 0.700)
+	sb.border_color = BoardTokens.GOLD if is_selected else Color(0.560, 0.470, 0.290, 0.700)
 	sb.corner_radius_top_left = 3
 	sb.corner_radius_top_right = 3
 	sb.corner_radius_bottom_left = 3
 	sb.corner_radius_bottom_right = 3
-	sb.border_width_left = 1
-	sb.border_width_top = 1
-	sb.border_width_right = 1
-	sb.border_width_bottom = 1
+	var w := 2 if is_selected else 1
+	sb.border_width_left = w
+	sb.border_width_top = w
+	sb.border_width_right = w
+	sb.border_width_bottom = w
 	return sb
 
 
@@ -676,6 +960,8 @@ func _refresh_cards() -> void:
 			name_label.add_theme_color_override(
 				"font_color", COLOR_ACCENT if is_selected else COLOR_TEXT
 			)
+	# 物种页大卡与右栏卡片共用同一次刷新（选中变化 → 两处一起更新）
+	_refresh_species_card()
 
 
 ## 卡片里那行数值：全部由 `SpeciesConfig` 推出来（不同物种自动显示不同数字）
@@ -815,6 +1101,11 @@ func _set_previews_running(running: bool) -> void:
 		var vp := (_cards[id] as Dictionary).get("viewport") as SubViewport
 		if vp != null and is_instance_valid(vp):
 			vp.render_target_update_mode = mode
+	# 物种页缩略图行是另一批 SubViewport（同一物种两个预览，页面上只有一组可见）
+	for id in _strip_previews.keys():
+		var vp := _strip_previews[id] as SubViewport
+		if vp != null and is_instance_valid(vp):
+			vp.render_target_update_mode = mode
 
 
 # ---------------------------------------------------------------------------
@@ -913,6 +1204,7 @@ func _clear() -> void:
 		child.queue_free()
 	_cards.clear()
 	_scrim = null
+	_rail_shade = null
 	_left_column = null
 	_right_column = null
 	_main_buttons = null
@@ -922,6 +1214,15 @@ func _clear() -> void:
 	_cards_box = null
 	_mvp_note = null
 	_locked_box = null
+	_species_card = null
+	_card_name = null
+	_card_tagline = null
+	_card_note = null
+	_card_stats = null
+	_strip = null
+	_card_bars.clear()
+	_strip_slots.clear()
+	_strip_previews.clear()
 	_settings_panel = null
 
 
