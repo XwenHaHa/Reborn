@@ -581,3 +581,28 @@ $proj = 'E:\Reborn\Game\Reborn'
   罗盘没有小地图。
 - **下一步**：阶段 E —— `tool_make_ravine_board.gd` → `l_ravine_board.tscn`（独立展示关，不碰 `l_courtyard`）
   + 后处理（DOF/雾/曝光）+ 第三人称构图；写实素材仍卡在资产授权。
+
+### ART09-E（展板切片关：溪谷 + 第三人称构图，2026-10-29，done / 环境材质 FAIL）
+
+- **新关**：`scenes/maps/l_ravine_board.tscn`，生成器 `tests/tool_make_ravine_board.gd`。
+  **不碰 `l_courtyard`**（玩法/回归关），本关是**纯展示**：零碰撞、零导航区、零玩法，
+  `main.tscn` 不引用它（`run_art09_frame_contract.gd` 用文件文本断言 `main.tscn` 不含 "ravine"）。
+- **构图**：地面 → 溪流（z≈−2.6，16×4.6）→ 中景巨石/树根洞口 → 远景矮墙/围栏/庇护棚，
+  主体锚点 `BoardSubjectAnchor`(0, 0.10, 2.4)，第三人称机位 = 主体+(0.45,0.58,1.35)、FOV 58、远景景深。
+- **后处理**：HDRI 全景天空 + SSAO + ACES(1.05) + 深度雾 9→46 m(sky_affect 0.10) + 轻辉光 0.30；
+  暖主光 (−24°,32°,1.45) + 冷补光 0.38。**景深可用**：`CameraAttributesPractical.dof_blur_far_enabled` 在本版本存在
+  （工具里先探测属性再设，打印 `dof=on/off` 而不是假设）。
+- **两条硬经验**：① 展示关的水面要用 **`PlaneMesh`**——`BoxMesh` 的侧壁在近景会被看穿成"水池挡板"
+  （庭院那边保持 BoxMesh，T011 的 `creek_water_mesh_is_box` 不能动）；
+  ② **摆件高度不要猜**：`tests/tool_probe_aabb.gd` 实测 9 件 glb 的 `min_y` 全是 0.000（原点在脚底），
+  一律 `pos + Vector3(0, GROUND_TOP, 0)`；我第一轮猜 +0.40/+1.50 把石墙和围栏吊到了半空。
+  ③ 展示关没有碰撞，放 `CharacterBody3D` 必须 `set_physics_process(false)`，否则主体直接掉出画面（实测 y=−0.269）。
+- **实测口径**：`run_art09_frame_contract` **40/40**、`run_t011_greybox` **229/229**、
+  art09 tokens/menu/species/hud 15/15、42/42、59/59、63/63；`tool_capture_art09_board -- ravine` 5 帧 `save_result=OK`
+  → `Art/Probes/art09_board_after/`。
+- **仍 FAIL（下一步要资产/材质）**：溪水像泳池（高饱和蓝 + 白沫）、`WetShore` 读成一条沥青带、
+  前景地面缺草/落叶散布、矮墙/围栏/棚顶仍是旧低模石皮、猫占屏高约 1/6（展板约 1/4）。
+- **⚠️ 事故记录**：用 `Get-Content | -replace | Set-Content` 批量改生成器常量，把文件 UTF-8/行尾写坏
+  （中文变 `玩?`）；该文件当时未跟踪，`git checkout --` 无效 → 用 `Write`+`Edit` 整文件重写恢复并重跑全部契约。
+  **再次确认：工程源码只用编辑工具改，不用 PowerShell 管道写回**（T029 也踩过同款）。
+- **下一步**：阶段 F（角色与四态动画 + 授权门），然后 G（整合验收：对照矩阵 + 回归 + 性能）。

@@ -1,0 +1,300 @@
+[gd_scene format=3]
+
+[ext_resource type="Shader" path="res://shaders/ground.gdshader" id="1_kr44r"]
+[ext_resource type="Shader" path="res://shaders/creek_water.gdshader" id="2_tqs1u"]
+[ext_resource type="PackedScene" path="res://assets/environment/sm_boulder_001.glb" id="3_832w8"]
+[ext_resource type="PackedScene" path="res://assets/environment/sm_bush_002.glb" id="4_ofe3l"]
+[ext_resource type="PackedScene" path="res://assets/environment/sm_root_hole_001.glb" id="5_bmue8"]
+[ext_resource type="PackedScene" path="res://assets/environment/sm_root_barrier_001.glb" id="6_bxk34"]
+[ext_resource type="PackedScene" path="res://assets/environment/sm_wall_low_001.glb" id="7_vhfud"]
+[ext_resource type="PackedScene" path="res://assets/environment/sm_fence_module_001.glb" id="8_gim65"]
+[ext_resource type="PackedScene" path="res://assets/environment/sm_shelter_post_001.glb" id="9_owpiv"]
+[ext_resource type="PackedScene" path="res://assets/environment/sm_roof_001.glb" id="10_0wuwp"]
+[ext_resource type="PackedScene" path="res://assets/environment/sm_mound_001.glb" id="11_uw8br"]
+[ext_resource type="Texture2D" path="res://assets/environment/hdri/mossy_forest_2k.hdr" id="12_l2th3"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_uca3q"]
+render_priority = 0
+shader = ExtResource("1_kr44r")
+shader_parameter/color_grass = Color(0.196, 0.235, 0.168, 1)
+shader_parameter/color_dirt = Color(0.247, 0.216, 0.176, 1)
+shader_parameter/color_dry = Color(0.298, 0.286, 0.204, 1)
+shader_parameter/patch_scale = 0.34
+shader_parameter/grain_strength = 0.18
+shader_parameter/contrast = 0.62
+shader_parameter/roughness_value = null
+
+[sub_resource type="BoxMesh" id="BoxMesh_pcf5f"]
+size = Vector3(46, 0.2, 50)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u87en"]
+albedo_color = Color(0.238, 0.22, 0.196, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="BoxMesh_caycu"]
+size = Vector3(16, 0.02, 5)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_xnwle"]
+render_priority = 0
+shader = ExtResource("2_tqs1u")
+shader_parameter/shallow_color = Color(0.216, 0.412, 0.451, 1)
+shader_parameter/deep_color = Color(0.075, 0.176, 0.208, 1)
+shader_parameter/foam_color = Color(0.8, 0.85, 0.86, 1)
+shader_parameter/flow_dir = Vector2(-0.94, 0.34)
+shader_parameter/flow_speed = 0.38
+shader_parameter/ripple_scale = 3.0
+shader_parameter/ripple_strength = 0.3
+shader_parameter/warp_amount = null
+shader_parameter/foam_width = null
+shader_parameter/foam_strength = null
+shader_parameter/base_alpha = 0.55
+shader_parameter/roughness_base = null
+shader_parameter/specular_amount = null
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_kuosu"]
+size = Vector2(16, 4.6)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fnh15"]
+albedo_color = Color(0.196, 0.18, 0.157, 1)
+roughness = 0.92
+
+[sub_resource type="BoxMesh" id="BoxMesh_0r80l"]
+size = Vector3(3, 0.05, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6t6mc"]
+albedo_color = Color(0.196, 0.18, 0.157, 1)
+roughness = 0.92
+
+[sub_resource type="BoxMesh" id="BoxMesh_y43ow"]
+size = Vector3(2.6, 0.05, 0.9)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_m432w"]
+albedo_color = Color(0.196, 0.18, 0.157, 1)
+roughness = 0.92
+
+[sub_resource type="BoxMesh" id="BoxMesh_fujjc"]
+size = Vector3(2.8, 0.05, 0.95)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sfv83"]
+albedo_color = Color(0.196, 0.18, 0.157, 1)
+roughness = 0.92
+
+[sub_resource type="BoxMesh" id="BoxMesh_aogbi"]
+size = Vector3(2.4, 0.05, 0.85)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7utbi"]
+albedo_color = Color(0.145, 0.133, 0.114, 1)
+roughness = 0.72
+
+[sub_resource type="BoxMesh" id="BoxMesh_l62o3"]
+size = Vector3(16, 0.03, 0.55)
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_1hsbk"]
+panorama = ExtResource("12_l2th3")
+
+[sub_resource type="Sky" id="Sky_3v6xo"]
+sky_material = SubResource("PanoramaSkyMaterial_1hsbk")
+
+[sub_resource type="Environment" id="Environment_cm0km"]
+background_mode = 2
+sky = SubResource("Sky_3v6xo")
+ambient_light_source = 3
+tonemap_mode = 3
+tonemap_exposure = 1.05
+ssao_enabled = true
+ssao_radius = 1.1
+ssao_intensity = 2.4
+ssao_power = 2.0
+glow_enabled = true
+glow_bloom = 0.04
+glow_hdr_threshold = 1.1
+fog_enabled = true
+fog_mode = 1
+fog_light_color = Color(0.68, 0.74, 0.78, 1)
+fog_light_energy = 0.85
+fog_density = 0.85
+fog_sky_affect = 0.1
+fog_depth_begin = 9.0
+fog_depth_end = 46.0
+
+[node name="RavineBoard" type="Node3D" unique_id=618731957]
+
+[node name="Ground" type="MeshInstance3D" parent="." unique_id=195551747]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.4901161e-09, 0)
+material_override = SubResource("ShaderMaterial_uca3q")
+mesh = SubResource("BoxMesh_pcf5f")
+
+[node name="CreekBed" type="MeshInstance3D" parent="." unique_id=1239837285]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4, 0.105, -2.6)
+material_override = SubResource("StandardMaterial3D_u87en")
+mesh = SubResource("BoxMesh_caycu")
+
+[node name="CreekWater" type="MeshInstance3D" parent="." unique_id=1149491805 groups=["water_bodies"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4, 0.12, -2.6)
+material_override = SubResource("ShaderMaterial_xnwle")
+mesh = SubResource("PlaneMesh_kuosu")
+metadata/water_depth = 0.03
+
+[node name="MudTongue1" type="MeshInstance3D" parent="." unique_id=2137020636]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.6, 0.104, -0.2)
+material_override = SubResource("StandardMaterial3D_fnh15")
+mesh = SubResource("BoxMesh_0r80l")
+
+[node name="MudTongue2" type="MeshInstance3D" parent="." unique_id=149922890]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 0.104, -0.4)
+material_override = SubResource("StandardMaterial3D_6t6mc")
+mesh = SubResource("BoxMesh_y43ow")
+
+[node name="MudTongue3" type="MeshInstance3D" parent="." unique_id=1576145056]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0.104, -4.8)
+material_override = SubResource("StandardMaterial3D_m432w")
+mesh = SubResource("BoxMesh_fujjc")
+
+[node name="MudTongue4" type="MeshInstance3D" parent="." unique_id=2000854933]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.6, 0.104, -4.6)
+material_override = SubResource("StandardMaterial3D_sfv83")
+mesh = SubResource("BoxMesh_aogbi")
+
+[node name="BoardBoulder1" type="Node3D" parent="." unique_id=276972628 instance=ExtResource("3_832w8")]
+transform = Transform3D(1.3703182, 0, 0.610105, 0, 1.5, 0, -0.610105, 0, 1.3703182, -3.4, 0.1, 1.2)
+
+[node name="BoardBoulder2" type="Node3D" parent="." unique_id=1868263862 instance=ExtResource("3_832w8")]
+transform = Transform3D(0.91843086, 0, -0.69208723, 0, 1.15, 0, 0.69208723, 0, 0.91843086, 2.6, 0.1, -0.6)
+
+[node name="BoardBoulder3" type="Node3D" parent="." unique_id=1157678385 instance=ExtResource("3_832w8")]
+transform = Transform3D(-0.39905086, 0, 0.75050545, 0, 0.85, 0, -0.75050545, 0, -0.39905086, 6.4, 0.1, -3.2)
+
+[node name="BoardBoulder4" type="Node3D" parent="." unique_id=1873816575 instance=ExtResource("3_832w8")]
+transform = Transform3D(0.4993896, 0, 0.9801072, 0, 1.1, 0, -0.9801072, 0, 0.4993896, -7.2, 0.1, -4)
+
+[node name="BoardBoulder5" type="Node3D" parent="." unique_id=182886629 instance=ExtResource("3_832w8")]
+transform = Transform3D(0.9292402, 0, -0.19751611, 0, 0.95, 0, 0.19751611, 0, 0.9292402, 0.9, 0.1, -6.2)
+
+[node name="BoardBush1" type="Node3D" parent="." unique_id=1947354589 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(0.5168309, 0, 0.18811107, 0, 0.55, 0, -0.18811107, 0, 0.5168309, -2.6, 0.1, 0.2)
+
+[node name="BoardBush2" type="Node3D" parent="." unique_id=1883590268 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(-0.4698463, 0, -0.17101008, 0, 0.5, 0, 0.17101008, 0, -0.4698463, 5.2, 0.1, -0.4)
+
+[node name="BoardBush3" type="Node3D" parent="." unique_id=995655479 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(0.0781417, 0, 0.44316345, 0, 0.45, 0, -0.44316345, 0, 0.0781417, 8.4, 0.1, -3.6)
+
+[node name="BoardBush4" type="Node3D" parent="." unique_id=729633790 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(-0.3983431, 0, 0.33424956, 0, 0.52, 0, -0.33424956, 0, -0.3983431, -5.4, 0.1, -1.4)
+
+[node name="BoardBush5" type="Node3D" parent="." unique_id=1928961393 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(0.22999996, 0, -0.39837173, 0, 0.46, 0, 0.39837173, 0, 0.22999996, 1.6, 0.1, -5)
+
+[node name="BoardBush6" type="Node3D" parent="." unique_id=1581303739 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(0.5975146, 0, 0.5013743, 0, 0.78, 0, -0.5013743, 0, 0.5975146, -9, 0.1, -8.4)
+
+[node name="BoardBush7" type="Node3D" parent="." unique_id=1669920941 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(-0.7101408, 0, 0.41000006, 0, 0.82, 0, -0.41000006, 0, -0.7101408, -4.2, 0.1, -9.6)
+
+[node name="BoardBush8" type="Node3D" parent="." unique_id=311928084 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(-0.1389185, 0, -0.78784627, 0, 0.8, 0, 0.78784627, 0, -0.1389185, 3, 0.1, -10.2)
+
+[node name="BoardBush9" type="Node3D" parent="." unique_id=455663658 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(0.7147851, 0, 0.1915261, 0, 0.74, 0, -0.1915261, 0, 0.7147851, 7.6, 0.1, -8.6)
+
+[node name="BoardBush10" type="Node3D" parent="." unique_id=1590760072 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(-0.059265923, 0, 0.6774124, 0, 0.68, 0, -0.6774124, 0, -0.059265923, 11, 0.1, -7)
+
+[node name="BoardRootHole" type="Node3D" parent="." unique_id=1806400764 instance=ExtResource("5_bmue8")]
+transform = Transform3D(0.9781476, 0, 0.2079117, 0, 1, 0, -0.2079117, 0, 0.9781476, -1.6, 0.1, -5.4)
+
+[node name="BoardRootBarrier1" type="Node3D" parent="." unique_id=1753855192 instance=ExtResource("6_bxk34")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.7527328, 0.1, -6.2)
+
+[node name="BoardRootBarrier2" type="Node3D" parent="." unique_id=1488832704 instance=ExtResource("6_bxk34")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -5.2916393, 0.1, -6.2)
+
+[node name="BoardRootBarrier3" type="Node3D" parent="." unique_id=1579495514 instance=ExtResource("6_bxk34")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.8305466, 0.1, -6.2)
+
+[node name="BoardRootBarrier4" type="Node3D" parent="." unique_id=13395623 instance=ExtResource("6_bxk34")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -0.36945352, 0.1, -6.2)
+
+[node name="BoardRootBarrier5" type="Node3D" parent="." unique_id=1724843024 instance=ExtResource("6_bxk34")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.0916395, 0.1, -6.2)
+
+[node name="BoardRootBarrier6" type="Node3D" parent="." unique_id=1450426158 instance=ExtResource("6_bxk34")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 4.5527325, 0.1, -6.2)
+
+[node name="BoardWall1" type="Node3D" parent="." unique_id=228857206 instance=ExtResource("7_vhfud")]
+transform = Transform3D(0.99026805, 0, 0.1391731, 0, 1, 0, -0.1391731, 0, 0.99026805, -9.6, 0.1, -8.2)
+
+[node name="BoardWall2" type="Node3D" parent="." unique_id=1051437777 instance=ExtResource("7_vhfud")]
+transform = Transform3D(0.9612617, 0, 0.27563736, 0, 1, 0, -0.27563736, 0, 0.9612617, -7.2, 0.1, -8.8)
+
+[node name="BoardWall3" type="Node3D" parent="." unique_id=2056243807 instance=ExtResource("7_vhfud")]
+transform = Transform3D(0.9975641, 0, 0.06975647, 0, 1, 0, -0.06975647, 0, 0.9975641, -4.8, 0.1, -9.2)
+
+[node name="BoardFence1" type="Node3D" parent="." unique_id=678379836 instance=ExtResource("8_gim65")]
+transform = Transform3D(0.9945219, 0, -0.104528464, 0, 1, 0, 0.104528464, 0, 0.9945219, 4.6, 0.1, -9.4)
+
+[node name="BoardFence2" type="Node3D" parent="." unique_id=1707223762 instance=ExtResource("8_gim65")]
+transform = Transform3D(0.9702957, 0, -0.2419219, 0, 1, 0, 0.2419219, 0, 0.9702957, 8.2, 0.1, -8.8)
+
+[node name="BoardShelterPost1" type="Node3D" parent="." unique_id=1493260639 instance=ExtResource("9_owpiv")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.150001, 0.1, -8.849999)
+
+[node name="BoardShelterPost2" type="Node3D" parent="." unique_id=2092278263 instance=ExtResource("9_owpiv")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.05, 0.1, -8.849999)
+
+[node name="BoardShelterPost3" type="Node3D" parent="." unique_id=1753271320 instance=ExtResource("9_owpiv")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.150001, 0.1, -5.5499997)
+
+[node name="BoardShelterPost4" type="Node3D" parent="." unique_id=930761273 instance=ExtResource("9_owpiv")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.05, 0.1, -5.5499997)
+
+[node name="BoardShelterRoof" type="Node3D" parent="." unique_id=1212805069 instance=ExtResource("10_0wuwp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.6, 1.72, -7.2)
+
+[node name="BoardShelterMound" type="Node3D" parent="." unique_id=24964830 instance=ExtResource("11_uw8br")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.6, 0.1, -6.6)
+
+[node name="WetShore" type="MeshInstance3D" parent="." unique_id=1277016187]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4, 0.106, -0.09999995)
+material_override = SubResource("StandardMaterial3D_7utbi")
+mesh = SubResource("BoxMesh_l62o3")
+
+[node name="NearRock1" type="Node3D" parent="." unique_id=1336675604 instance=ExtResource("3_832w8")]
+transform = Transform3D(0.3325702, 0, 0.070689976, 0, 0.34, 0, -0.070689976, 0, 0.3325702, -2.2, 0.1, 2.2)
+
+[node name="NearRock2" type="Node3D" parent="." unique_id=946568927 instance=ExtResource("3_832w8")]
+transform = Transform3D(0.06298629, 0, 0.27282363, 0, 0.28, 0, -0.27282363, 0, 0.06298629, 1.4, 0.1, 1.8)
+
+[node name="NearRock3" type="Node3D" parent="." unique_id=1302797408 instance=ExtResource("3_832w8")]
+transform = Transform3D(-0.29001847, 0, 0.13523786, 0, 0.32, 0, -0.13523786, 0, -0.29001847, 3.6, 0.1, 2.6)
+
+[node name="NearRock4" type="Node3D" parent="." unique_id=619494855 instance=ExtResource("3_832w8")]
+transform = Transform3D(-0.19052559, 0, -0.10999999, 0, 0.22, 0, 0.10999999, 0, -0.19052559, -1, 0.1, 3.4)
+
+[node name="NearBush1" type="Node3D" parent="." unique_id=832465954 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(0.25980762, 0, 0.15, 0, 0.3, 0, -0.15, 0, 0.25980762, -2.9, 0.1, 2.9)
+
+[node name="NearBush2" type="Node3D" parent="." unique_id=738476630 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(-0.08892521, 0, -0.24432008, 0, 0.26, 0, 0.24432008, 0, -0.08892521, 2.2, 0.1, 3.3)
+
+[node name="NearBush3" type="Node3D" parent="." unique_id=585341593 instance=ExtResource("4_ofe3l")]
+transform = Transform3D(-0.12000001, 0, 0.20784609, 0, 0.24, 0, -0.20784609, 0, -0.12000001, 0.6, 0.1, 4.2)
+
+[node name="BoardSun" type="DirectionalLight3D" parent="." unique_id=321749641]
+transform = Transform3D(0.8480481, -0.21553758, 0.48410532, 0, 0.9135454, 0.40673664, -0.52991927, -0.34493223, 0.77473044, 0, 0, 0)
+light_color = Color(1, 0.9, 0.72, 1)
+light_energy = 1.45
+shadow_enabled = true
+shadow_bias = 0.03
+directional_shadow_max_distance = 45.0
+
+[node name="BoardSkyFill" type="DirectionalLight3D" parent="." unique_id=968347117]
+transform = Transform3D(0.98367745, 0.09909646, -0.15019538, 0, 0.8346924, 0.5507164, 0.179941, -0.5417273, 0.82106805, 0, 0, 0)
+light_color = Color(0.62, 0.72, 0.88, 1)
+light_energy = 0.38
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1052005110]
+environment = SubResource("Environment_cm0km")
+
+[node name="BoardSubjectAnchor" type="Marker3D" parent="." unique_id=1475351843]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 2.4)
