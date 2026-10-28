@@ -101,3 +101,16 @@ Sketchfab 模型**全部未下载**（需登录）；它们只在 `reference_man
 
 > 原始下载文件在 `references/_downloads/`（已 gitignore）。**不得**把 Sketchfab Free Standard / NoAI
 > 许可的资产放进仓库（`mouse_charliecatling` 因此弃用）。
+## 8. ART09：天空球 HDRI（CC0，已入库）
+
+| 资产 | 来源页 | 作者 | 许可 | 署名义务 | 仓库内路径 |
+|---|---|---|---|---|---|
+| 森林天空球 `mossy_forest_2k.hdr` | https://polyhaven.com/a/mossy_forest | Greg Zaal / Poly Haven | **CC0 1.0** | **无**（自愿署名） | `Game/Reborn/assets/environment/hdri/mossy_forest_2k.hdr`（源档另存 `Art/Exports/Env/HDRIs/`） |
+
+- 下载方式：`https://api.polyhaven.com/files/mossy_forest` 返回的匿名直链
+  `https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/mossy_forest_2k.hdr`，无需登录。
+- 字节数：7.25 MB；SHA256 `EAC287225A8D012F9DABF706AA4DD411340F681122C66AE88CF3484FBC716080`。
+- 用途：`l_courtyard.tscn` 的 `PanoramaSkyMaterial`（菜单与实玩的背景天空），由
+  `tests/tool_make_courtyard.gd` 重新生成时保留；生成器里带程序化天空退路（HDRI 缺失不黑屏）。
+- Godot 导入会打印两条 `Ignoring unsupported header information in HDR` 警告（Radiance 头里的
+  GAMMA/PRIMARIES 字段），**不影响纹理**，已实测可正常渲染。
