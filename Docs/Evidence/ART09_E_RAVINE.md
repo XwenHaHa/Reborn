@@ -122,6 +122,8 @@ SUMMARY|checks=48|failures=0
 - 回归：`run_t011_greybox` 229/229、`run_art09_tokens` 15/15、`run_art09_menu_contract` 42/42、
   `run_art09_species_layout` 59/59、`run_art09_hud_layout` 63/63。
 - 截图（同名覆盖）：`Art/Probes/art09_board_after/{ravine_tp,ravine_env_creek,ravine_env_roots,ravine_env_far}.png`
+- `ravine_tp_wide.png` 已删除：取证工具为控制窗口耗时把这台机位从 `SHOTS` 移除，
+  留着旧图会与当前几何/材质不符（误导性证据）。
 
 ### 判读变化
 
