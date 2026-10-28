@@ -606,3 +606,25 @@ $proj = 'E:\Reborn\Game\Reborn'
   （中文变 `玩?`）；该文件当时未跟踪，`git checkout --` 无效 → 用 `Write`+`Edit` 整文件重写恢复并重跑全部契约。
   **再次确认：工程源码只用编辑工具改，不用 PowerShell 管道写回**（T029 也踩过同款）。
 - **下一步**：阶段 F（角色与四态动画 + 授权门），然后 G（整合验收：对照矩阵 + 回归 + 性能）。
+
+### ART09-E2（展板关 A+B 修复轮，2026-10-29，done / 部分达标）
+
+- **A 档（纯代码）**：猫占屏从 ≈1/6 提到 **0.255**（`TP_FOV` 58→45、斜距 1.45 m、下俯 ~11°），
+  并且**量化**：取证工具用 `unproject_position(头顶/脚底)` 输出 `SUBJECT|px_ratio`，
+  超出 [0.20, 0.30] 直接 `CAP|ravine|FAIL` + **退出码 1** —— 以后不用肉眼估构图。
+- **WetShore 直板 → 14 段不规则泥板**（`ShorePlate*`，确定性哈希摆放）；`legacy_wide_shore_removed` 断言守着。
+- **前景散布**：96 株草（bush×0.10–0.22，带风摆）+ 34 颗碎石（boulder×0.05–0.12），全部确定性网格 + 抖动。
+- **水面**：去饱和 + `roughness_base` 0.35 + `specular_amount` 0.25 + `base_alpha` 0.32 + `ripple_scale` 9；
+  河床换 CC0 `dry_river_pebbles`（uv 10×3.4）→ 水下能看到碎石，不再是"纯色蓝板"。
+- **B 档（CC0，已登记 `Docs/THIRD_PARTY_ASSETS.md` §9）**：地面 `forest_floor`（uv 22×24 + tint 0.62/0.66/0.58）、
+  石墙/围栏 `stone_wall_02`（diff+normal+ARM；墙 2.4×1.2、围栏 3.0×2.4）。**只换材质，几何/碰撞不动**。
+- **关键坑（新）**：glb 里 `surface_override_material` **不会**被 `PackedScene.pack()` 保存 ——
+  glb 子网格的 `owner` 指向实例根。要持久化必须把子树 `owner` 认领给场景根（`_own_recursive`）。
+  这条只在展示关做；玩法关不要摊平 glb。
+- **另一条操作教训**：我两次按"行号区间"替换生成器把文件改坏（漏函数头 / 吃掉相邻函数尾巴）。
+  文件已提交 → `git checkout -- <file>` 回 HEAD 后，用**唯一文本锚点**逐条小步改才稳定。
+- **实测**：`run_art09_frame_contract` **48/48**；T011 229/229；art09 tokens/menu/species/hud 15/42/59/63；
+  取证 `SUBJECT|px_ratio=0.255`、4 帧 `save_result=OK`、`CAP|ravine|done`。
+- **仍 FAIL**：水面仍是"一层平水面"（不做浅溪折射/岸线白边，要水材质或 Water 插件）；
+  石墙仍是旧几何平铺（要重建模）；地面偏秋叶色（`forest_leaves_02/03/04` 未定，需负责人选）。
+  落叶卡片缺带 alpha 素材（`dry_decay_leaves` 实测无 alpha，已删）。本关帧率 `NOT-RUN`。

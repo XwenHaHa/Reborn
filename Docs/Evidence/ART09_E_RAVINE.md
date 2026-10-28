@@ -92,3 +92,61 @@ SUMMARY|checks=40|failures=0
 
 删除本阶段新增的 4 个脚本 + `scenes/maps/l_ravine_board.tscn` + `Art/Probes/art09_board_after/` 即可完全回退；
 `l_courtyard.tscn`、`tool_make_courtyard.gd` 与 ART07 未提交改动**未被触碰**。
+
+
+## 7. A+B 修复轮（2026-10-29 追加）
+
+针对 §3 里判 FAIL 的五项，做了「纯代码（A）+ CC0 贴图（B）」的一轮修复。
+
+### 改了什么
+
+| 项 | 根因 | 修法 | 断言 |
+|---|---|---|---|
+| 猫占屏 1/6 | 机位太远 + FOV 58 | 斜距 1.45 m、FOV 58→**45**、相机 y 0.58→0.50、`look.y` 降到 −0.10（下俯 ~11°） | 取证工具用 `unproject_position` 量 `SUBJECT\|px_ratio`，超 [0.20, 0.30] 直接 `CAP\|ravine\|FAIL` + 退出码 1；实测 **0.255** |
+| WetShore 沥青带 | 一块 16×0.55 纯色直板横贯画面 | 删除该节点，改为 **14 段不规则泥板**（长 0.9–2.5 / 宽 0.28–0.62 / yaw ±13° / 明度 0.150–0.225 抖动，确定性哈希摆放） | `shore_plates_at_least_10`、`legacy_wide_shore_removed` |
+| 前景缺草/落叶 | 只有 3 团草 + 4 块石 | 确定性散布 **96 株草**（bush×0.10–0.22，带风摆）+ **34 颗碎石**（boulder×0.05–0.12） | `near_grass_at_least_80`、`near_pebbles_at_least_20` |
+| 溪水像泳池 | 又亮又滑（roughness 0.08 / specular 0.55 / 白沫全屏）+ 河床是纯色板 | 去饱和（shallow 0.20/0.30/0.30、deep 0.06/0.11/0.12）、**粗糙度 0.35**、**镜面 0.25**、`base_alpha` 0.55→**0.32**、`ripple_scale` 3→**9**、`foam_strength` 0.55→0.35；河床换 **`dry_river_pebbles` CC0 贴图**（uv 10×3.4） | `water_alpha_le_0_45`、`water_roughness_ge_0_25`、`water_finer_ripples`、`creek_bed_textured` |
+| 矮墙/围栏低模石皮 | 旧低模石皮、无贴图 | glb 表面 override 成 **`stone_wall_02`**（diff+normal+ARM；墙 uv 2.4×1.2、围栏 3.0×2.4）；地面换 **`forest_floor`**（uv 22×24，并压一档 albedo 拉回冷绿） | `stone_wall_textured`、`ground_textured` |
+
+### 结果
+
+```text
+SUBJECT|px_ratio=0.255|target=0.20..0.30
+FRAME_CONTRACT|counts|{ "near_grass": 96, "near_pebbles": 34, "shore_plates": 14,
+  "legacy_wide_shore": 0, "walls": 3, "fences": 2, ... }
+SUMMARY|checks=48|failures=0
+```
+
+- `run_art09_frame_contract.gd`：**48/48**（原 40 条 + 本轮新增 8 条）。
+- `tool_capture_art09_board.gd -- ravine`：`SUBJECT|px_ratio=0.255`、4 帧 `save_result=OK`、`CAP|ravine|done`、exit 0。
+- 回归：`run_t011_greybox` 229/229、`run_art09_tokens` 15/15、`run_art09_menu_contract` 42/42、
+  `run_art09_species_layout` 59/59、`run_art09_hud_layout` 63/63。
+- 截图（同名覆盖）：`Art/Probes/art09_board_after/{ravine_tp,ravine_env_creek,ravine_env_roots,ravine_env_far}.png`
+
+### 判读变化
+
+| 项 | 上一轮 | 本轮 |
+|---|---|---|
+| 猫占屏比 | FAIL（≈1/6） | **PASS**（0.255，展板约 1/4） |
+| 岸边「沥青带」 | FAIL | **PASS**（打散成 14 段泥板，不再有单一长条） |
+| 前景散布 | FAIL | **PASS**（96 草 + 34 石） |
+| 溪水像泳池 | FAIL | **部分改善、仍 FAIL**：颜色/高光/透明度压下来了、水下碎石可见，但**仍是一层平水面**，没有浅溪的折射与岸线白边 |
+| 石墙/围栏 | FAIL | **部分改善、仍 FAIL**：已换 CC0 扫描石皮（带法线/粗糙度），但仍是旧几何平铺，模块缝与体量密度不如展板 |
+| 地面 | FAIL | **部分改善**：`forest_floor` 是「秋叶+砾石」色系，靠 tint 拉回冷绿，仍偏"秋叶地"；更合适的 `forest_leaves_02/03/04` 未下载（待负责人定） |
+
+### 本轮踩的坑（含我自己的操作事故）
+
+1. **glb 的 `surface_override_material` 不会自动进 `pack()`**：glb 子网格的 `owner` 指向实例根，
+   `PackedScene.pack()` 只序列化 owner 指向场景根的节点 → 覆盖材质丢失（`stone_wall_textured` 抓到）。
+   修法：套完材质后把整棵子树 `owner` 认领给场景根（`_own_recursive`，**只在展示关这么做**）。
+2. **两次按行号区间替换把生成器改坏**（漏掉函数头 / 吃掉相邻函数尾部）。该文件已提交，
+   于是 `git checkout -- <file>` 回到 HEAD，再用**唯一锚点**逐条改才稳定。
+   教训：大段重写不要猜行号区间；先回退到已提交版本，再小步精确改。
+3. `dry_decay_leaves` 想当落叶卡片，实测**没有 alpha 通道**，已删除未入库（见 `Docs/THIRD_PARTY_ASSETS.md` §9）。
+
+### 仍未做（明确边界）
+
+- 展板级水面需要带流动法线/泡沫遮罩的水材质或 Water 插件（C 档，需授权/工时）。
+- 落叶卡片需要带 alpha 的素材（CC0 没有现成的；可 Blender 自制 alpha card，属美术工时）。
+- 石墙要真正像展板需要重新建模不规则砌体（C 档，1–2 天）。
+- 本关性能仍未实测（`tool_perf_probe` 未跑，`NOT-RUN`）；网格数从 48 涨到 189（散布 + 摊平的石墙子树）。

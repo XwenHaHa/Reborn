@@ -11,18 +11,22 @@ const BODY := "res://scenes/characters/animal_body.tscn"
 const CAT_CFG := "res://resources/species/cat.tres"
 
 const RES := Vector2i(1280, 720)
-const SETTLE := 10
+const SETTLE := 6
 
-## 第三人称：站在主体后上方，视线穿过主体落进溪谷（下俯 ~12°）
-const TP_OFFSET := Vector3(0.45, 0.58, 1.35)
-const TP_LOOK := Vector3(0.02, 0.14, -2.60)
-const TP_FOV := 58.0
+## 第三人称：站在主体后上方，视线穿过主体落进溪谷（下俯 ~11°）
+## 取景算过：FOV 45 + 斜距 ≈1.5 m 时，0.31 m 高的猫约占总高 0.25（展板约 1/4）
+const TP_OFFSET := Vector3(0.42, 0.50, 1.45)
+const TP_LOOK := Vector3(0.02, -0.10, -2.20)
+const TP_FOV := 45.0
 const TP_NEAR := 0.05
+## 主体占屏高比的目标区间（`unproject_position` 实测，不是肉眼估）
+const SUBJECT_RATIO_MIN := 0.20
+const SUBJECT_RATIO_MAX := 0.30
+
+var _failed := false
 
 ## 其余环境机位（同一场景、不同取景）
 const SHOTS := [
-	{"tag": "ravine_tp_wide", "pos": Vector3(1.15, 0.70, 2.20),
-		"look": Vector3(-0.20, 0.22, -3.20), "fov": 50.0},
 	{"tag": "ravine_env_creek", "pos": Vector3(0.60, 0.40, 0.20),
 		"look": Vector3(4.00, 0.14, -3.20), "fov": 42.0},
 	{"tag": "ravine_env_roots", "pos": Vector3(-0.20, 0.50, -3.00),
@@ -40,7 +44,7 @@ func _initialize() -> void:
 	print("CAP|ravine|begin")
 	await _run()
 	print("CAP|ravine|done")
-	quit(0)
+	quit(1 if _failed else 0)
 
 
 func _run() -> void:
@@ -61,6 +65,16 @@ func _run() -> void:
 	var cam := _make_camera(level, "TPCamera", subject_at + TP_OFFSET,
 		subject_at + TP_LOOK, TP_FOV, true)
 	cam.current = true
+	# 主体占屏高比：用 unproject 实测（不再"看着差不多"）
+	for i in 4:
+		await process_frame
+	var ratio := _subject_px_ratio(cam, body)
+	print("SUBJECT|px_ratio=%.3f|target=%.2f..%.2f" % [
+		ratio, SUBJECT_RATIO_MIN, SUBJECT_RATIO_MAX,
+	])
+	if ratio < SUBJECT_RATIO_MIN or ratio > SUBJECT_RATIO_MAX:
+		print("CAP|ravine|FAIL|subject_ratio_out_of_range")
+		_failed = true
 	await _save("ravine_tp")
 
 	for shot in SHOTS:
@@ -151,3 +165,17 @@ func _save(tag: String) -> void:
 	print("CAP|ravine|%s|save_result=%d (%s)|%s" % [
 		tag, err, "OK" if err == OK else "FAIL", ProjectSettings.globalize_path(path),
 	])
+
+
+## 主体占屏高比 = 头顶到脚底在屏幕上的像素跨度 / 视口高。
+## 高度取"模型实际高 ≈ 胶囊高 × 0.65"（ART02/ART06 实测关系），不用胶囊总高虚报。
+func _subject_px_ratio(cam: Camera3D, body: AnimalBody) -> float:
+	if cam == null or body == null or not is_instance_valid(body):
+		return 0.0
+	var cfg: SpeciesConfig = body.species_config
+	var h := (cfg.capsule_height() * 0.65) if cfg != null else 0.31
+	var feet := body.global_position
+	var head := feet + Vector3(0.0, h, 0.0)
+	var a := cam.unproject_position(feet)
+	var b := cam.unproject_position(head)
+	return absf(b.y - a.y) / float(RES.y)

@@ -114,3 +114,28 @@ Sketchfab 模型**全部未下载**（需登录）；它们只在 `reference_man
   `tests/tool_make_courtyard.gd` 重新生成时保留；生成器里带程序化天空退路（HDRI 缺失不黑屏）。
 - Godot 导入会打印两条 `Ignoring unsupported header information in HDR` 警告（Radiance 头里的
   GAMMA/PRIMARIES 字段），**不影响纹理**，已实测可正常渲染。
+
+
+## 9. ART09-E：展板切片关用的 1K 贴图（CC0，已入库）
+
+来源站点 **Poly Haven**（许可 CC0 1.0，无需署名），下载走 `api.polyhaven.com/files/<id>` 返回的匿名直链。
+入库路径统一在 `Game/Reborn/assets/environment/tex/`（`.jpg` 走 Git LFS）。
+
+| 用途 | 资产页 | 文件（仓库内） | 字节 | SHA256 前 16 位 |
+|---|---|---|---|---|
+| 溪床碎石 | https://polyhaven.com/a/dry_river_pebbles | `dry_river_pebbles_diff_1k.jpg` | 876,543 | `FEE6E37AFDA03968` |
+| 〃 | 〃 | `dry_river_pebbles_nor_gl_1k.jpg` | 1,137,664 | `6E266F6CDE5ED79B` |
+| 〃 | 〃 | `dry_river_pebbles_arm_1k.jpg` | 795,648 | `325D28A518B0DD30` |
+| 森林地表 | https://polyhaven.com/a/forest_floor | `forest_floor_diff_1k.jpg` | 1,330,176 | `F12E5ADEA1741F9E` |
+| 〃 | 〃 | `forest_floor_nor_gl_1k.jpg` | 1,380,352 | `681F3DE8C756C4D1` |
+| 〃 | 〃 | `forest_floor_arm_1k.jpg` | 931,840 | `B9443866B3171946` |
+| 石墙 | https://polyhaven.com/a/stone_wall_02 | `stone_wall_02_diff_1k.jpg` | 621,568 | `546C51130575B57D` |
+| 〃 | 〃 | `stone_wall_02_nor_gl_1k.jpg` | 981,733 | `47C4EE16834A755D` |
+| 〃 | 〃 | `stone_wall_02_arm_1k.jpg` | 715,776 | `7EA36EF84B82847F` |
+
+- 用法：`tool_make_ravine_board.gd` 的 `_make_tex_material()` 把 diff/nor_gl/arm 拼成 `StandardMaterial3D`
+  （arm 通道：R=AO、G=Roughness、B=Metallic），只用于 `l_ravine_board.tscn`；**庭院关不受影响**。
+- 已知问题：`forest_floor` 是"秋叶+砾石"色系，与本场景冷绿基调冲突，目前靠 `albedo_color`
+  压一档（0.62/0.66/0.58）拉了回来；更合适的候选是 `forest_leaves_02/03/04`（未下载，需负责人定）。
+- 曾尝试 `dry_decay_leaves`（PNG 1K，6.1 MB）：**实测无 alpha 通道**（角落与中心 alpha 均为 255），
+  不能当落叶卡片用，已删除未入库；做落叶需要带 alpha 的素材或 Blender 自制卡片。

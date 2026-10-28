@@ -76,6 +76,15 @@ func _run() -> void:
 		_check("creek_water_group", water.is_in_group("water_bodies"))
 		_check("creek_water_no_collision", _count_type(water, "CollisionShape3D") == 0)
 		_check("creek_water_shader", water.material_override is ShaderMaterial)
+		var wmat := water.material_override as ShaderMaterial
+		if wmat != null:
+			# 首轮"像泳池"的根因：水又亮又滑又挡底。这里把修好后必须成立的三条钉住。
+			_check("water_alpha_le_0_45",
+				float(wmat.get_shader_parameter(&"base_alpha")) <= 0.45)
+			_check("water_roughness_ge_0_25",
+				float(wmat.get_shader_parameter(&"roughness_base")) >= 0.25)
+			_check("water_finer_ripples",
+				float(wmat.get_shader_parameter(&"ripple_scale")) >= 6.0)
 
 	# --- 装饰件数量 ---
 	var counts := {
@@ -86,8 +95,10 @@ func _run() -> void:
 		"walls": _count_prefix(level, "BoardWall"),
 		"fences": _count_prefix(level, "BoardFence"),
 		"shelter_posts": _count_prefix(level, "BoardShelterPost"),
-		"near_rocks": _count_prefix(level, "NearRock"),
-		"near_bushes": _count_prefix(level, "NearBush"),
+		"near_grass": _count_prefix(level, "NearGrass"),
+		"near_pebbles": _count_prefix(level, "NearPebble"),
+		"shore_plates": _count_prefix(level, "ShorePlate"),
+		"legacy_wide_shore": _count_prefix(level, "WetShore"),
 	}
 	print("FRAME_CONTRACT|counts|%s" % str(counts))
 	_check("boulders_at_least_5", int(counts["boulders"]) >= 5)
@@ -96,12 +107,18 @@ func _run() -> void:
 	_check("root_barrier_tiled", int(counts["root_barrier"]) >= 4)
 	_check("far_frames_present", int(counts["walls"]) >= 2 and int(counts["fences"]) >= 1)
 	_check("shelter_posts_4", int(counts["shelter_posts"]) == 4)
-	_check("near_clutter_present",
-		int(counts["near_rocks"]) >= 3 and int(counts["near_bushes"]) >= 2)
+	# 前景散布：草 ≥80、碎石 ≥20；岸边泥板 ≥10 且**旧的那条直板已删除**
+	_check("near_grass_at_least_80", int(counts["near_grass"]) >= 80)
+	_check("near_pebbles_at_least_20", int(counts["near_pebbles"]) >= 20)
+	_check("shore_plates_at_least_10", int(counts["shore_plates"]) >= 10)
+	_check("legacy_wide_shore_removed", int(counts["legacy_wide_shore"]) == 0)
 	_check("root_hole_visible", level.get_node_or_null("BoardRootHole") != null)
 	_check("ground_exists", level.get_node_or_null("Ground") != null)
 	_check("creek_bed_exists", level.get_node_or_null("CreekBed") != null)
-	_check("wet_shore_exists", level.get_node_or_null("WetShore") != null)
+	_check_textured(level.get_node_or_null("Ground") as MeshInstance3D, "ground_textured")
+	_check_textured(level.get_node_or_null("CreekBed") as MeshInstance3D, "creek_bed_textured")
+	var wall := level.get_node_or_null("BoardWall1") as Node3D
+	_check("stone_wall_textured", _instance_has_texture(wall))
 	var mesh_total := _count_type(level, "MeshInstance3D")
 	print("FRAME_CONTRACT|meshes=%d" % mesh_total)
 	_check("mesh_density", mesh_total >= 40)
@@ -167,3 +184,35 @@ func _finish() -> void:
 	print("SUMMARY|checks=%d|failures=%d" % [_checks, _fails])
 	print("RESULT|%s" % ("PASS" if _fails == 0 else "FAIL"))
 	quit(0 if _fails == 0 else 1)
+
+
+## 材质必须真的带贴图（首轮地面/河床是纯色，读起来"没有材质"）
+func _check_textured(mi: MeshInstance3D, label: String) -> void:
+	if mi == null:
+		_check(label, false)
+		return
+	var mat := mi.material_override as StandardMaterial3D
+	_check(label, mat != null and mat.albedo_texture != null and mat.normal_enabled)
+
+
+## glb 实例：任一网格表面的 override 材质带 albedo 贴图即算"已换材质"
+func _instance_has_texture(inst: Node3D) -> bool:
+	if inst == null:
+		return false
+	for mi in _meshes_of_test(inst):
+		if mi.mesh == null:
+			continue
+		for i in mi.mesh.get_surface_count():
+			var mat := mi.get_surface_override_material(i) as StandardMaterial3D
+			if mat != null and mat.albedo_texture != null:
+				return true
+	return false
+
+
+func _meshes_of_test(n: Node) -> Array[MeshInstance3D]:
+	var out: Array[MeshInstance3D] = []
+	if n is MeshInstance3D:
+		out.append(n as MeshInstance3D)
+	for child in n.get_children():
+		out.append_array(_meshes_of_test(child))
+	return out

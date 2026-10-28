@@ -22,7 +22,7 @@ const GROUND_TOP := 0.10
 ## 溪流：横穿中景的一条带（镜头朝 −Z 看，水面在 z≈−2.6；宽 16 m、进深 4.6 m）
 const CREEK_CENTER := Vector3(2.4, 0.12, -2.6)
 const CREEK_SIZE := Vector3(16.0, 0.03, 4.6)
-const CREEK_BED_SIZE := Vector3(16.0, 0.02, 5.0)
+const CREEK_BED_SIZE := Vector3(15.6, 0.02, 4.2)
 
 ## 岩石：前中后三档，前档做遮挡、中档做落点、后档做轮廓
 const BOULDERS := [
@@ -103,6 +103,26 @@ const ROOF_ASSET := "res://assets/environment/sm_roof_001.glb"
 const MOUND_ASSET := "res://assets/environment/sm_mound_001.glb"
 const SKY_HDRI_PATH := "res://assets/environment/hdri/mossy_forest_2k.hdr"
 
+## ART09-E-2：Poly Haven CC0 贴图（1K，diffuse + nor_gl + arm），登记在 `Docs/THIRD_PARTY_ASSETS.md` §9
+const TEX_DIR := "res://assets/environment/tex/"
+const TEX_PEBBLES_DIFF := TEX_DIR + "dry_river_pebbles_diff_1k.jpg"
+const TEX_PEBBLES_NOR := TEX_DIR + "dry_river_pebbles_nor_gl_1k.jpg"
+const TEX_PEBBLES_ARM := TEX_DIR + "dry_river_pebbles_arm_1k.jpg"
+const TEX_FLOOR_DIFF := TEX_DIR + "forest_floor_diff_1k.jpg"
+const TEX_FLOOR_NOR := TEX_DIR + "forest_floor_nor_gl_1k.jpg"
+const TEX_FLOOR_ARM := TEX_DIR + "forest_floor_arm_1k.jpg"
+const TEX_STONE_DIFF := TEX_DIR + "stone_wall_02_diff_1k.jpg"
+const TEX_STONE_NOR := TEX_DIR + "stone_wall_02_nor_gl_1k.jpg"
+const TEX_STONE_ARM := TEX_DIR + "stone_wall_02_arm_1k.jpg"
+
+## 近景散布（确定性网格 + 抖动，不用随机数）
+const SCATTER_GRASS := 96
+const SCATTER_PEBBLE := 34
+const SCATTER_BAND_X := Vector2(-7.0, 9.0)
+const SCATTER_BAND_Z := Vector2(0.4, 9.0)
+## 岸边泥板（取代上一版那条 16×0.55 的直板）
+const SHORE_PLATE_COUNT := 14
+
 ## 第三人称机位的站位锚点（`tool_capture_art09_board.gd` 用它放主体）
 const SUBJECT_ANCHOR := Vector3(0.0, 0.10, 2.4)
 
@@ -143,18 +163,24 @@ func _add_ground(parent: Node3D) -> void:
 	bm.size = GROUND_SIZE
 	mi.mesh = bm
 	mi.position = Vector3(0.0, GROUND_TOP - GROUND_SIZE.y * 0.5, 0.0)
-	var shader_res := load(GROUND_SHADER) as Shader
-	if shader_res != null:
-		var smat := ShaderMaterial.new()
-		smat.shader = shader_res
-		# 近景机位要看到"草/土/枯草"的斑块：庭院那套低频斑块（0.09）在这里会糊成一整片绿
-		smat.set_shader_parameter(&"patch_scale", 0.34)
-		smat.set_shader_parameter(&"grain_strength", 0.18)
-		smat.set_shader_parameter(&"contrast", 0.62)
-		smat.set_shader_parameter(&"color_grass", Color(0.196, 0.235, 0.168))
-		smat.set_shader_parameter(&"color_dirt", Color(0.247, 0.216, 0.176))
-		smat.set_shader_parameter(&"color_dry", Color(0.298, 0.286, 0.204))
-		mi.material_override = smat
+	# 地面：优先 Poly Haven CC0 森林地表贴图（albedo + normal + ARM），缺失时退回程序化 shader
+	var floor_mat := _make_tex_material(TEX_FLOOR_DIFF, TEX_FLOOR_NOR, TEX_FLOOR_ARM,
+		Vector2(22.0, 24.0), 0.96)
+	if floor_mat != null:
+		# `forest_floor` 是"秋叶+砾石"色系，和本场景的冷绿基调冲，压一档并把饱和度往绿偏
+		floor_mat.albedo_color = Color(0.62, 0.66, 0.58)
+		mi.material_override = floor_mat
+		print("TOOL|Ground|material=forest_floor|uv=9x9")
+	else:
+		var shader_res := load(GROUND_SHADER) as Shader
+		if shader_res != null:
+			var smat := ShaderMaterial.new()
+			smat.shader = shader_res
+			smat.set_shader_parameter(&"patch_scale", 0.34)
+			smat.set_shader_parameter(&"grain_strength", 0.18)
+			smat.set_shader_parameter(&"contrast", 0.62)
+			mi.material_override = smat
+			print("TOOL|Ground|material=shader_fallback")
 	parent.add_child(mi)
 	mi.owner = parent
 
@@ -164,10 +190,16 @@ func _add_ground(parent: Node3D) -> void:
 	bed_mesh.size = CREEK_BED_SIZE
 	bed.mesh = bed_mesh
 	bed.position = Vector3(CREEK_CENTER.x, GROUND_TOP + 0.005, CREEK_CENTER.z)
-	var bed_mat := StandardMaterial3D.new()
-	bed_mat.albedo_color = Color(0.238, 0.220, 0.196)
-	bed_mat.roughness = 0.95
-	bed.material_override = bed_mat
+	var bed_mat := _make_tex_material(TEX_PEBBLES_DIFF, TEX_PEBBLES_NOR, TEX_PEBBLES_ARM,
+		Vector2(10.0, 3.4), 0.92)
+	if bed_mat != null:
+		bed.material_override = bed_mat
+		print("TOOL|CreekBed|material=dry_river_pebbles")
+	else:
+		var plain := StandardMaterial3D.new()
+		plain.albedo_color = Color(0.238, 0.220, 0.196)
+		plain.roughness = 0.95
+		bed.material_override = plain
 	parent.add_child(bed)
 	bed.owner = parent
 	print("TOOL|Ground|size=%s|top=%.3f" % [GROUND_SIZE, GROUND_TOP])
@@ -185,14 +217,20 @@ func _add_creek(parent: Node3D) -> void:
 	if shader_res != null:
 		var smat := ShaderMaterial.new()
 		smat.shader = shader_res
-		smat.set_shader_parameter(&"shallow_color", Color(0.216, 0.412, 0.451))
-		smat.set_shader_parameter(&"deep_color", Color(0.075, 0.176, 0.208))
-		smat.set_shader_parameter(&"foam_color", Color(0.800, 0.850, 0.860))
+		# 去饱和 + 抬粗糙度 + 压镜面 + 降 alpha —— 首轮"像泳池"的主因是又亮又滑又挡底
+		smat.set_shader_parameter(&"shallow_color", Color(0.200, 0.300, 0.300))
+		smat.set_shader_parameter(&"deep_color", Color(0.060, 0.110, 0.120))
+		smat.set_shader_parameter(&"foam_color", Color(0.760, 0.800, 0.800))
 		smat.set_shader_parameter(&"flow_dir", Vector2(-0.94, 0.34))
-		smat.set_shader_parameter(&"flow_speed", 0.38)
-		smat.set_shader_parameter(&"ripple_scale", 3.0)
-		smat.set_shader_parameter(&"ripple_strength", 0.30)
-		smat.set_shader_parameter(&"base_alpha", 0.55)
+		smat.set_shader_parameter(&"flow_speed", 0.22)
+		smat.set_shader_parameter(&"ripple_scale", 9.0)
+		smat.set_shader_parameter(&"ripple_strength", 0.18)
+		smat.set_shader_parameter(&"warp_amount", 1.2)
+		smat.set_shader_parameter(&"foam_width", 0.09)
+		smat.set_shader_parameter(&"foam_strength", 0.35)
+		smat.set_shader_parameter(&"base_alpha", 0.32)
+		smat.set_shader_parameter(&"roughness_base", 0.35)
+		smat.set_shader_parameter(&"specular_amount", 0.25)
 		mi.material_override = smat
 		print("TOOL|Creek|water=shader|%s" % WATER_SHADER)
 	else:
@@ -216,11 +254,11 @@ func _add_shores(parent: Node3D) -> void:
 		var mi := MeshInstance3D.new()
 		mi.name = "MudTongue%d" % i
 		var bm := BoxMesh.new()
-		bm.size = Vector3(size.x, 0.05, size.y)
+		bm.size = Vector3(size.x, 0.03, size.y)
 		mi.mesh = bm
 		mi.position = (spot["pos"] as Vector3) + Vector3(0.0, GROUND_TOP + 0.004, 0.0)
 		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(0.196, 0.180, 0.157)
+		mat.albedo_color = Color(0.262, 0.236, 0.202)
 		mat.roughness = 0.92
 		mi.material_override = mat
 		parent.add_child(mi)
@@ -351,6 +389,7 @@ func _add_far_frames(parent: Node3D) -> void:
 			inst.rotation_degrees = Vector3(0.0, float(spot["yaw"]), 0.0)
 			parent.add_child(inst)
 			inst.owner = parent
+			_apply_stone_to_instance(inst, Vector2(2.4, 1.2))
 	var fences := 0
 	if ResourceLoader.exists(FENCE_ASSET):
 		var ps: PackedScene = load(FENCE_ASSET) as PackedScene
@@ -362,6 +401,7 @@ func _add_far_frames(parent: Node3D) -> void:
 			inst.rotation_degrees = Vector3(0.0, float(spot["yaw"]), 0.0)
 			parent.add_child(inst)
 			inst.owner = parent
+			_apply_stone_to_instance(inst, Vector2(3.0, 2.4))
 	_add_shelter(parent)
 	print("TOOL|FarFrames|walls=%d|fences=%d" % [walls, fences])
 
@@ -397,46 +437,41 @@ func _add_shelter(parent: Node3D) -> void:
 
 
 func _add_near_clutter(parent: Node3D) -> void:
-	var shore := MeshInstance3D.new()
-	shore.name = "WetShore"
-	var sm := BoxMesh.new()
-	sm.size = Vector3(CREEK_SIZE.x, 0.03, 0.55)
-	shore.mesh = sm
-	shore.position = Vector3(CREEK_CENTER.x, GROUND_TOP + 0.006,
-		CREEK_CENTER.z + CREEK_SIZE.z * 0.5 + 0.20)
-	var shore_mat := StandardMaterial3D.new()
-	shore_mat.albedo_color = Color(0.145, 0.133, 0.114)
-	shore_mat.roughness = 0.72
-	shore.material_override = shore_mat
-	parent.add_child(shore)
-	shore.owner = parent
+	_add_shore_plates(parent)
 
-	var rocks := 0
-	if ResourceLoader.exists(BOULDER_ASSET):
-		var ps: PackedScene = load(BOULDER_ASSET) as PackedScene
-		for spot in NEAR_ROCKS:
-			rocks += 1
-			var inst: Node3D = ps.instantiate() as Node3D
-			inst.name = "NearRock%d" % rocks
-			inst.position = (spot["pos"] as Vector3) + Vector3(0.0, GROUND_TOP, 0.0)
-			inst.rotation_degrees = Vector3(0.0, float(spot["yaw"]), 0.0)
-			inst.scale = Vector3.ONE * float(spot["scale"])
-			parent.add_child(inst)
-			inst.owner = parent
-	var bushes := 0
+	# 近景草：确定性散布 96 株（同一套 bush 资产缩到 0.10–0.22），带风摆
+	var grass := 0
 	if ResourceLoader.exists(BUSH_ASSET):
-		var ps: PackedScene = load(BUSH_ASSET) as PackedScene
-		for spot in NEAR_BUSHES:
-			bushes += 1
-			var inst: Node3D = ps.instantiate() as Node3D
-			inst.name = "NearBush%d" % bushes
-			inst.position = (spot["pos"] as Vector3) + Vector3(0.0, GROUND_TOP, 0.0)
-			inst.rotation_degrees = Vector3(0.0, float(spot["yaw"]), 0.0)
-			inst.scale = Vector3.ONE * float(spot["scale"])
+		var bush: PackedScene = load(BUSH_ASSET) as PackedScene
+		for i in SCATTER_GRASS:
+			var p := _scatter_point(i, 0.37)
+			var inst: Node3D = bush.instantiate() as Node3D
+			inst.name = "NearGrass%d" % (i + 1)
+			inst.position = p + Vector3(0.0, GROUND_TOP, 0.0)
+			inst.rotation_degrees = Vector3(0.0, float(i) * 37.0, 0.0)
+			inst.scale = Vector3.ONE * (0.10 + 0.12 * _hash01(i, 5.7))
 			parent.add_child(inst)
 			inst.owner = parent
 			_apply_grass_wind(inst)
-	print("TOOL|NearClutter|rocks=%d|bushes=%d" % [rocks, bushes])
+			grass += 1
+
+	# 近景碎石：34 颗（巨石缩到 0.05–0.12）
+	var pebbles := 0
+	if ResourceLoader.exists(BOULDER_ASSET):
+		var boulder: PackedScene = load(BOULDER_ASSET) as PackedScene
+		for i in SCATTER_PEBBLE:
+			var p := _scatter_point(i, 0.71)
+			var inst: Node3D = boulder.instantiate() as Node3D
+			inst.name = "NearPebble%d" % (i + 1)
+			inst.position = p + Vector3(0.0, GROUND_TOP, 0.0)
+			inst.rotation_degrees = Vector3(0.0, float(i) * 53.0, 0.0)
+			inst.scale = Vector3.ONE * (0.05 + 0.07 * _hash01(i, 2.3))
+			parent.add_child(inst)
+			inst.owner = parent
+			pebbles += 1
+	print("TOOL|NearClutter|grass=%d|pebbles=%d|shore_plates=%d" % [
+		grass, pebbles, SHORE_PLATE_COUNT,
+	])
 
 
 # ---------------------------------------------------------------------------
@@ -524,3 +559,104 @@ func _add_subject_anchor(parent: Node3D) -> void:
 	parent.add_child(marker)
 	marker.owner = parent
 	print("TOOL|Anchor|subject=%s" % SUBJECT_ANCHOR)
+
+
+## 湿泥岸：14 段**不规则**泥板（长 0.9–2.5、宽 0.28–0.62、yaw ±13°、明度抖动）。
+## 取代上一版那条 16×0.55 直板——直板在截图里读成"一条沥青带"（ART09-E 证据 §3）。
+func _add_shore_plates(parent: Node3D) -> void:
+	var half := CREEK_SIZE.z * 0.5
+	for i in SHORE_PLATE_COUNT:
+		var near_edge := i % 2 == 0
+		var edge_z := CREEK_CENTER.z + half if near_edge else CREEK_CENTER.z - half
+		var t := (_hash01(i, 1.7) - 0.5) * CREEK_SIZE.x * 0.92
+		var w := 0.9 + 1.6 * _hash01(i, 2.9)
+		var d := 0.28 + 0.34 * _hash01(i, 4.1)
+		var offset_z := (0.12 + 0.16 * _hash01(i, 6.3)) * (1.0 if near_edge else -1.0)
+		var mi := MeshInstance3D.new()
+		mi.name = "ShorePlate%d" % (i + 1)
+		var bm := BoxMesh.new()
+		bm.size = Vector3(w, 0.02, d)
+		mi.mesh = bm
+		mi.position = Vector3(CREEK_CENTER.x + t, GROUND_TOP + 0.004, edge_z + offset_z)
+		mi.rotation_degrees = Vector3(0.0, (_hash01(i, 8.1) - 0.5) * 26.0, 0.0)
+		var shade := 0.150 + 0.075 * _hash01(i, 9.7)
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(shade, shade * 0.93, shade * 0.84)
+		mat.roughness = 0.86
+		mi.material_override = mat
+		parent.add_child(mi)
+		mi.owner = parent
+
+
+## 用 Poly Haven 的 diff / nor_gl / arm 三张 1K 贴图拼一个 `StandardMaterial3D`
+## （arm 打包：R = AO、G = Roughness、B = Metallic）。贴图缺失时返回 null，调用方退回纯色。
+func _make_tex_material(diff: String, nor: String, arm: String, uv_scale: Vector2,
+		rough_override: float = -1.0) -> StandardMaterial3D:
+	if not (ResourceLoader.exists(diff) and ResourceLoader.exists(nor) and ResourceLoader.exists(arm)):
+		return null
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = load(diff) as Texture2D
+	mat.normal_enabled = true
+	mat.normal_texture = load(nor) as Texture2D
+	var arm_tex := load(arm) as Texture2D
+	if arm_tex != null:
+		mat.ao_enabled = true
+		mat.ao_texture = arm_tex
+		mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		mat.roughness_texture = arm_tex
+		mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+	mat.uv1_scale = Vector3(uv_scale.x, uv_scale.y, 1.0)
+	if rough_override >= 0.0:
+		mat.roughness = rough_override
+	mat.metallic = 0.0
+	return mat
+
+
+## 把石墙贴图套到某个 glb 实例的所有表面上（只换材质，几何与碰撞不动）。
+## 必须在**入树之后**调用：入树前套的 override 在 `PackedScene.pack()` 里会丢（实测）。
+func _apply_stone_to_instance(inst: Node3D, uv_scale: Vector2) -> int:
+	var mat := _make_tex_material(TEX_STONE_DIFF, TEX_STONE_NOR, TEX_STONE_ARM, uv_scale, 0.92)
+	if mat == null:
+		return 0
+	var applied := 0
+	for mi in _meshes_of(inst):
+		if mi.mesh == null:
+			continue
+		for i in mi.mesh.get_surface_count():
+			mi.set_surface_override_material(i, mat)
+			applied += 1
+	# glb 的子网格 owner 是实例根，`pack()` 只存 owner 指向场景根的节点 → override 会丢。
+	# 所以把整棵子树认领给场景根（展示关里可以摊平；玩法关不这么做）。
+	if inst.owner != null:
+		_own_recursive(inst, inst.owner)
+	return applied
+
+
+func _own_recursive(n: Node, owner_node: Node) -> void:
+	for child in n.get_children():
+		child.owner = owner_node
+		_own_recursive(child, owner_node)
+
+
+func _meshes_of(n: Node) -> Array[MeshInstance3D]:
+	var out: Array[MeshInstance3D] = []
+	if n is MeshInstance3D:
+		out.append(n as MeshInstance3D)
+	for child in n.get_children():
+		out.append_array(_meshes_of(child))
+	return out
+
+
+## 确定性 0..1 伪随机（不用 RandomNumberGenerator，重跑结果一致）
+func _hash01(i: int, salt: float) -> float:
+	var s := sin(float(i) * 12.9898 + salt * 78.233) * 43758.5453
+	return s - floorf(s)
+
+
+func _scatter_point(i: int, salt: float) -> Vector3:
+	var u := _hash01(i * 2 + 1, salt)
+	var v := _hash01(i * 2 + 2, salt + 3.1)
+	return Vector3(
+		lerpf(SCATTER_BAND_X.x, SCATTER_BAND_X.y, u), 0.0,
+		lerpf(SCATTER_BAND_Z.x, SCATTER_BAND_Z.y, v)
+	)
