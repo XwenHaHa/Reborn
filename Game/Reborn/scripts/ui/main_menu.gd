@@ -42,15 +42,17 @@ const TAGLINE := "不同的生命 · 同一个世界"
 const TAGLINE_2 := "在轮回中相遇 · 在生存中延续"
 const VERSION_TAG := "v0.1.0 · MVP Demo"
 
+## 颜色：与 `BoardTokens` 同族；`run_art09_tokens.gd` 按 0.03 容差核对，防止两处各调一套
 const COLOR_TEXT := Color(0.949, 0.929, 0.882)
 const COLOR_DIM := Color(0.596, 0.639, 0.612)
 const COLOR_FAINT := Color(0.396, 0.443, 0.427)
 const COLOR_ACCENT := Color(0.851, 0.588, 0.227)
 const COLOR_ACCENT_DIM := Color(0.431, 0.325, 0.157)
-const COLOR_PANEL := Color(0.043, 0.071, 0.078, 0.780)
-const COLOR_PANEL_SEL := Color(0.086, 0.133, 0.145, 0.900)
+const COLOR_PANEL := Color(0.035, 0.047, 0.049, 0.900)
+const COLOR_PANEL_SEL := Color(0.090, 0.103, 0.093, 0.965)
 
-const PREVIEW_PX := 96
+## 缩略图边长/超采样：真源在 `BoardTokens`，这里只做同值别名（断言守着，见 `run_art09_tokens.gd`）
+const PREVIEW_PX := 64
 const PREVIEW_SUPERSAMPLE := 2
 
 var _configs: Array[SpeciesConfig] = []
@@ -65,6 +67,8 @@ var _species_buttons: VBoxContainer = null
 var _record_label: Label = null
 var _hint_label: Label = null
 var _cards_box: VBoxContainer = null
+var _mvp_note: Control = null
+var _locked_box: VBoxContainer = null
 var _settings_panel: PanelContainer = null
 var _center_showcase: Control = null
 
@@ -104,6 +108,7 @@ func build(configs: Array[SpeciesConfig], initial_settings: Dictionary = {}) -> 
 	_build_scrim()
 	_build_left_column()
 	_build_right_column()
+	_build_mvp_note()
 	_build_hint()
 	_build_settings()
 	if not _configs.is_empty():
@@ -268,66 +273,116 @@ func _process(delta: float) -> void:
 # ---------------------------------------------------------------------------
 
 func _build_scrim() -> void:
-	# 压暗 3D 场景，保证文字可读；左重右轻，把注意力留在物种卡片这一侧
+	# 展板：背景是实拍级森林溪谷，文字直接压在照片上。这里背景是真实 3D 关卡
+	# + CC0 森林天空球（`BoardTokens.ASSET_SKY_HDRI`）；等阶段 E 的 `l_ravine_board`
+	# 出来以后，这块换成那台机位渲染的关键图（见 `Docs/BoardArtPipeline.md`）。
 	_scrim = ColorRect.new()
 	_scrim.name = "Scrim"
-	_scrim.color = Color(0.020, 0.035, 0.041, 0.470)
+	_scrim.color = BoardTokens.SCRIM
 	_scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_scrim)
 
-	var left_shade := ColorRect.new()
-	left_shade.name = "LeftShade"
-	left_shade.color = Color(0.016, 0.027, 0.031, 0.400)
+	# 左栏：横向渐变压暗（展板是照片自然变暗，不是一块矩形面板）
+	var left_shade := TextureRect.new()
+	left_shade.name = "LeftPanelShade"
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.008, 0.016, 0.016, 0.94))
+	ramp.set_color(1, Color(0.008, 0.016, 0.016, 0.0))
+	var ramp_tex := GradientTexture2D.new()
+	ramp_tex.gradient = ramp
+	ramp_tex.width = 256
+	ramp_tex.height = 8
+	ramp_tex.fill_from = Vector2(0.0, 0.0)
+	ramp_tex.fill_to = Vector2(1.0, 0.0)
+	left_shade.texture = ramp_tex
+	left_shade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	left_shade.stretch_mode = TextureRect.STRETCH_SCALE
 	left_shade.anchor_bottom = 1.0
-	left_shade.offset_right = 500.0
+	left_shade.offset_right = BoardTokens.LEFT_WIDTH + 210.0
 	left_shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(left_shade)
+
+	# 右栏：深色玻璃卡片列（展板右栏是明显的一块深色底板）
+	var right_panel := Panel.new()
+	right_panel.name = "RightRailShade"
+	right_panel.anchor_left = 1.0
+	right_panel.anchor_right = 1.0
+	right_panel.anchor_bottom = 1.0
+	right_panel.offset_left = -BoardTokens.RAIL_WIDTH
+	right_panel.offset_right = 0.0
+	right_panel.add_theme_stylebox_override("panel", _rail_style())
+	right_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(right_panel)
 
 func _build_left_column() -> void:
 	var margin := MarginContainer.new()
 	margin.name = "LeftPanel"
 	margin.anchor_bottom = 1.0
-	margin.offset_right = 480.0
-	margin.add_theme_constant_override("margin_left", 64)
-	margin.add_theme_constant_override("margin_top", 46)
-	margin.add_theme_constant_override("margin_right", 32)
-	margin.add_theme_constant_override("margin_bottom", 40)
+	margin.offset_right = BoardTokens.LEFT_WIDTH
+	margin.add_theme_constant_override("margin_left", int(BoardTokens.CONTENT_MARGIN_LEFT))
+	margin.add_theme_constant_override("margin_top", int(BoardTokens.CONTENT_MARGIN_TOP))
+	margin.add_theme_constant_override("margin_right", 30)
+	margin.add_theme_constant_override("margin_bottom", 42)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(margin)
 	_left_column = margin
 
 	var column := VBoxContainer.new()
 	column.name = "Column"
-	column.add_theme_constant_override("separation", 6)
+	column.add_theme_constant_override("separation", 4)
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(column)
 
-	var title := _label(PAGE_TITLE, 80, COLOR_TEXT)
-	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.72))
-	title.add_theme_constant_override("shadow_offset_x", 2)
-	title.add_theme_constant_override("shadow_offset_y", 3)
+	# 书法主标题：用系统行楷（`BoardTokens.title_font()`）。字体文件不进仓库——
+	# 华文行楷不可再分发，运行时取系统字体，换机器没有就自动退回默认字重。
+	var title := _label(PAGE_TITLE, BoardTokens.FONT_TITLE, COLOR_TEXT)
+	title.name = "TitleCalligraphy"
+	title.add_theme_font_override("font", BoardTokens.title_font())
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.92))
+	title.add_theme_constant_override("shadow_offset_x", 3)
+	title.add_theme_constant_override("shadow_offset_y", 4)
 	column.add_child(title)
 
-	column.add_child(_label(PAGE_SUBTITLE, 21, COLOR_ACCENT))
-	column.add_child(_spacer(16))
-	column.add_child(_label(TAGLINE, 18, Color(0.827, 0.804, 0.741)))
-	column.add_child(_label(TAGLINE_2, 14, COLOR_DIM))
+	# 英文标题：展板是金色 + 大字距（Label 没有 tracking，`PAGE_SUBTITLE` 里用空格代替）
+	var latin := _label(PAGE_SUBTITLE, BoardTokens.FONT_TITLE_LATIN, COLOR_ACCENT)
+	latin.name = "TitleLatin"
+	latin.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.75))
+	latin.add_theme_constant_override("outline_size", 4)
+	column.add_child(latin)
+
+	# 细金线：展板英文标题下的分隔线
+	var rule := ColorRect.new()
+	rule.name = "TitleRule"
+	rule.color = Color(COLOR_ACCENT.r, COLOR_ACCENT.g, COLOR_ACCENT.b, 0.45)
+	rule.custom_minimum_size = Vector2(BoardTokens.TITLE_RULE_W, 1.0)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(rule)
+
+	column.add_child(_spacer(20))
+	column.add_child(_label(TAGLINE, BoardTokens.FONT_TAGLINE, Color(0.930, 0.875, 0.730)))
+	column.add_child(_label(TAGLINE_2, BoardTokens.FONT_TAGLINE_SMALL, COLOR_DIM))
 	column.add_child(_spacer(30))
 
 	_main_buttons = _button_column()
 	_main_buttons.name = "MainButtons"
 	column.add_child(_main_buttons)
+
 	var start := _button("开始游戏", true)
+	start.name = "StartButton"
 	start.pressed.connect(func() -> void: commit())
 	_main_buttons.add_child(start)
 	var pick := _button("物种选择", false)
+	pick.name = "SpeciesButton"
 	pick.pressed.connect(func() -> void: show_page(Page.SPECIES))
 	_main_buttons.add_child(pick)
 	var settings := _button("设置", false)
+	settings.name = "SettingsButton"
 	settings.pressed.connect(_toggle_settings)
 	_main_buttons.add_child(settings)
 	var quit := _button("退出", false)
+	quit.name = "QuitButton"
 	quit.pressed.connect(func() -> void: quit_requested.emit())
 	_main_buttons.add_child(quit)
 
@@ -336,9 +391,11 @@ func _build_left_column() -> void:
 	_species_buttons.visible = false
 	column.add_child(_species_buttons)
 	var enter := _button("进入世界", true)
+	enter.name = "EnterButton"
 	enter.pressed.connect(func() -> void: commit())
 	_species_buttons.add_child(enter)
 	var back := _button("返回", false)
+	back.name = "BackButton"
 	back.pressed.connect(func() -> void: show_page(Page.MAIN))
 	_species_buttons.add_child(back)
 
@@ -356,45 +413,63 @@ func _build_left_column() -> void:
 
 
 func _build_right_column() -> void:
+	# 展板右栏：一块深色玻璃底板，里面是同款「照片卡」——可玩物种在上，
+	# 未来物种在下（压暗、不可点），底部一行「更多物种·敬请期待」。
 	var margin := MarginContainer.new()
 	margin.name = "SpeciesRail"
 	margin.anchor_left = 1.0
 	margin.anchor_right = 1.0
 	margin.anchor_bottom = 1.0
-	margin.offset_left = -452.0
-	margin.offset_right = -28.0
-	margin.add_theme_constant_override("margin_top", 34)
-	margin.add_theme_constant_override("margin_bottom", 34)
+	margin.offset_left = -BoardTokens.RAIL_WIDTH
+	margin.offset_right = 0.0
+	margin.add_theme_constant_override("margin_left", int(BoardTokens.RAIL_INNER_PAD))
+	margin.add_theme_constant_override("margin_top", 26)
+	margin.add_theme_constant_override("margin_right", int(BoardTokens.RAIL_INNER_PAD))
+	margin.add_theme_constant_override("margin_bottom", 22)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(margin)
 	_right_column = margin
 
 	var column := VBoxContainer.new()
 	column.name = "Column"
-	column.add_theme_constant_override("separation", 8)
+	column.add_theme_constant_override("separation", 6)
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(column)
 
-	column.add_child(_label("可玩物种", 15, COLOR_ACCENT))
-	# 数量由配置推出，不写死（新增物种只加 .tres）
-	column.add_child(_label(
-		"MVP Demo：%d 个物种，其余按数据接入" % _configs.size(), 12, COLOR_FAINT))
-	column.add_child(_spacer(6))
+	var heading := _label("生命档案", BoardTokens.FONT_RAIL_HEAD, COLOR_ACCENT)
+	heading.name = "RailHeading"
+	heading.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.70))
+	heading.add_theme_constant_override("outline_size", 3)
+	column.add_child(heading)
+	column.add_child(_label("选择你的生存方式", 12, Color(0.760, 0.780, 0.730)))
+	column.add_child(_spacer(4))
 
 	_cards_box = VBoxContainer.new()
 	_cards_box.name = "SpeciesCards"
-	_cards_box.add_theme_constant_override("separation", 8)
+	_cards_box.add_theme_constant_override("separation", int(BoardTokens.CARD_GAP))
 	_cards_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(_cards_box)
 
 	for cfg in _configs:
 		_cards_box.add_child(_make_species_card(cfg))
 
-	# ART06：未来物种收成一行小字。原来 3 张 72 px 的占位卡把右栏塞满，
-	# 视线被一排暗色块分走，主视觉（猫）反而抢不到注意力。
 	_cards_box.add_child(_spacer(6))
-	_cards_box.add_child(_label("未来开放", 11, COLOR_FAINT))
-	_cards_box.add_child(_make_future_row())
+	var future_head := _label("未来将拓展更多动物", 12, COLOR_DIM)
+	future_head.name = "FutureHeading"
+	_cards_box.add_child(future_head)
+
+	_locked_box = VBoxContainer.new()
+	_locked_box.name = "FutureSpecies"
+	_locked_box.add_theme_constant_override("separation", 8)
+	_locked_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cards_box.add_child(_locked_box)
+	for entry in FUTURE_SPECIES:
+		_locked_box.add_child(_make_locked_card(entry))
+
+	var footer := _label("更多物种 · 敬请期待", BoardTokens.FONT_FOOTNOTE, COLOR_FAINT)
+	footer.name = "RailFooter"
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cards_box.add_child(footer)
 
 
 func _build_hint() -> void:
@@ -420,37 +495,82 @@ func _refresh_hint() -> void:
 	else:
 		_hint_label.text = "Enter 开始 · 鼠标点击卡片选择物种 · Esc 返回"
 
+
+## 展板右上角那块「初期版本（MVP Demo）」说明：告诉玩家当前只有 1～2 个可玩物种。
+func _build_mvp_note() -> void:
+	var box := VBoxContainer.new()
+	box.name = "MvpNote"
+	box.anchor_left = 1.0
+	box.anchor_right = 1.0
+	box.offset_left = -BoardTokens.RAIL_WIDTH - 300.0
+	box.offset_right = -BoardTokens.RAIL_WIDTH - 18.0
+	box.offset_top = 34.0
+	box.add_theme_constant_override("separation", 4)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.alignment = BoxContainer.ALIGNMENT_BEGIN
+	add_child(box)
+	_mvp_note = box
+
+	var head := _label("初期版本（MVP Demo）", 13, Color(0.949, 0.929, 0.882))
+	head.name = "MvpHeading"
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	head.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	head.add_theme_constant_override("shadow_offset_x", 1)
+	head.add_theme_constant_override("shadow_offset_y", 2)
+	box.add_child(head)
+
+	for line in [
+		"目前仅开放 %d 种动物（猫 / 鼠）作为示例。" % maxi(1, _configs.size()),
+		"后续将陆续加入更多动物，",
+		"体现不同的生存方式与生态关系。",
+	]:
+		var body := _label(String(line), 11, Color(0.780, 0.800, 0.760))
+		body.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.80))
+		body.add_theme_constant_override("shadow_offset_x", 1)
+		body.add_theme_constant_override("shadow_offset_y", 1)
+		box.add_child(body)
+
 func _make_species_card(cfg: SpeciesConfig) -> PanelContainer:
+	# 展板右栏卡：左侧方图缩略图 + 右侧「名字 / 定位 / 一句描述」三层文字。
 	var card := PanelContainer.new()
 	card.name = "Card_%s" % String(cfg.species_id)
-	card.custom_minimum_size = Vector2(0.0, 104.0)
+	card.custom_minimum_size = Vector2(0.0, BoardTokens.CARD_H)
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	card.add_theme_stylebox_override("panel", _card_style(false))
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
+	row.name = "Row"
+	row.add_theme_constant_override("separation", 14)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(row)
 
 	var preview := _make_preview(cfg)
-	row.add_child(preview)
+	row.add_child(_thumb_frame(preview, "Thumb_%s" % String(cfg.species_id)))
 
 	var text := VBoxContainer.new()
-	text.add_theme_constant_override("separation", 2)
+	text.name = "Text"
+	text.add_theme_constant_override("separation", 1)
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	text.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(text)
 
-	var name_label := _label(cfg.display_title(), 20, COLOR_TEXT)
+	var name_label := _label(cfg.display_title(), BoardTokens.FONT_CARD_NAME, COLOR_TEXT)
 	name_label.name = "Name"
 	text.add_child(name_label)
 	if not cfg.display_tagline.is_empty():
-		text.add_child(_label(cfg.display_tagline, 13, Color(0.812, 0.769, 0.639)))
+		var tag := _label(cfg.display_tagline, BoardTokens.FONT_CARD_TAG,
+			Color(0.812, 0.769, 0.639))
+		tag.name = "Tagline"
+		text.add_child(tag)
 	if not cfg.display_note.is_empty():
-		text.add_child(_label(cfg.display_note, 12, COLOR_DIM))
-	text.add_child(_label(_stat_line(cfg), 11, COLOR_FAINT))
+		var note := _label(cfg.display_note, BoardTokens.FONT_CARD_NOTE, COLOR_DIM)
+		note.name = "Note"
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		text.add_child(note)
 
 	var id := cfg.species_id
 	card.gui_input.connect(func(event: InputEvent) -> void:
@@ -470,22 +590,77 @@ func _make_species_card(cfg: SpeciesConfig) -> PanelContainer:
 	return card
 
 
-## 未来物种：一行低调的"名字 + 定位语"小标签（`HFlowContainer` 自动换行）。
-## 仍然**只占位**、不可点：真源是 `resources/species/*.tres`，一旦落地就出现在上面的卡片里。
-func _make_future_row() -> Control:
-	var flow := HFlowContainer.new()
-	flow.name = "FutureSpecies"
-	flow.add_theme_constant_override("h_separation", 10)
-	flow.add_theme_constant_override("v_separation", 2)
-	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for entry in FUTURE_SPECIES:
-		var chip := _label("%s（%s）" % [
-			String(entry.get("name", "?")), String(entry.get("tagline", "")),
-		], 11, COLOR_FAINT)
-		chip.name = "Locked_%s" % String(entry.get("name", "?"))
-		chip.tooltip_text = String(entry.get("note", ""))
-		flow.add_child(chip)
-	return flow
+## 未来物种卡：版式与可玩卡同族，但**整体压暗、不可点**。
+## 仍然只是占位：真源是 `resources/species/*.tres`，落地后自动出现在上面的可玩列表里。
+func _make_locked_card(entry: Dictionary) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.name = "Locked_%s" % String(entry.get("name", "?"))
+	card.custom_minimum_size = Vector2(0.0, 60.0)
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.tooltip_text = "未来开放：%s" % String(entry.get("note", ""))
+	card.add_theme_stylebox_override("panel", _locked_style())
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(row)
+
+	var mark := _label("?", 20, COLOR_FAINT)
+	mark.custom_minimum_size = Vector2(44.0, 44.0)
+	mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(_thumb_frame(mark, "Thumb_%s" % String(entry.get("name", "?")), 44.0))
+
+	var text := VBoxContainer.new()
+	text.add_theme_constant_override("separation", 1)
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(text)
+	text.add_child(_label(String(entry.get("name", "?")), 14, COLOR_DIM))
+	text.add_child(_label(String(entry.get("tagline", "")), 11, COLOR_FAINT))
+	return card
+
+
+## 缩略图外框：展板是圆角方形照片框，这里给同尺寸深色玻璃框（3D 预览贴在里面）。
+func _thumb_frame(content: Control, node_name: String, side: float = -1.0) -> PanelContainer:
+	var frame := PanelContainer.new()
+	frame.name = node_name
+	var s := side if side > 0.0 else BoardTokens.THUMB
+	frame.custom_minimum_size = Vector2(s, s)
+	frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_theme_stylebox_override("panel", _thumb_style())
+	frame.add_child(content)
+	return frame
+
+
+## 未来/锁定卡片的底色：比可玩卡更暗、边框更淡，读起来就是「还没开放」
+func _locked_style() -> StyleBoxFlat:
+	var sb := _panel_style()
+	sb.bg_color = Color(0.028, 0.040, 0.042, 0.720)
+	sb.border_color = Color(0.180, 0.220, 0.212, 0.480)
+	sb.content_margin_left = 10.0
+	sb.content_margin_right = 10.0
+	sb.content_margin_top = 6.0
+	sb.content_margin_bottom = 6.0
+	return sb
+
+
+## 缩略图框：1 px 暗金边 + 3 px 圆角
+func _thumb_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.020, 0.030, 0.030, 0.900)
+	sb.border_color = Color(0.560, 0.470, 0.290, 0.700)
+	sb.corner_radius_top_left = 3
+	sb.corner_radius_top_right = 3
+	sb.corner_radius_bottom_left = 3
+	sb.corner_radius_bottom_right = 3
+	sb.border_width_left = 1
+	sb.border_width_top = 1
+	sb.border_width_right = 1
+	sb.border_width_bottom = 1
+	return sb
 
 
 func _refresh_cards() -> void:
@@ -580,11 +755,13 @@ func _make_preview(cfg: SpeciesConfig) -> Control:
 	# 取景按**物种自己的胶囊尺寸**算，不用模型 AABB：胶囊高度是配置里的尺寸契约
 	# （猫 0.48 m / 鼠 0.18 m），这样两个卡片里动物看起来一样大，也不受 glb 内部缩放影响。
 	var h := maxf(0.05, cfg.capsule_height())
-	var target := Vector3(0.0, h * 0.46, 0.0)
+	# 取景按「模型实际高 ≈ 胶囊高 × 0.65」留余量：展板缩略图是紧凑肖像，
+	# 早先 中心 h*0.46 / 距离 h*2.20 会让动物只占方框一半，读起来像迷你模型。
+	var target := Vector3(0.0, h * 0.34, 0.0)
 	# 模型在 Godot 里**面朝 −Z**（见 `Docs/BlenderPipeline.md`）→ 相机放在 −Z 侧才能拍到正脸。
 	# 这里手算朝向而不用 `look_at()`：此刻卡片还没挂到容器上、相机不在树里，
 	# `look_at()` 会报 "Node not inside tree"（实测踩到）。
-	var cam_pos := Vector3(0.0, h * 0.85, -h * 2.20)
+	var cam_pos := Vector3(0.0, h * 0.42, -h * 1.50)
 	var cam := Camera3D.new()
 	cam.fov = 30.0
 	cam.near = 0.01
@@ -743,6 +920,8 @@ func _clear() -> void:
 	_record_label = null
 	_hint_label = null
 	_cards_box = null
+	_mvp_note = null
+	_locked_box = null
 	_settings_panel = null
 
 
@@ -780,28 +959,67 @@ func _button(text: String, primary: bool) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(220.0, 46.0)
-	b.add_theme_font_size_override("font_size", 19)
-	var font_color := Color(0.980, 0.957, 0.898) if primary else Color(0.878, 0.898, 0.867)
-	b.add_theme_color_override("font_color", font_color)
+	b.custom_minimum_size = Vector2(BoardTokens.BUTTON_W, BoardTokens.BUTTON_H)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.add_theme_font_size_override("font_size", BoardTokens.FONT_BUTTON)
+	b.add_theme_color_override("font_color", Color(0.980, 0.957, 0.898))
 	b.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0))
 	b.add_theme_color_override("font_pressed_color", Color(1.0, 1.0, 1.0))
-
-	var normal := _panel_style()
-	if primary:
-		normal.bg_color = COLOR_ACCENT
-		normal.border_color = COLOR_ACCENT.lightened(0.25)
-	else:
-		normal.bg_color = Color(0.086, 0.118, 0.129, 0.760)
-		normal.border_color = Color(0.235, 0.286, 0.275, 0.800)
-	var hover := normal.duplicate() as StyleBoxFlat
-	hover.bg_color = COLOR_ACCENT.lightened(0.14) if primary else Color(0.145, 0.192, 0.204, 0.900)
+	var normal := _button_style(primary, false)
+	var hover := _button_style(primary, true)
 	b.add_theme_stylebox_override("normal", normal)
 	b.add_theme_stylebox_override("hover", hover)
 	b.add_theme_stylebox_override("pressed", hover)
 	b.add_theme_stylebox_override("disabled", normal)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	if primary:
+		# 展板金色主按钮右侧有 chevron：用一个忽略鼠标的 Label 画，不引入图标资源
+		var chevron := _label("›", 24, Color(1.0, 0.96, 0.86, 0.95))
+		chevron.name = "Chevron"
+		chevron.anchor_left = 1.0
+		chevron.anchor_right = 1.0
+		chevron.anchor_top = 0.5
+		chevron.anchor_bottom = 0.5
+		chevron.offset_left = -42.0
+		chevron.offset_right = -16.0
+		chevron.offset_top = -16.0
+		chevron.offset_bottom = 16.0
+		chevron.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		chevron.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		b.add_child(chevron)
 	return b
+
+
+func _button_style(primary: bool, hovered: bool) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	if primary:
+		# 展板主按钮：金底 + 亮金边 + 轻微投影（撑起"可点"的层次）
+		sb.bg_color = BoardTokens.GOLD.lightened(0.10) if hovered else BoardTokens.GOLD
+		sb.border_color = BoardTokens.GOLD_BRIGHT
+		sb.shadow_color = Color(0.0, 0.0, 0.0, 0.45)
+		sb.shadow_size = 4
+		sb.shadow_offset = Vector2(0.0, 2.0)
+		sb.corner_radius_top_left = 3
+		sb.corner_radius_top_right = 3
+		sb.corner_radius_bottom_left = 3
+		sb.corner_radius_bottom_right = 3
+	else:
+		# 次级按钮：深色玻璃 + 1 px 暗边，hover 只提亮一档，不抢主按钮
+		sb.bg_color = Color(0.086, 0.118, 0.129, 0.92) if hovered else Color(0.055, 0.070, 0.070, 0.88)
+		sb.border_color = Color(0.60, 0.62, 0.52, 0.70) if hovered else Color(0.48, 0.51, 0.44, 0.55)
+		sb.corner_radius_top_left = 2
+		sb.corner_radius_top_right = 2
+		sb.corner_radius_bottom_left = 2
+		sb.corner_radius_bottom_right = 2
+	sb.border_width_left = 1
+	sb.border_width_top = 1
+	sb.border_width_right = 1
+	sb.border_width_bottom = 1
+	sb.content_margin_left = 24.0
+	sb.content_margin_right = 18.0
+	sb.content_margin_top = 13.0
+	sb.content_margin_bottom = 13.0
+	return sb
 
 
 func _panel_style() -> StyleBoxFlat:
@@ -828,4 +1046,20 @@ func _card_style(is_selected: bool) -> StyleBoxFlat:
 	sb.bg_color = COLOR_PANEL_SEL if is_selected else COLOR_PANEL
 	sb.border_width_left = 3 if is_selected else 1
 	sb.border_color = COLOR_ACCENT if is_selected else Color(0.200, 0.250, 0.239, 0.550)
+	return sb
+func _menu_panel_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.012, 0.024, 0.024, 0.86)
+	sb.border_width_right = 1
+	sb.border_color = Color(0.76, 0.58, 0.28, 0.32)
+	return sb
+
+
+func _rail_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = BoardTokens.RAIL_BG
+	sb.border_width_left = 1
+	sb.border_color = Color(0.90, 0.72, 0.38, 0.42)
+	sb.corner_radius_top_left = 2
+	sb.corner_radius_bottom_left = 2
 	return sb

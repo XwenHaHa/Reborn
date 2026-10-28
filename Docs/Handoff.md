@@ -511,3 +511,31 @@ $proj = 'E:\Reborn\Game\Reborn'
 > 已知阻塞：真实按键输入无安全自动化手段（**禁止盲发按键**）。
 > 不要在没有实测证据时把任何游戏任务标为 done；不要因无头断言通过就宣称画面正确。
 
+## 展板对齐改造（ART09-A / ART09-B，2026-10-29）
+
+- **总纲**：`Docs/Tasks/ART09_BOARD_PARITY.md`（展板 15 项要素 → 现状 → 差距分类；A–G 七阶段；§6 决策记录已填）。
+  **负责人 2026-10-29 决定**：走 **路径 C（混合）**；允许 **CC0 素材下载** + **本机图片生成**；同意「`l_courtyard` 做玩法关 +
+  另建 `l_ravine_board` 做展板展示关」；未来物种只做肖像占位。已开工 A+B。
+- **ART09-A（done）**：`Game/Reborn/scripts/ui/board_tokens.gd`（`class_name BoardTokens`）是颜色/字号阶/三段栅格/控件尺寸的
+  **唯一真源**（1280 下：左 430 / 中央 430–900 / 右 380；按钮 300×52；卡片高 84；缩略图 64、超采样 ×2）。
+  书法标题用 `SystemFont`（候选 华文行楷→华文新魏→楷体→SimSun，本机命中行楷）——**商业字体文件不入库**。
+  关键图规则见 `Docs/BoardArtPipeline.md`：只允许「引擎渲染 / 已登记 CC0 / 记录 prompt 的生图」。
+  **本机图片生成模型未配置**（`GenerateImages` → `IMAGE_NOT_CONFIGURED`），类型 C 目前不可用，别假设能生图。
+- **ART09-A 的天空球**：`l_courtyard.tscn` 的 `ProceduralSkyMaterial` 换成 `PanoramaSkyMaterial` +
+  CC0 `mossy_forest_2k.hdr`（Poly Haven，登记在 `Docs/THIRD_PARTY_ASSETS.md` §8）；`tool_make_courtyard.gd` 同步
+  并带程序化退路。T011 的两条环境断言（`world_environment_with_sky` / `decor_sky_background_kept`）仍成立。
+  **这两个文件仍带 ART07 未提交改动，所以天空球这次没有单独提交**，等 ART07 被接受时一并提交。
+- **ART09-B（done，整体展板视觉仍 FAIL）**：`scripts/ui/main_menu.gd` 按展板重排（书法「轮生」+ 金色 `R E B O R N` +
+  细金线 + slogan；金色主按钮 + chevron；右栏 2 可玩卡 + 3 张压暗不可点的未来卡 + 「更多物种·敬请期待」；
+  右上「初期版本（MVP Demo）」；左栏横向渐变压暗）。上一轮未提交的 `CreekBackground`
+  （`Game/Reborn/assets/ui/menu_creek.png`，实为庭院低质渲染）**已从代码移除**，文件保留未删。
+- **ART09-B 实测口径**：`tests/run_art09_menu_contract.gd` **42/42**、`run_art09_tokens.gd` **15/15**；
+  回归 art08 三件套 9/9、9/9、15/15；art05 设置 20/20 + 非 headless 输入 20/20；T011 229/229；art02 72/72。
+  截图 `Art/Probes/art09_menu_after/`（4 张，`save_result=OK`）。
+- **仍在 FAIL 的三项**（阶段 E/F 处理）：卡内缩略图是实时 3D 不是照片；背景仍是庭院石墙+直线水面不是森林溪谷；
+  中央主视觉没有景深/逆光构图。**不要**把 A/B 的通过写成"已达到展板"。
+- **坑（本机实测）**：headless 根视口默认 **64×64**，`root.size` 在入树前后都会被拉回，必须
+  「入树 → 等 12 帧 → 再设 `root.size` → 等 6 帧」才量得到真实布局；否则 `rails_left` 会是负数。
+- **下一步**：阶段 C（物种选择页：左侧大卡 + 底部 5 缩略图 + 金色开始按钮）→ D（HUD 图标 / 技能环 / 罗盘）→
+  E（`tool_make_ravine_board.gd` → `l_ravine_board.tscn` + 后处理 + 第三人称构图）→ F（`sm_cat_004` 评估、四态展示条）。
+- **待负责人**：cat/mouse 肖像图（照片或渲染）走哪条来源；`menu_creek.png` 是否删除；ART07 是否接受（决定天空球何时入库）。
