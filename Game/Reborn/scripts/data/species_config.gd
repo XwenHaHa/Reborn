@@ -166,6 +166,9 @@ const CAMERA_THIRD_PERSON := 1
 @export var display_tagline: String = ""
 ## 一行习性补充（卡片第三行，例如「擅长攀爬与伏击」）
 @export var display_note: String = ""
+## ART09-F1：菜单/物种页用的**肖像图**（引擎渲染产物，见 `Docs/BoardArtPipeline.md`）。
+## 为空时 UI 回退到实时 3D 缩略图（`_make_preview()`），所以旧配置不会坏。
+@export var display_portrait: Texture2D = null
 
 ## Godot 的 `CapsuleShape3D.height` 是含两端半球的总高
 

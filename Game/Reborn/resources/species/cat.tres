@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="SpeciesConfig" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="SpeciesConfig" load_steps=5 format=3]
 
 ; 猫的起测配置。数值来源：Docs/Parameters.md（厘米 → 米，÷100）。
 ; 改数值请改这里，不要在系统代码里另写一份（见 Docs/Tasks/T008.md）。
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/data/species_config.gd" id="1_cfg"]
 [ext_resource type="Script" path="res://scripts/ai/cat_ai.gd" id="2_ai"]
 [ext_resource type="PackedScene" path="res://assets/characters/cat/sm_cat_002.glb" id="3_vis"]
+[ext_resource type="Texture2D" path="res://assets/ui/portraits/portrait_cat.png" id="4_portrait"]
 
 [resource]
 script = ExtResource("1_cfg")
@@ -76,6 +77,7 @@ ai_script = ExtResource("2_ai")
 display_name = "猫"
 display_tagline = "敏捷的捕食者"
 display_note = "擅长攀爬与伏击"
+display_portrait = ExtResource("4_portrait")
 
 ; 相机（ART05 第三人称）：肩后臂 1.30 m、枢轴比身体中心高 0.18 m、固定下俯 12°
 camera_mode = 1

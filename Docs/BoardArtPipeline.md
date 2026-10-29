@@ -63,3 +63,16 @@
   不是"一定命中行楷"，所以换机不会假红。
 - 正式发行前若要求稳定观感，需采购可商用的书法字体（授权门，负责人决定），
   届时改为 `FontFile` 资源并在此登记许可。
+
+
+## 7. 物种肖像（ART09-F1，引擎渲染）
+
+- **产物**：`Game/Reborn/assets/ui/portraits/portrait_<species_id>.png`（512×512，属 §2 的 A 类：引擎内渲染）。
+- **工具**：`Game/Reborn/tests/tool_render_board_portraits.gd`（非 headless，`-- portraits`）。
+  对 `resources/species/*.tres` 逐个渲染，**不需要任何外部素材或授权**。
+- **取景**：闭环自校正 —— 透明底渲一遍 → 用 alpha `get_used_rect()` 量「填充率 + 偏心」→ 修距离/平移相机，
+  最多 5 轮；目标填充率 0.62、偏心 ≤4%。不依赖胶囊尺寸，也不猜骨骼网格 AABB（`SkinnedMesh.get_aabb()` 实测 0.02 m）。
+- **接线**：`SpeciesConfig.display_portrait`（`Texture2D`，可空）→ 菜单右栏卡、物种页缩略图槽、物种页大卡背景。
+  配置为空时自动回退实时 3D 预览，所以旧配置与未来物种都不会坏。
+- **重跑时机**：换角色模型、改光照/配色、加新物种时重跑一次；`run_art09_portrait_contract.gd` 守着产物与接线。
+- **注意**：肖像只能覆盖**有模型**的物种；兔/狐/鸟没有模型时卡片保持 `?`，**不得**用别名或占位图冒充。

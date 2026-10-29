@@ -73,6 +73,7 @@ var _locked_box: VBoxContainer = null
 
 ## 物种选择页（ART09-C）：左侧大卡 + 底部缩略图行
 var _species_card: Panel = null
+var _card_portrait: TextureRect = null
 var _card_name: Label = null
 var _card_tagline: Label = null
 var _card_note: Label = null
@@ -451,6 +452,18 @@ func _build_species_card() -> void:
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(panel)
 	_species_card = panel
+
+	# 大卡背景：展板的卡内是动物大图。这里用该物种的**肖像图**铺底（无肖像时保持纯色面板）
+	var card_portrait := TextureRect.new()
+	card_portrait.name = "CardPortrait"
+	card_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	card_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	card_portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	card_portrait.modulate = Color(1.0, 1.0, 1.0, 0.28)
+	card_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card_portrait.visible = false
+	panel.add_child(card_portrait)
+	_card_portrait = card_portrait
 	# 窗口变窄/变矮时把大卡收回视口内（960×540 实测会压出下边界）
 	if not get_viewport().size_changed.is_connected(_layout_species_card):
 		get_viewport().size_changed.connect(_layout_species_card)
@@ -579,8 +592,9 @@ func _vital_row(row: Dictionary) -> Control:
 ## 可玩物种的缩略图槽：点击只**选中**（留在本页），真正开局仍走金色「开始游戏」
 func _make_strip_slot(cfg: SpeciesConfig) -> Control:
 	var id := cfg.species_id
-	var preview := _make_preview(cfg)
-	var frame := _thumb_frame(preview, "Strip_%s" % String(id), BoardTokens.STRIP_SLOT)
+	var preview: Control = _make_preview(cfg) if cfg.display_portrait == null else null
+	var content: Control = preview if preview != null else _make_portrait(cfg)
+	var frame := _thumb_frame(content, "Strip_%s" % String(id), BoardTokens.STRIP_SLOT)
 	frame.mouse_filter = Control.MOUSE_FILTER_STOP
 	frame.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	frame.gui_input.connect(func(event: InputEvent) -> void:
@@ -590,7 +604,9 @@ func _make_strip_slot(cfg: SpeciesConfig) -> Control:
 			select_species(id)
 	)
 	_strip_slots[id] = frame
-	var vp := preview.get_meta("sub_viewport", null) as SubViewport
+	var vp: SubViewport = null
+	if preview != null and preview.has_meta("sub_viewport"):
+		vp = preview.get_meta("sub_viewport") as SubViewport
 	if vp != null:
 		_strip_previews[id] = vp
 	return frame
@@ -614,6 +630,9 @@ func _refresh_species_card() -> void:
 		return
 	if _card_name != null:
 		_card_name.text = cfg.display_title()
+	if _card_portrait != null:
+		_card_portrait.texture = cfg.display_portrait
+		_card_portrait.visible = cfg.display_portrait != null
 	if _card_tagline != null:
 		_card_tagline.text = cfg.display_tagline
 	if _card_note != null:
@@ -830,8 +849,10 @@ func _make_species_card(cfg: SpeciesConfig) -> PanelContainer:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(row)
 
-	var preview := _make_preview(cfg)
-	row.add_child(_thumb_frame(preview, "Thumb_%s" % String(cfg.species_id)))
+	# ART09-F1：配置里有肖像图就用它（引擎渲染，展板观感），否则回退实时 3D 预览
+	var preview: Control = _make_preview(cfg) if cfg.display_portrait == null else null
+	var thumb: Control = preview if preview != null else _make_portrait(cfg)
+	row.add_child(_thumb_frame(thumb, "Thumb_%s" % String(cfg.species_id)))
 
 	var text := VBoxContainer.new()
 	text.name = "Text"
@@ -867,8 +888,8 @@ func _make_species_card(cfg: SpeciesConfig) -> PanelContainer:
 	_cards[id] = {
 		"card": card,
 		"name": name_label,
-		"viewport": preview.get_meta("sub_viewport", null),
-		"pivot": preview.get_meta("pivot", null),
+		"viewport": preview.get_meta("sub_viewport") if preview != null and preview.has_meta("sub_viewport") else null,
+		"pivot": preview.get_meta("pivot") if preview != null and preview.has_meta("pivot") else null,
 	}
 	return card
 
@@ -974,6 +995,18 @@ func _stat_line(cfg: SpeciesConfig) -> String:
 # ---------------------------------------------------------------------------
 # 构建：卡片 3D 预览
 # ---------------------------------------------------------------------------
+
+## ART09-F1：肖像图控件（配置里有 `display_portrait` 时用它，缺省回退 `_make_preview()`）
+func _make_portrait(cfg: SpeciesConfig) -> Control:
+	var tr := TextureRect.new()
+	tr.name = "Portrait_%s" % String(cfg.species_id)
+	tr.texture = cfg.display_portrait
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.custom_minimum_size = Vector2(BoardTokens.THUMB, BoardTokens.THUMB)
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return tr
+
 
 ## 返回一个 `SubViewportContainer`，并在它的 meta 里挂上 `sub_viewport` / `pivot`
 func _make_preview(cfg: SpeciesConfig) -> Control:
@@ -1215,6 +1248,7 @@ func _clear() -> void:
 	_mvp_note = null
 	_locked_box = null
 	_species_card = null
+	_card_portrait = null
 	_card_name = null
 	_card_tagline = null
 	_card_note = null

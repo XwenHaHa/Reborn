@@ -628,3 +628,20 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **仍 FAIL**：水面仍是"一层平水面"（不做浅溪折射/岸线白边，要水材质或 Water 插件）；
   石墙仍是旧几何平铺（要重建模）；地面偏秋叶色（`forest_leaves_02/03/04` 未定，需负责人选）。
   落叶卡片缺带 alpha 素材（`dry_decay_leaves` 实测无 alpha，已删）。本关帧率 `NOT-RUN`。
+
+### ART09-F1（物种肖像：引擎渲染 + 接线，2026-10-29，done）
+
+- **零授权路径**：`tests/tool_render_board_portraits.gd`（**非 headless**）对 `resources/species/*.tres` 逐个渲染
+  512×512 肖像 → `assets/ui/portraits/portrait_<id>.png`；写进 `SpeciesConfig.display_portrait`。
+- **必须用 `AnimalBody` 承载**：直接实例化 `sm_cat_002.glb` 时源尺寸远大于真实猫（缩放在 `AnimalBody` 里），
+  相机贴进模型内部 → 只拍到背景；另外 `AnimalBody` 的胶囊占位 `BodyMesh` 必须显式 `visible = false`。
+- **取景闭环**：透明底（`BG_CLEAR_COLOR` + `transparent_bg`）渲一遍 → `image.get_used_rect()` 量填充率与偏心 →
+  修距离、**平移相机**（比转视线稳）→ 最多 5 轮，收敛到 fill≈0.62、偏心 ≤4%。
+  **`SkinnedMesh.get_aabb()` 不可用**（实测只有 0.02 m），别再拿它算取景。
+- **接线**：菜单右栏卡 + 物种页缩略图槽 + 大卡 `CardPortrait` 背景（`modulate.a = 0.28` 压暗当纹理）；
+  配置没有肖像就自动回退实时 3D 预览（旧配置与未来物种都不会坏）。
+- **实测**：`run_art09_portrait_contract` **24/24**；菜单 42/42、物种 59/59、art08 契约 9/9、令牌 15/15；
+  非 headless 5 帧 `save_result=OK` → `Art/Probes/art09_portraits_after/`。
+- **仍 FAIL / 未做**：肖像质感受 `sm_cat_002` / `sm_mouse_002` 模型本身限制；**F2（`sm_cat_004` 评估）与
+  F3（四态拼条）NOT-RUN**；兔/狐/鸟无模型仍是 `?`；猫扑击/鼠逃跑仍 `NOT-AVAILABLE`。
+- **下一步**：F2 → F3（都无授权依赖），然后 ART09-G 整合验收（对照矩阵 + 全量回归 + `tool_perf_probe`）。
