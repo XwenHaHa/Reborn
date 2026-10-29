@@ -645,3 +645,17 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **仍 FAIL / 未做**：肖像质感受 `sm_cat_002` / `sm_mouse_002` 模型本身限制；**F2（`sm_cat_004` 评估）与
   F3（四态拼条）NOT-RUN**；兔/狐/鸟无模型仍是 `?`；猫扑击/鼠逃跑仍 `NOT-AVAILABLE`。
 - **下一步**：F2 → F3（都无授权依赖），然后 ART09-G 整合验收（对照矩阵 + 全量回归 + `tool_perf_probe`）。
+
+### ART09-F2 / F3（猫资产切 004 + 四态展示条，2026-10-29）
+
+- **F2 采纳 `sm_cat_004`**：`tool_cat_gait_eval` 同参数对比 002/004 —— 004 有重心起伏（root_y 0.0155 vs 0）、
+  最小膝角 51.7°（002 只有 6.7°，腿几乎笔直）、不超伸（0.914 vs 1.001）、支撑相占空比 0.38–0.40（002 无有效支撑帧）。
+  `cat.tres` 的 `visual_scene` 已切到 004；`run_art02_cat.gd` 里两处写死 002 的断言（`ASSET` / `asset_root_name`）
+  同步更新为当前资产后 **72/72**；art08 角色契约 15/15、T008 118/118、T009 81/81 全绿。
+- **F3 猫条 PASS / 鼠条 FAIL**：`tests/tool_capture_art09_gait.gd`（**非 headless**）固定侧视机位，
+  只改动画与时间点（Idle 0.30 / Walk 0.02 / Walk 0.55 / Run 0.30），4 帧拼 1024×256：
+  取景同时照顾**高度与长度**（`k = max(fill_y/0.66, fill_x/0.86)`）+ 按像素偏差修视线高度。
+  产物 `Art/Probes/art09_gait/gait_cat_row.png`（四态可辨、头尾完整）、`gait_mouse_row.png`
+  （**FAIL**：7 cm 的鼠被单次反推拉到 0.48 m，压在画面底部）—— 需 2–3 轮闭环或按体型分档，本轮未修。
+- **注意**：四态条单元只有 256 px，放大到展板尺寸会糊，要交付需 512/768 重跑；
+  视口纹理是 RGBAH/RGBE，`blit_rect` 前必须 `img.convert(Image.FORMAT_RGBA8)`（否则报 format 不匹配）。
