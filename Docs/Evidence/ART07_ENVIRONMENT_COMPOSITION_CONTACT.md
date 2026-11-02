@@ -176,3 +176,38 @@ vision 复判（6 个关键机位，`node E:/claude-vision-skill/vision.js`）�
 `MainWindowHandle`——headless 回归 12 次采样 **0 个窗口句柄**（48/48 PASS）；非 headless 截图
 的渲染窗口存在但始终在屏幕外，4 帧产出、非黑、vision 复判通过。详见
 `Docs/Evidence/ART11_GROUND_TEXTURE.md` §7 与 `Tools/README.md`。
+
+**三次反馈补记（2026-11-02 17:02-17:10，"整条链路零可见窗口"最终解）**：
+负责人第三次看到窗口在**左上角闪现**。逐层实测排查（全部证据在
+`Art/Probes/.capture_logs/*.winmon.log`）：
+
+1. **参数确实到达进程**：`Get-CimInstance Win32_Process` 取回 CommandLine，
+   `--position -2400,-2400` 在场（每次运行写进 `.winmon.log` 尾行）。
+2. **但 `--position` 是"软"的**：Godot 在 Windows 上主窗口**显式**建在客户区 (0,0)
+   （窗口矩形 (-7,-30,1031,584)，不用 CW_USEDEFAULT），项目设置
+   `initial_position_type`、`override.cfg`、autoload、外部 `SetWindowPos` **全部晚于窗口
+   创建+show**。且启动期主线程 ~2 秒不泵消息：autoload 实测 t≈2340-2442ms 才执行
+   （引擎内部位置仍报 (0,0)），任何跨线程挪动都要等引擎泵消息才生效——
+   **窗口在左上角可见 ~1.7-1.9 秒**（如 165242 跑：首见 594ms 可见、2433ms 才离屏）。
+   之前没发现，是因为旧监视器的**同步** `SetWindowPos` 被不泵消息的目标线程阻塞
+   ~1.4 秒、期间"失明"（改为 `SWP_ASYNCWINDOWPOS` 后才测到真实时间线）。
+3. **两次有依据的修复尝试**：
+   - 尝试 1（失败）：`CreateProcessW + STARTF_USEPOSITION`（快捷方式"起始位置"同款
+     机制）。stdout 重定向生效证明 STARTUPINFO 已到达，但窗口仍建在 (0,0)——
+     Godot 显式传坐标建窗，该标志无效。
+   - 尝试 2（成功）：**自建隐藏桌面**。`CreateDesktopW("RebornCapture")` +
+     `CreateProcessW(lpDesktop="winsta0\RebornCapture")`——子进程的**所有**窗口只能
+     建在那个桌面上，用户桌面按定义不可见；现有捕获脚本零改动。
+4. **可证明验收（2026-11-02 17:02/17:03 两次连跑，`tool_capture_creek.gd -- creek`）**：
+   - 170233 跑：用户桌面 `windows_seen=0|visible_hits=0`；隐藏桌面 4 窗
+     （主窗首见 rect=(-7,-30,1031,584) t=315ms，2330ms 挪至 (-3207,-3230)——
+     全程在隐藏桌面，用户不可见）。
+   - 170303 跑：同样 `visible_hits=0`，隐藏桌面 4 窗。
+   - 截图有效：water motion 0.03196/45 帧（与可见桌面跑 0.0316 一致，非黑帧）、
+     exit=0、stderr 空；vision 判读"非全黑、可见水面/植被/石墙、亮度正常"（通过）。
+   - headless 路径同日回归：T011 229/229、T012 79/79（新启动器 + autoload 在场）。
+5. **结论**：非 headless 取证默认走隐藏桌面（`Tools/CaptureRun.ps1`，`-VisibleDesktop`
+   为诊断开关），**0 可见帧**。旧"屏幕外+监视器"模式保留为兜底，其实测残余
+   （~1.7 秒可见）已如实记录；引擎侧（不动引擎源码）无法消除该残余，若日后需要
+   完全无窗口的渲染，备选是 `--headless` + 离屏 `SubViewport` 渲染（需负责人授权重构）。
+   详见 `Tools/README.md`。

@@ -17,6 +17,7 @@ config/features=PackedStringArray("4.7")
 
 [autoload]
 
+CaptureWindowGuard="*res://scripts/core/capture_window_guard.gd"
 WorldDirector="*res://autoload/world_director.gd"
 GameState="*res://autoload/game_state.gd"
 
