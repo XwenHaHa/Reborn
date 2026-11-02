@@ -707,4 +707,31 @@ $proj = 'E:\Reborn\Game\Reborn'
   ART07 证据 §9.4。**之后所有实跑/截图不再弹前台窗口。**
 - **遗留**：tp 中心过曝、远景平地轻度平铺（需 triplanar/多材质混合，超范围）、庭院关未动。
 - **下一步**：C 阶段——草透光/次表面观感 + 庭院构图一轮（`grass_wind.gdshader` 已随 ART07
-  提交解冻），独立前后对比 + vision 判读，写独立证据文档。
+  提交解冻），独立前后对比 + vision 判读，写独立证据文档。（已于同日完成，见下 ART12。）
+
+### ART12（草透光/次表面 + 庭院草带成带，2026-11-02，awaiting-review）
+
+- **改动**（规格 `Docs/Tasks/ART12_GRASS_SSS_COURTYARD.md`；证据
+  `Docs/Evidence/ART12_GRASS_SSS_COURTYARD.md`）：
+  ① `grass_wind.gdshader` fragment 加 `BACKLIGHT` 廉价 SSS 透光近似
+  （`sss_tint=(0.55,0.72,0.28)`、`sss_strength=0.55`、梢部多透/根部不透），零新贴图；
+  ② 生成器 `SCENERY_BUSHES_FILL` 6→14，补北墙中部 26 m 与东西墙各 11–16 m 空档
+  （新增株尺度 ≤0.74、不进危险区/掩体/导航组，自检有断言）；
+  ③ `l_courtyard.tscn` 重建（39 阴影 / 24 草簇）；T011 §G 计数同步。
+- **回归**：生成器自检 229/229、T011 全绿、T012 79/79、`run_art09_frame_contract` **48/48**
+  （shader 展板关共用）、nav 烤焙 `.tres` **无 diff**。未改玩法/碰撞/导航/鼠洞溪缝尺寸。
+- **取证与判读**：15 帧（庭院 7 + 溪 4 + 展板 4）+ 6 张前后对比板
+  （`Art/Probes/art12_after/`、`Art/Probes/art12_compare/`，对比基线 = ART07 收口帧与 ART11 帧）；
+  vision 判读 7–8.5/10：逆光草叶透亮（黄绿）不再哑光、墙脚草带围合连贯、无新穿帮。
+  **参数维持 `sss_strength=0.55` 不动**——ravine_tp 判读"部分迎光叶尖接近泛白"与
+  grass_danger"可再强一点"两向证据冲突，按"没有依据时不随机改系统"登记 0.45 为终审备选。
+- **窗口工具链最终解（负责人第三轮反馈后）**：`--position`/autoload/外部 SetWindowPos
+  全部晚于 Godot 显式建窗（左上角可见 ~1.7–1.9 s，实测见 ART07 证据 §9.4），软参数不可行。
+  最终方案 = **隐藏桌面**：`Tools/CaptureRun.ps1` 内嵌 C# 用 `CreateDesktopW("RebornCapture")`
+  + `CreateProcessW(lpDesktop=…)` 启动，子进程窗口只能建在该桌面，用户桌面按定义 0 可见帧；
+  辅以 `SWP_ASYNCWINDOWPOS` 监视器与 `timeBeginPeriod(1)` 轮询。两次验收
+  （170233/170303）`visible_hits=0`、截图非黑、vision 通过。详见 `Tools/README.md` 与
+  ART07 证据 §9.4（含"不要用 console 版 exe 做取证"）。复现：
+  `powershell -File E:\Reborn\Tools\CaptureRun.ps1 -Script tests/tool_capture_creek.gd -UserArgs creek`。
+- **下一步**：等负责人终审（sss_strength 0.55 vs 0.45；ART10 各 awaiting-review 项授权）；
+  视觉线暂停时回到 T031（地点发现与老鼠解锁）。

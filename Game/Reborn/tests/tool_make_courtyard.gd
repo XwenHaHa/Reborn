@@ -233,6 +233,10 @@ const SCENERY_BUSHES := [
 ## ART07 收尾轮 #2（续）：vision 判围墙脚草簇"零星、点状、极其稀疏，没有连成带"。
 ## 因此沿同一条墙脚线**加密** 6 株（同资产、同规则：零碰撞、不进导航组、不进危险区、离掩体 ≥2 m），
 ## 让北墙/东西墙脚各读成一小段连续草带；尺度仍 ≤0.86（明显小于 1.00 的掩体草丛）。
+## **ART12（C 阶段，2026-11-02）**：ART07 收口轮 vision 复判墙脚草带"仍点状散落"。
+## 空档分析：北墙中部 x∈[-13.2, 13.4] 有 26 m 空档；西墙 z∈[-24.0, 2.8]、东墙 z∈[-24.2, 3.0]
+## 各有两段 11～16 m 空档。再补 8 株（同规则，尺度压到 ≤0.74）把三段最大空档填上；
+## 北墙中部株 z≈28 全部在 `danger_zones`（z∈[-22, 2]）之外，开阔暴露区保持开阔。
 const SCENERY_BUSHES_FILL := [
 	{"x": -21.0, "z": 28.4, "yaw": 55.0, "s": 0.74},
 	{"x": -18.2, "z": 27.6, "yaw": 12.0, "s": 0.70},
@@ -240,6 +244,15 @@ const SCENERY_BUSHES_FILL := [
 	{"x": 24.6, "z": 27.4, "yaw": 240.0, "s": 0.72},
 	{"x": -34.2, "z": -8.4, "yaw": 310.0, "s": 0.70},
 	{"x": 34.2, "z": -8.0, "yaw": 96.0, "s": 0.72},
+	# ART12 新增（北墙中部 26 m 空档 ×4 + 东西墙各两段空档 ×4）
+	{"x": -8.5, "z": 28.2, "yaw": 88.0, "s": 0.72},
+	{"x": -3.0, "z": 27.8, "yaw": 152.0, "s": 0.70},
+	{"x": 2.5, "z": 28.3, "yaw": 26.0, "s": 0.74},
+	{"x": 8.0, "z": 27.9, "yaw": 214.0, "s": 0.71},
+	{"x": -34.2, "z": -16.2, "yaw": 300.0, "s": 0.70},
+	{"x": -34.1, "z": -3.2, "yaw": 68.0, "s": 0.72},
+	{"x": 34.2, "z": -16.0, "yaw": 112.0, "s": 0.72},
+	{"x": 34.1, "z": -2.8, "yaw": 246.0, "s": 0.70},
 ]
 ## 庭院内的前景小石（纯视觉）：给出生点附近一个近景参考物，不压出生→补给走廊。
 const COURTYARD_ROCKS := [
@@ -1347,7 +1360,7 @@ func _add_composition_dressing(parent: Node3D) -> void:
 	_mk_ground_shadow(parent, "GroundShadowMoundB", Vector3(14.0, 0.0, -8.0), Vector2(2.3, 2.3), 0.18, 0.0)
 
 	# ② 背景层草簇：贴围墙脚 / 场地边角，只做中远景剪影
-	#    主列表 10 株（`SceneryBush00..09`）+ 加密列表 6 株（`SceneryBushFill0..5`），同资产同规则。
+	#    主列表 10 株（`SceneryBush00..09`）+ 加密列表 14 株（`SceneryBushFill0..13`，ART12 增 8），同资产同规则。
 	for i in SCENERY_BUSHES.size():
 		var b: Dictionary = SCENERY_BUSHES[i]
 		var nm := "SceneryBush%02d" % i
@@ -1922,8 +1935,9 @@ func _verify() -> void:
 		var cy: float = (ch as Node3D).position.y
 		_check("shadow_%d_hugging_ground" % decor_shadows,
 			cy >= GROUND_TOP and cy <= GROUND_TOP + 0.02)
-	# 25 → 31：加密了 6 株背景草簇（各带一块接地暗片）。12（掩体/溪岸草/巨石/两树桩/三碎屑/两土墩）+ 16 株草 + 3 庭院石
-	_check("shadow_count_is_31", decor_shadows == 31)
+	# 25 → 31（ART07 #2：加密 6 株背景草簇各带一块接地暗片）→ 39（ART12：再加密 8 株）。
+	# 12（掩体/溪岸草/巨石/两树桩/三碎屑/两土墩）+ 24 株草 + 3 庭院石
+	_check("shadow_count_is_39", decor_shadows == 39)
 	print("VERIFY|GroundShadows|count=%d|lift=%.3f" % [decor_shadows, GROUND_SHADOW_LIFT])
 
 	var scenery := 0

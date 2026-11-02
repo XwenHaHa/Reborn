@@ -950,7 +950,8 @@ func _s7_decor() -> void:
 	for i in 10:
 		want_decor.append("SceneryBush%02d" % i)
 	# ART07 收尾轮 #2：墙脚加密的 6 株（同资产、同规则），名字即契约
-	for i in 6:
+	# ART12（C 阶段）：再加密 8 株（北墙中部 + 东西墙空档），6 → 14
+	for i in 14:
 		want_decor.append("SceneryBushFill%d" % i)
 	for i in 6:
 		want_decor.append("CreekRock%02d" % i)
@@ -988,7 +989,7 @@ func _s7_decor() -> void:
 		var y: float = (ch as Node3D).position.y
 		if y < GROUND_TOP - 1e-4 or y > GROUND_TOP + 0.02 or _count_collision_nodes(ch) != 0:
 			floating.append("%s@y=%.3f" % [String(ch.name), y])
-	_assert("decor_shadow_count", "31 个贴地阴影", "%d 个" % shadows, shadows == 31)
+	_assert("decor_shadow_count", "39 个贴地阴影", "%d 个" % shadows, shadows == 39)
 	_assert("decor_shadows_hug_ground", "0 个漂浮/带碰撞", "%s" % str(floating), floating.is_empty())
 	var s0 := _world.get_node_or_null("GroundShadowCover1") as Node3D
 	if _assert("decor_shadow_sample_exists", "GroundShadowCover1", str(s0), s0 != null):

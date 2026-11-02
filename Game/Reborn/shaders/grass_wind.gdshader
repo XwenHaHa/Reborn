@@ -30,6 +30,13 @@ uniform float wind_speed = 1.7;       // 摆动频率
 uniform vec2 wind_dir = vec2(0.85, 0.53);
 uniform float height_ref = 0.88;      // 资产高度（用来把 VERTEX.y 归一）
 uniform float bend_power = 1.7;
+// ART12（C 阶段）：透光/次表面近似。草叶是薄壁组织，逆光/侧逆光时叶尖应"透亮发黄绿"，
+// 而不是两面一样哑光——ART10 判读 FAIL 的"草与暖光融合"即此。用 Godot 的 BACKLIGHT 内建
+// （Lambert/Burley 漫反射下，光从叶片背面来时把该色加进漫反射），是零贴图的廉价 SSS：
+// 配 v_h_norm 让梢部（薄）透光多、根部（厚 + 已有接触 AO）几乎不透。生成器不设这两个
+// 参数，走默认值；回退 = revert 本文件。
+uniform vec3 sss_tint : source_color = vec3(0.55, 0.72, 0.28); // 叶绿素透射偏黄绿
+uniform float sss_strength = 0.55;
 
 void vertex() {
 	vec3 origin = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
@@ -58,4 +65,8 @@ void fragment() {
 	ALBEDO = albedo_color * contact_ao * v_inst_var;
 	ROUGHNESS = roughness_value;
 	SPECULAR = 0.25;
+	// ART12：透光近似（见 uniform 块注释）。根部 0.30 档兜底，梢部满强度——
+	// 与接触 AO 方向相反（根暗梢亮），逆光时读成"叶尖透光"而不是"整团发亮"。
+	float sss_k = sss_strength * (0.30 + 0.70 * smoothstep(0.25, 1.0, v_h_norm));
+	BACKLIGHT = sss_tint * sss_k;
 }
