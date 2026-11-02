@@ -685,3 +685,26 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **ART07 遗留**：五文件未提交改动 + 未跟踪 Docs 保持原样，**未纳入** ART10 提交；提交前 `git status` 复核过。
 - **下一步**：等负责人审阅本轮 awaiting-review 项与证据 §6 授权请求（模型/动作/水材质/贴图选型/P6）；
   视觉线暂停时回到 T031（地点发现与老鼠解锁）。
+
+### ART11（地表贴图选型 leafy_grass + 工具链零窗口，2026-11-02，done / 部分达标）
+
+- **选型**：按负责人批准从 Poly Haven CC0 候选选地表贴图。9 宫格短名单（8 候选 diffuse）→
+  场景内同机位 4 变体对比（`tool_capture_ground_compare.gd`，baseline/fl02/fl03/fl04/lgrass，
+  ground 近景 + scene 全景两机位）→ 2×2 并排终审，**leafy_grass** 胜出：小尺度苔藓/泥土/碎叶混合、
+  平铺重复隐蔽好、与 3D 草丛融合最佳、自带湿润感；forest_leaves_02 因大叶片重复感落选。
+  判读全程（含各候选分数与理由）见 `Docs/Evidence/ART11_GROUND_TEXTURE.md` §3。
+- **接入**：展板关 `l_ravine_board.tscn` 地面由 `forest_floor` 换 `leafy_grass`（生成器
+  `tool_make_ravine_board.gd`：tint 0.82/0.88/0.74、uv 24x26、roughness 1.0；第 1 轮修正
+  roughness 0.96→1.0、uv 15x17→24x26 后 tp 判读 6/10→**7.5/10**）。三件套 jpg 入库
+  `assets/environment/tex/`，登记 `Docs/THIRD_PARTY_ASSETS.md` §9.1（CC0，字节/SHA256/接入参数）。
+  `forest_floor` 三件套保留，去留待负责人定。`run_art09_frame_contract` **48/48**。
+- **工具链零窗口（负责人两次反馈）**：①渲染窗口 `--position -2400,-2400` 屏幕外；
+  ②根因是 console 版 exe 即使 `--headless` 也会弹黑色终端 → `Tools/CaptureRun.ps1` 新增
+  `-Headless` 开关，所有 headless 调用统一走 GUI 版 exe，日志由 `Start-Process
+  -RedirectStandardOutput/-RedirectStandardError` 在调用层取得。**取证一律不要用 console 版 exe。**
+  验证（`Tools/verify_no_window.ps1`）：headless 回归 12 次采样 **0 窗口句柄**（48/48 PASS）、
+  非 headless 截图窗口存在但屏幕外、4 帧非黑 vision 通过。约定写入 `Tools/README.md` 与
+  ART07 证据 §9.4。**之后所有实跑/截图不再弹前台窗口。**
+- **遗留**：tp 中心过曝、远景平地轻度平铺（需 triplanar/多材质混合，超范围）、庭院关未动。
+- **下一步**：C 阶段——草透光/次表面观感 + 庭院构图一轮（`grass_wind.gdshader` 已随 ART07
+  提交解冻），独立前后对比 + vision 判读，写独立证据文档。

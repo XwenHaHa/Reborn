@@ -139,3 +139,20 @@ Sketchfab 模型**全部未下载**（需登录）；它们只在 `reference_man
   压一档（0.62/0.66/0.58）拉了回来；更合适的候选是 `forest_leaves_02/03/04`（未下载，需负责人定）。
 - 曾尝试 `dry_decay_leaves`（PNG 1K，6.1 MB）：**实测无 alpha 通道**（角落与中心 alpha 均为 255），
   不能当落叶卡片用，已删除未入库；做落叶需要带 alpha 的素材或 Blender 自制卡片。
+
+### 9.1 ART11（2026-11-02）：地表贴图选型——`leafy_grass` 胜出入库
+
+选型过程与判读证据见 `Docs/Evidence/ART11_GROUND_TEXTURE.md`。候选（含落选者）的**原始下载**
+都在 `references/_downloads/`（gitignored、不进包），字节与 Poly Haven API 的 size/md5 逐一校验通过。
+
+| 用途 | 资产页 | 文件（仓库内） | 字节 | SHA256 前 16 位 |
+|---|---|---|---|---|
+| 森林地表（苔藓/泥土/碎叶） | https://polyhaven.com/a/leafy_grass | `leafy_grass_diff_1k.jpg` | 1,195,394 | `CFA40BC9D9417D18` |
+| 〃 | 〃 | `leafy_grass_nor_gl_1k.jpg` | 1,466,049 | `832328216ADC0A7E` |
+| 〃 | 〃 | `leafy_grass_arm_1k.jpg` | 1,010,081 | `95432451CB269379` |
+
+- 接入：`tool_make_ravine_board.gd` 地面由 `forest_floor` 换为 `leafy_grass`
+  （tint 0.82/0.88/0.74 去粉紫偏暖棕-苔绿、uv 24x26、roughness 1.0）。
+  `forest_floor` 三件套仍在库中（暂无其他用途，是否删除由负责人定）。
+- 落选候选（源文件在 `references/_downloads/`，未入库）：`forest_leaves_02/03/04`、
+  `forest_ground_04/05/06`、`leaves_forest_ground`、`mud_forest`。

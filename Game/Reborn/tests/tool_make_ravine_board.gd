@@ -111,6 +111,13 @@ const TEX_PEBBLES_ARM := TEX_DIR + "dry_river_pebbles_arm_1k.jpg"
 const TEX_FLOOR_DIFF := TEX_DIR + "forest_floor_diff_1k.jpg"
 const TEX_FLOOR_NOR := TEX_DIR + "forest_floor_nor_gl_1k.jpg"
 const TEX_FLOOR_ARM := TEX_DIR + "forest_floor_arm_1k.jpg"
+## B 阶段（2026-11-02）选型胜出：leafy_grass（Poly Haven CC0，登记 §9）。
+## 9 宫格短名单 + 同机位 4 变体对比 + vision 判读：小尺度苔藓/泥土/碎叶混合，
+## 平铺重复隐蔽好、与 3D 草丛融合最佳、自带湿润感；forest_leaves_02 因大叶片
+## 重复感与干燥秋叶性格落选（详见 Docs/Evidence/ART11_GROUND_TEXTURE.md）。
+const TEX_GROUND_DIFF := TEX_DIR + "leafy_grass_diff_1k.jpg"
+const TEX_GROUND_NOR := TEX_DIR + "leafy_grass_nor_gl_1k.jpg"
+const TEX_GROUND_ARM := TEX_DIR + "leafy_grass_arm_1k.jpg"
 const TEX_STONE_DIFF := TEX_DIR + "stone_wall_02_diff_1k.jpg"
 const TEX_STONE_NOR := TEX_DIR + "stone_wall_02_nor_gl_1k.jpg"
 const TEX_STONE_ARM := TEX_DIR + "stone_wall_02_arm_1k.jpg"
@@ -166,15 +173,17 @@ func _add_ground(parent: Node3D) -> void:
 	mi.mesh = bm
 	mi.position = Vector3(0.0, GROUND_TOP - GROUND_SIZE.y * 0.5, 0.0)
 	# 地面：优先 Poly Haven CC0 森林地表贴图（albedo + normal + ARM），缺失时退回程序化 shader
-	var floor_mat := _make_tex_material(TEX_FLOOR_DIFF, TEX_FLOOR_NOR, TEX_FLOOR_ARM,
-		Vector2(22.0, 24.0), 0.96)
+	# B 阶段（2026-11-02）：forest_floor（秋叶+砾石）→ leafy_grass（苔藓/泥土/碎叶小尺度混合）。
+	# vision 建议：贴图近景有粉/紫灰色偏 → tint 把色偏往暖棕-苔绿拉（R/B 略压、G 相对抬高）。
+	# 第 1 轮修正（tp 判读"高反光/像水面 + 平铺重复"）：roughness 0.96→1.0、uv 15x17→24x26
+	# （小尺度贴图支持更密平铺，单 tile ~1.9 m，重复图案更难读出）。
+	var floor_mat := _make_tex_material(TEX_GROUND_DIFF, TEX_GROUND_NOR, TEX_GROUND_ARM,
+		Vector2(24.0, 26.0), 1.0)
 	if floor_mat != null:
-		# ART10：`forest_floor` 是"秋叶+砾石"色系，被判读"秋叶地毯/贴图平铺太碎"。
-		# tint 再往冷绿压一档、uv 平铺放大（22x24 → 15x17），让近景读到的是"苔地"而不是重复落叶。
-		floor_mat.albedo_color = Color(0.50, 0.58, 0.46)
-		floor_mat.uv1_scale = Vector3(15.0, 17.0, 1.0)
+		floor_mat.albedo_color = Color(0.82, 0.88, 0.74)
+		floor_mat.uv1_scale = Vector3(24.0, 26.0, 1.0)
 		mi.material_override = floor_mat
-		print("TOOL|Ground|material=forest_floor|uv=9x9")
+		print("TOOL|Ground|material=leafy_grass|tint=0.82,0.88,0.74|uv=24x26|rough=1.0")
 	else:
 		var shader_res := load(GROUND_SHADER) as Shader
 		if shader_res != null:
