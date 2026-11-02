@@ -33,7 +33,7 @@
 改后帧 `Art/Probes/art12_after/`（16:25 前后拍摄，save_result 全 OK）：
 
 - 庭院 `tool_capture_render.gd -- t011` 7 帧；
-- 溪区 `tool_capture_creek.gd -- creek` 4 帧（water motion 0.0316/45 帧，非黑）；
+- 溪区 `tool_capture_creek.gd -- creek` 3 帧（creek_wide_a/b + creek_low_a；water motion 0.0316/45 帧，非黑）；
 - 展板关 `tool_capture_art09_board.gd -- ravine` 4 帧（共用 shader 的透光收益）。
 
 改前基线：`art07_after/`（15:17）与 `art11_ground_after/`（16:08），场景状态与提交基线一致。

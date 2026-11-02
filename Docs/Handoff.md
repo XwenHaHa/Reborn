@@ -720,7 +720,7 @@ $proj = 'E:\Reborn\Game\Reborn'
   ③ `l_courtyard.tscn` 重建（39 阴影 / 24 草簇）；T011 §G 计数同步。
 - **回归**：生成器自检 229/229、T011 全绿、T012 79/79、`run_art09_frame_contract` **48/48**
   （shader 展板关共用）、nav 烤焙 `.tres` **无 diff**。未改玩法/碰撞/导航/鼠洞溪缝尺寸。
-- **取证与判读**：15 帧（庭院 7 + 溪 4 + 展板 4）+ 6 张前后对比板
+- **取证与判读**：14 帧（庭院 7 + 溪 3 + 展板 4）+ 6 张前后对比板
   （`Art/Probes/art12_after/`、`Art/Probes/art12_compare/`，对比基线 = ART07 收口帧与 ART11 帧）；
   vision 判读 7–8.5/10：逆光草叶透亮（黄绿）不再哑光、墙脚草带围合连贯、无新穿帮。
   **参数维持 `sss_strength=0.55` 不动**——ravine_tp 判读"部分迎光叶尖接近泛白"与
