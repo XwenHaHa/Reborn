@@ -165,3 +165,14 @@ vision 复判（6 个关键机位，`node E:/claude-vision-skill/vision.js`）�
 
 "窗口不弹前台 + print 不挂死"已固化为统一包装 `Tools/CaptureRun.ps1`（见 `Tools/README.md`），
 2026-11-02 15:28 用 creek 工具实测验证（窗口 (-2400,-2400) 屏幕外、截图非黑、vision 可判读）。
+
+**补记（2026-11-02 二次反馈）——console 版 exe 是隐藏的弹窗来源**：
+渲染窗口已挪到屏幕外后负责人仍看到窗口弹出，根因是部分调用走了
+`Godot_v4.7.2-stable_win64_console.exe`——**控制台版即使参数全对、`--headless` 也照样在桌面
+弹一个黑色终端窗口**。修正：包装新增 `-Headless` 开关，headless 调用也统一走 GUI 版
+`Godot_v4.7.2-stable_win64.exe`（日志由 `Start-Process -RedirectStandardOutput/-RedirectStandardError`
+在调用层取得，与 exe 类型无关）。**取证/实跑一律不要用 console 版 exe。**
+零窗口验证（`Tools/verify_no_window.ps1`，16:08）：连续 2 次运行并轮询 Godot 进程
+`MainWindowHandle`——headless 回归 12 次采样 **0 个窗口句柄**（48/48 PASS）；非 headless 截图
+的渲染窗口存在但始终在屏幕外，4 帧产出、非黑、vision 复判通过。详见
+`Docs/Evidence/ART11_GROUND_TEXTURE.md` §7 与 `Tools/README.md`。
