@@ -48,8 +48,10 @@ const COLOR_DIM := Color(0.596, 0.639, 0.612)
 const COLOR_FAINT := Color(0.396, 0.443, 0.427)
 const COLOR_ACCENT := Color(0.851, 0.588, 0.227)
 const COLOR_ACCENT_DIM := Color(0.431, 0.325, 0.157)
-const COLOR_PANEL := Color(0.035, 0.047, 0.049, 0.900)
-const COLOR_PANEL_SEL := Color(0.090, 0.103, 0.093, 0.965)
+## ART10：面板底从"暗青灰"往"深灰蓝"偏（展板面板是偏蓝的深色磨砂玻璃；
+## vision 判读旧值透出草绿后"浑浊发青"）。GOLD 强调色不动（令牌契约钉死）。
+const COLOR_PANEL := Color(0.043, 0.055, 0.075, 0.900)
+const COLOR_PANEL_SEL := Color(0.085, 0.105, 0.135, 0.965)
 
 ## 缩略图边长/超采样：真源在 `BoardTokens`，这里只做同值别名（断言守着，见 `run_art09_tokens.gd`）
 const PREVIEW_PX := 64
@@ -942,7 +944,7 @@ func _thumb_frame(content: Control, node_name: String, side: float = -1.0) -> Pa
 ## 未来/锁定卡片的底色：比可玩卡更暗、边框更淡，读起来就是「还没开放」
 func _locked_style() -> StyleBoxFlat:
 	var sb := _panel_style()
-	sb.bg_color = Color(0.028, 0.040, 0.042, 0.720)
+	sb.bg_color = Color(0.032, 0.043, 0.060, 0.760)
 	sb.border_color = Color(0.180, 0.220, 0.212, 0.480)
 	sb.content_margin_left = 10.0
 	sb.content_margin_right = 10.0
@@ -954,7 +956,7 @@ func _locked_style() -> StyleBoxFlat:
 ## 缩略图框：未选中 1 px 暗金边，选中 2 px 亮金边（展板里选中槽是描金框）
 func _thumb_style(is_selected: bool = false) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.020, 0.030, 0.030, 0.900)
+	sb.bg_color = Color(0.024, 0.034, 0.048, 0.900)
 	sb.border_color = BoardTokens.GOLD if is_selected else Color(0.560, 0.470, 0.290, 0.700)
 	sb.corner_radius_top_left = 3
 	sb.corner_radius_top_right = 3
@@ -1339,8 +1341,8 @@ func _button_style(primary: bool, hovered: bool) -> StyleBoxFlat:
 		sb.corner_radius_bottom_left = 3
 		sb.corner_radius_bottom_right = 3
 	else:
-		# 次级按钮：深色玻璃 + 1 px 暗边，hover 只提亮一档，不抢主按钮
-		sb.bg_color = Color(0.086, 0.118, 0.129, 0.92) if hovered else Color(0.055, 0.070, 0.070, 0.88)
+		# 次级按钮：深色玻璃 + 1 px 暗边，hover 只提亮一档，不抢主按钮（ART10：同面板一起偏蓝灰）
+		sb.bg_color = Color(0.086, 0.112, 0.150, 0.92) if hovered else Color(0.055, 0.068, 0.090, 0.88)
 		sb.border_color = Color(0.60, 0.62, 0.52, 0.70) if hovered else Color(0.48, 0.51, 0.44, 0.55)
 		sb.corner_radius_top_left = 2
 		sb.corner_radius_top_right = 2

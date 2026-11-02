@@ -55,6 +55,8 @@ var menu: MainMenu = null
 var menu_camera: Camera3D = null
 ## 菜单补光（挂在菜单相机下、不投阴影）：展示动物的正脸常被主光甩进阴影，加一盏只用于菜单的补光
 var menu_fill: DirectionalLight3D = null
+## ART10 菜单轮廓光（同样只用于菜单）：从主体背后朝镜头打暖金边光，模仿展板的侧逆光毛边
+var menu_rim: DirectionalLight3D = null
 ## 菜单里展示的物种模型（每个物种一个）：只在选物种/结算时存在，出生即释放
 var _showcase: Array[Node3D] = []
 ## 设置项（ART04/ART05）：灵敏度倍数、视野覆盖。真源在 `user://settings.cfg`（见 `GameSettings`）
@@ -349,6 +351,8 @@ func _present_menu() -> void:
 		menu_camera.current = true
 	if menu_fill != null:
 		menu_fill.visible = true
+	if menu_rim != null:
+		menu_rim.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
@@ -361,6 +365,8 @@ func _dismiss_menu() -> void:
 	_clear_showcase()
 	if menu_fill != null:
 		menu_fill.visible = false
+	if menu_rim != null:
+		menu_rim.visible = false
 
 
 func _previous_record_text() -> String:
@@ -629,6 +635,17 @@ func _build_menu_camera() -> void:
 	menu_fill.rotation_degrees = Vector3(-14.0, 0.0, 0.0)
 	menu_fill.visible = false
 	menu_camera.add_child(menu_fill)
+	# ART10：菜单轮廓光——展板主视觉是侧逆光，动物毛边有一圈暖金亮边；实机旧帧
+	# 展示模型被判读"光照平、无立体感"。灯挂在 MenuCamera 下、朝镜头方向打（绕 Y 转 180°），
+	# 只照亮主体的背光边缘；与 MenuFill 同开同关，出生即隐藏，不进玩法。
+	menu_rim = DirectionalLight3D.new()
+	menu_rim.name = "MenuRim"
+	menu_rim.light_energy = 0.85
+	menu_rim.light_color = Color(1.0, 0.82, 0.60)
+	menu_rim.shadow_enabled = false
+	menu_rim.rotation_degrees = Vector3(-6.0, 180.0, 0.0)
+	menu_rim.visible = false
+	menu_camera.add_child(menu_rim)
 
 
 ## 展示点吸附到地面：向下打一条射线；打不到就用常数高度（关卡变化时的兜底）

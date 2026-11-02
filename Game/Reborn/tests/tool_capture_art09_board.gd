@@ -136,10 +136,15 @@ func _make_camera(parent: Node3D, nm: String, from: Vector3, to: Vector3,
 				supported = true
 				break
 		if supported:
+			# ART10：远端景深加深（0.06→0.10、起焦 8 m），并**新增近端景深**
+			# （0.7 m 内的前景草虚化）——展板前景是失焦的苔石/草叶，实机旧帧前景是"清晰的一马平川"。
 			attrs.set("dof_blur_far_enabled", true)
-			attrs.set("dof_blur_far_distance", 7.0)
-			attrs.set("dof_blur_far_transition", 5.0)
-			attrs.set("dof_blur_amount", 0.06)
+			attrs.set("dof_blur_far_distance", 8.0)
+			attrs.set("dof_blur_far_transition", 4.0)
+			attrs.set("dof_blur_near_enabled", true)
+			attrs.set("dof_blur_near_distance", 0.7)
+			attrs.set("dof_blur_near_transition", 0.45)
+			attrs.set("dof_blur_amount", 0.10)
 			cam.attributes = attrs
 			dof = "on"
 	print("FRAME|%s|pos=(%.2f, %.2f, %.2f)|pitch=%.1f|fov=%.0f|dof=%s" % [

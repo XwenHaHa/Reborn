@@ -39,11 +39,12 @@ const TEXT := Color("f4f1e8ff")
 const TEXT_WARM := Color("eddfb9ff")
 const TEXT_DIM := Color("b7c0bcff")
 const TEXT_FAINT := Color("8a938cff")
-## 面板底色：展板右栏是压暗的深青灰玻璃
-const PANEL := Color("07141ddd")
-const PANEL_SELECTED := Color("16211ff2")
+## 面板底色：展板右栏是压暗的深青灰玻璃。
+## ART10：vision 判读实机面板"浑浊发青"，整体往深灰蓝收一档（b 通道 +2..3）；GOLD 族不动。
+const PANEL := Color("0a1018dd")
+const PANEL_SELECTED := Color("16202af2")
 const PANEL_BORDER := Color("7b8b8f66")
-const RAIL_BG := Color("08141af0")
+const RAIL_BG := Color("0a1018f0")
 const RAIL_BORDER := Color("d89b3c59")
 const SCRIM := Color("03121340")
 const BUTTON_DARK := Color("0c1415e0")

@@ -116,7 +116,9 @@ const TEX_STONE_NOR := TEX_DIR + "stone_wall_02_nor_gl_1k.jpg"
 const TEX_STONE_ARM := TEX_DIR + "stone_wall_02_arm_1k.jpg"
 
 ## 近景散布（确定性网格 + 抖动，不用随机数）
-const SCATTER_GRASS := 96
+## ART10：96 → 128 株、单株 0.10–0.22 → 0.16–0.36——旧密度/尺度被判读
+## "草的比例和密度与猫完全不匹配"（猫肩高 ~0.31 m，草却只有火柴大小）。
+const SCATTER_GRASS := 128
 const SCATTER_PEBBLE := 34
 const SCATTER_BAND_X := Vector2(-7.0, 9.0)
 const SCATTER_BAND_Z := Vector2(0.4, 9.0)
@@ -167,8 +169,10 @@ func _add_ground(parent: Node3D) -> void:
 	var floor_mat := _make_tex_material(TEX_FLOOR_DIFF, TEX_FLOOR_NOR, TEX_FLOOR_ARM,
 		Vector2(22.0, 24.0), 0.96)
 	if floor_mat != null:
-		# `forest_floor` 是"秋叶+砾石"色系，和本场景的冷绿基调冲，压一档并把饱和度往绿偏
-		floor_mat.albedo_color = Color(0.62, 0.66, 0.58)
+		# ART10：`forest_floor` 是"秋叶+砾石"色系，被判读"秋叶地毯/贴图平铺太碎"。
+		# tint 再往冷绿压一档、uv 平铺放大（22x24 → 15x17），让近景读到的是"苔地"而不是重复落叶。
+		floor_mat.albedo_color = Color(0.50, 0.58, 0.46)
+		floor_mat.uv1_scale = Vector3(15.0, 17.0, 1.0)
 		mi.material_override = floor_mat
 		print("TOOL|Ground|material=forest_floor|uv=9x9")
 	else:
@@ -217,20 +221,22 @@ func _add_creek(parent: Node3D) -> void:
 	if shader_res != null:
 		var smat := ShaderMaterial.new()
 		smat.shader = shader_res
-		# 去饱和 + 抬粗糙度 + 压镜面 + 降 alpha —— 首轮"像泳池"的主因是又亮又滑又挡底
-		smat.set_shader_parameter(&"shallow_color", Color(0.200, 0.300, 0.300))
+		# ART10 二轮调水：①泡沫带 (foam_width 0.09) 在 16 m 水面上铺出 ~1.4 m 宽的白边，
+		# 把矩形水岸整个描出来（被判读"泳池边"）→ 压到 0.03 且降强度；
+		# ②涟漪更细更活 (13 / 0.26 / flow 0.30)；③再降 alpha 提镜面，逆光下出波光而不是塑料反光。
+		smat.set_shader_parameter(&"shallow_color", Color(0.230, 0.330, 0.310))
 		smat.set_shader_parameter(&"deep_color", Color(0.060, 0.110, 0.120))
 		smat.set_shader_parameter(&"foam_color", Color(0.760, 0.800, 0.800))
 		smat.set_shader_parameter(&"flow_dir", Vector2(-0.94, 0.34))
-		smat.set_shader_parameter(&"flow_speed", 0.22)
-		smat.set_shader_parameter(&"ripple_scale", 9.0)
-		smat.set_shader_parameter(&"ripple_strength", 0.18)
+		smat.set_shader_parameter(&"flow_speed", 0.30)
+		smat.set_shader_parameter(&"ripple_scale", 13.0)
+		smat.set_shader_parameter(&"ripple_strength", 0.26)
 		smat.set_shader_parameter(&"warp_amount", 1.2)
-		smat.set_shader_parameter(&"foam_width", 0.09)
-		smat.set_shader_parameter(&"foam_strength", 0.35)
-		smat.set_shader_parameter(&"base_alpha", 0.32)
-		smat.set_shader_parameter(&"roughness_base", 0.35)
-		smat.set_shader_parameter(&"specular_amount", 0.25)
+		smat.set_shader_parameter(&"foam_width", 0.03)
+		smat.set_shader_parameter(&"foam_strength", 0.22)
+		smat.set_shader_parameter(&"base_alpha", 0.26)
+		smat.set_shader_parameter(&"roughness_base", 0.28)
+		smat.set_shader_parameter(&"specular_amount", 0.34)
 		mi.material_override = smat
 		print("TOOL|Creek|water=shader|%s" % WATER_SHADER)
 	else:
@@ -257,10 +263,18 @@ func _add_shores(parent: Node3D) -> void:
 		bm.size = Vector3(size.x, 0.03, size.y)
 		mi.mesh = bm
 		mi.position = (spot["pos"] as Vector3) + Vector3(0.0, GROUND_TOP + 0.004, 0.0)
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(0.262, 0.236, 0.202)
-		mat.roughness = 0.92
-		mi.material_override = mat
+		# ART10：泥舌从"纯色土板"换成湿砾石贴图（压暗 tint + 低粗糙度的湿面），
+		# 读作"水陆交界的湿石滩"而不是一块沥青板。贴图缺失时退回旧纯色。
+		var mat := _make_tex_material(TEX_PEBBLES_DIFF, TEX_PEBBLES_NOR, TEX_PEBBLES_ARM,
+			Vector2(1.6, 0.7), 0.50)
+		if mat != null:
+			mat.albedo_color = Color(0.40, 0.37, 0.31)
+			mi.material_override = mat
+		else:
+			var plain := StandardMaterial3D.new()
+			plain.albedo_color = Color(0.262, 0.236, 0.202)
+			plain.roughness = 0.92
+			mi.material_override = plain
 		parent.add_child(mi)
 		mi.owner = parent
 	print("TOOL|Shore|mud_tongues=%d" % i)
@@ -326,7 +340,9 @@ func _apply_grass_wind(inst: Node3D) -> bool:
 			continue
 		var wm := ShaderMaterial.new()
 		wm.shader = shader_res
-		wm.set_shader_parameter(&"albedo_color", base_mat.albedo_color)
+		# ART10：草色往暖金压一档（golden hour 里草不该是"纯翠绿"，
+		# vision 判读"受光面过于翠绿、没有和暖橙环境光融合"）。
+		wm.set_shader_parameter(&"albedo_color", base_mat.albedo_color * Color(0.86, 0.78, 0.60))
 		wm.set_shader_parameter(&"roughness_value", base_mat.roughness)
 		mi.set_surface_override_material(i, wm)
 		applied += 1
@@ -439,7 +455,7 @@ func _add_shelter(parent: Node3D) -> void:
 func _add_near_clutter(parent: Node3D) -> void:
 	_add_shore_plates(parent)
 
-	# 近景草：确定性散布 96 株（同一套 bush 资产缩到 0.10–0.22），带风摆
+	# 近景草：确定性散布 128 株（同一套 bush 资产缩到 0.16–0.36），带风摆
 	var grass := 0
 	if ResourceLoader.exists(BUSH_ASSET):
 		var bush: PackedScene = load(BUSH_ASSET) as PackedScene
@@ -449,7 +465,7 @@ func _add_near_clutter(parent: Node3D) -> void:
 			inst.name = "NearGrass%d" % (i + 1)
 			inst.position = p + Vector3(0.0, GROUND_TOP, 0.0)
 			inst.rotation_degrees = Vector3(0.0, float(i) * 37.0, 0.0)
-			inst.scale = Vector3.ONE * (0.10 + 0.12 * _hash01(i, 5.7))
+			inst.scale = Vector3.ONE * (0.16 + 0.20 * _hash01(i, 5.7))
 			parent.add_child(inst)
 			inst.owner = parent
 			_apply_grass_wind(inst)
@@ -479,12 +495,14 @@ func _add_near_clutter(parent: Node3D) -> void:
 # ---------------------------------------------------------------------------
 
 func _add_light_and_env(parent: Node3D) -> void:
-	# 暖色低角度主光：展板的侧逆光来自画面右上，阴影拉长在前景
+	# ART10：改**侧逆光**——主光从溪谷后方（画面深处）低角度射向镜头，
+	# 主体（猫）背对光、镜头侧看到的是轮廓光 + 长阴影，这正是展板主视觉的布光。
+	# 旧值 (-24, 32, 0) 是顺光，被判读"无方向光、无轮廓光、画面平"。
 	var sun := DirectionalLight3D.new()
 	sun.name = "BoardSun"
-	sun.rotation_degrees = Vector3(-24.0, 32.0, 0.0)
-	sun.light_color = Color(1.0, 0.90, 0.72)
-	sun.light_energy = 1.45
+	sun.rotation_degrees = Vector3(-14.0, 196.0, 0.0)
+	sun.light_color = Color(1.0, 0.83, 0.60)
+	sun.light_energy = 1.60
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 45.0
 	sun.shadow_bias = 0.03
@@ -495,8 +513,8 @@ func _add_light_and_env(parent: Node3D) -> void:
 	var fill := DirectionalLight3D.new()
 	fill.name = "BoardSkyFill"
 	fill.basis = Basis.looking_at(Vector3(0.15, -0.55, -0.82))
-	fill.light_color = Color(0.62, 0.72, 0.88)
-	fill.light_energy = 0.38
+	fill.light_color = Color(0.60, 0.70, 0.88)
+	fill.light_energy = 0.55
 	fill.shadow_enabled = false
 	parent.add_child(fill)
 	fill.owner = parent
@@ -519,8 +537,8 @@ func _add_light_and_env(parent: Node3D) -> void:
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ssao_enabled = true
-	env.ssao_radius = 1.1
-	env.ssao_intensity = 2.4
+	env.ssao_radius = 1.35
+	env.ssao_intensity = 2.8
 	env.ssao_power = 2.0
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 1.05
@@ -528,18 +546,30 @@ func _add_light_and_env(parent: Node3D) -> void:
 	# 空气透视：近景 9 m 内零影响，远景（石墙/围栏）淡下去做层次
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_DEPTH
-	env.fog_light_color = Color(0.68, 0.74, 0.78)
-	env.fog_light_energy = 0.85
+	env.fog_light_color = Color(0.74, 0.71, 0.62)
+	env.fog_light_energy = 0.75
 	env.fog_density = 0.85
-	env.fog_sky_affect = 0.10
+	env.fog_sky_affect = 0.15
 	env.fog_depth_begin = 9.0
-	env.fog_depth_end = 46.0
+	env.fog_depth_end = 38.0
 	env.fog_depth_curve = 1.0
-	# 展板的高光是"太阳边上发亮"，给一点点辉光就够，不做整屏泛白
+	# ART10：体积雾——展板有"树冠间暖色光柱 + 溪面薄雾"，深度雾只推远景推不出光柱。
+	# anisotropy 高值让逆光主光在雾里前向散射，形成穿林光带（T600 @1280x720 Forward+ 实测可开）。
+	env.volumetric_fog_enabled = true
+	env.volumetric_fog_density = 0.016
+	env.volumetric_fog_albedo = Color(0.82, 0.78, 0.70)
+	env.volumetric_fog_anisotropy = 0.72
+	env.volumetric_fog_length = 72.0
+	env.volumetric_fog_detail_spread = 2.0
+	env.volumetric_fog_ambient_inject = 0.12
+	env.volumetric_fog_sky_affect = 0.12
+	env.volumetric_fog_temporal_reprojection_enabled = true
+	# 展板的高光是"太阳边上发亮"，给一点点辉光就够，不做整屏泛白。
+	# ART10 二轮：0.50/1.05 被判读"画面中心一片死白、吃掉水面细节"→ 收到 0.35/1.15。
 	env.glow_enabled = true
-	env.glow_intensity = 0.30
-	env.glow_bloom = 0.04
-	env.glow_hdr_threshold = 1.10
+	env.glow_intensity = 0.35
+	env.glow_bloom = 0.05
+	env.glow_hdr_threshold = 1.15
 	var we := WorldEnvironment.new()
 	we.name = "WorldEnvironment"
 	we.environment = env
@@ -579,11 +609,19 @@ func _add_shore_plates(parent: Node3D) -> void:
 		mi.mesh = bm
 		mi.position = Vector3(CREEK_CENTER.x + t, GROUND_TOP + 0.004, edge_z + offset_z)
 		mi.rotation_degrees = Vector3(0.0, (_hash01(i, 8.1) - 0.5) * 26.0, 0.0)
+		# ART10：岸板是"灰色悬空板/马路牙子"判读的头号来源——纯色深灰必须换掉。
+		# 换成湿砾石贴图（uv 随板长走、tint 按原抖动压暗、低粗糙度做湿面高光）。
 		var shade := 0.150 + 0.075 * _hash01(i, 9.7)
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(shade, shade * 0.93, shade * 0.84)
-		mat.roughness = 0.86
-		mi.material_override = mat
+		var mat := _make_tex_material(TEX_PEBBLES_DIFF, TEX_PEBBLES_NOR, TEX_PEBBLES_ARM,
+			Vector2(1.4, 0.6), 0.42)
+		if mat != null:
+			mat.albedo_color = Color(shade * 2.9, shade * 2.75, shade * 2.5)
+			mi.material_override = mat
+		else:
+			var plain := StandardMaterial3D.new()
+			plain.albedo_color = Color(shade, shade * 0.93, shade * 0.84)
+			plain.roughness = 0.86
+			mi.material_override = plain
 		parent.add_child(mi)
 		mi.owner = parent
 
