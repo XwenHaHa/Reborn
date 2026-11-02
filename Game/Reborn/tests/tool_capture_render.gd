@@ -428,6 +428,10 @@ const T011_VIEWS := [
 
 func _capture_t011_frames(lab: Node) -> void:
 	print("CAP|t011|start")
+	# ART07：庭院取景前先隔离 lab —— T021 就记录过"lab 自带 Player/标尺/探针立方体会落进取景场"，
+	# t011 分支早于那次修复，基线图里能看到 1 m 探针立方体与标尺落在庭院中央（被判读误读成"测试靶场"）。
+	# 这里只隐藏 lab 可视物 + 把它自己的 Player 移出碰撞/物理，不碰庭院世界，也不改任何断言路径。
+	_t011_isolate_lab(lab)
 	var packed: PackedScene = load(T011_LEVEL)
 	if packed == null:
 		print("CAP|t011|ERROR|level load failed")
@@ -2145,3 +2149,44 @@ func _capture_t030_frames(lab: Node) -> void:
 	for i in 4:
 		await process_frame
 	print("CAP|t030|done")
+
+
+## ART07：t011 取景隔离（同 `_t021_isolate_lab` 的规矩：lab 不要出现在庭院画面里）
+func _t011_isolate_lab(lab: Node) -> void:
+	if lab == null:
+		print("CAP|t011|isolate|lab=<none>")
+		return
+	if lab is Node3D:
+		(lab as Node3D).visible = false
+	var player := lab.get_node_or_null("Player") as CollisionObject3D
+	if player != null:
+		player.collision_layer = 0
+		player.collision_mask = 0
+		player.set_physics_process(false)
+	# ART07 实测缺陷：只隐藏 lab 的**可视物**不够 —— lab 自带 `WorldEnvironment`（带默认
+	# `ProceduralSkyMaterial`）和一盏 `DirectionalLight3D`。同一个 Viewport 里两个
+	# `WorldEnvironment` 只有一个生效，基线图"画面顶部一条深褐色横带 + 没有空气透视"
+	# 就是**lab 的默认天空**在起作用：庭院的 fog / 天空半球颜色 / 补光全被它盖掉了。
+	# 所以取景前必须把 lab 的环境与灯光一并关掉（只关 lab，不碰庭院世界）。
+	var lab_env := lab.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if lab_env != null:
+		lab_env.environment = null
+	var lab_lights := 0
+	for n in _t011_collect_lights(lab):
+		n.visible = false
+		lab_lights += 1
+	print("CAP|t011|isolate|lab=%s|lab_is_node3d=%s|lab_player=%s|player_layer=%d" % [
+		lab.name, str(lab is Node3D), str(player != null),
+		player.collision_layer if player != null else -1])
+	print("CAP|t011|isolate_env|lab_world_env=%s|lab_lights_disabled=%d" % [
+		str(lab_env != null), lab_lights])
+
+
+## 递归收集 lab 里的灯光节点（`Light3D` 的 `visible=false` 即不参与光照）。
+func _t011_collect_lights(n: Node) -> Array:
+	var out: Array = []
+	if n is Light3D:
+		out.append(n)
+	for ch in n.get_children():
+		out.append_array(_t011_collect_lights(ch))
+	return out

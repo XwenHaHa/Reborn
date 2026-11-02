@@ -315,15 +315,16 @@ $proj = 'E:\Reborn\Game\Reborn'
 - **NOT-VERIFIED**：鼠作主视觉时的模型朝向（vision 对正反两个机位都答「背对」，自相矛盾 → 不作结论）。
 - 回归证据：`Docs/Evidence/ART06.md` §5（15 套 / 1,463 条全绿，含非 headless `run_art05_input`）。
 
-## 庭院构图 / 接触感 / 背光试作（ART07，2026-10-28）
+## 庭院构图 / 接触感 / 背光试作（ART07，2026-10-28 起；2026-11-02 收口轮）
 
-- 任务规格 `Docs/Tasks/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`（临时视觉试作，不是正式 T/P6/T053）；证据 `Docs/Evidence/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`；状态 **awaiting-review**，不是 done/approved。
-- 当前表现层：16 株背景草簇、31 个无碰撞阴影、草风 shader 根部明暗/实例差异、SSAO + ACES；指数雾关闭，备选 depth fog 参数留在生成器但关闭。`SkyFill` 0.45→0.62。溪心装饰石已避开溪缝固定视线。
-- **生成顺序**：`tool_make_courtyard.gd` → `tool_make_courtyard_nav.gd` → 回归 → 窗口取证。生成器重建会清掉两张 `NavigationRegion3D` 和 `nav_source_courtyard` 组，漏掉 nav 工具会造成 T012/T020/T026/T027 大量失败。本次 nav 重烤后 `.tres` 无 diff：鼠 228 polys、猫 180 polys。
-- 当前无头回归：生成器自检 229/229；T011 229/229、T012 79/79、T020 164/164、T026 96/96、T027 96/96（总计 664），0 条 `SCRIPT ERROR`。鼠洞 0.24×0.30、溪缝 0.24、20 个 StaticBody、四区域、cover volumes 和猫鼠路线不变。
-- 视觉判读：现有 overview 图显示均匀雾幕消失、地标可辨但背景层次偏弱；溪缝清晰。courtyard/grass 仍被判草石像贴纸、接地阴影弱、危险区/路线表达不清。A5/A7 未通过，A6 仅溪缝机位确认。
-- 最后一轮非 headless 窗口取证调用超时（240 s），因此不能证明 `art07_after` 全部截图对应最后一次 shader/生成参数。证据文档已明确此限制；需在可完成窗口取证的条件下重拍并复核，之后再决定是否请求负责人验收。
-- **下一任务**：视觉试作记录后回到 T031（地点发现与老鼠解锁）；正式环境资产仍受 P6/T053 依赖与负责人美术批准约束。
+- 任务规格 `Docs/Tasks/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`（§11 收口轮记录）；证据 `Docs/Evidence/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`（§9 收口轮证据）；状态 **awaiting-review（2026-11-02 已按 awaiting-review 提交）**，不是 done/approved。
+- 改动内容（只复用现有资产）：背景草簇 16 + 灌木 10 + 填充灌木 6、溪心石 6（`CreekRock05` 移离溪缝视线）、庭院石 3、不透明泥舌半岛 5、31 个无碰撞贴地阴影（PlaneMesh 外扩 + 径向渐隐）、草根接触 AO + 实例明暗差异（`grass_wind.gdshader`）、SSAO 1.2 + ACES、`SkyFill` 0.62、CC0 HDRI 天空球（ART09-A）；指数雾关闭（depth fog 参数保留但关闭）。
+- **收口审阅（2026-11-02，负责人授权）**：五个文件 + `l_courtyard.tscn` 逐项核过——每处改动对应证据里的一个视觉问题、与 ART10 已提交改动无文件重叠、可整体 revert 回恢复点；grass_wind 根部 AO 对庭院/展板两关一致生效，`run_art09_frame_contract` **48/48** 复跑通过。审阅中修掉生成器环境块一行重复赋值。
+- **生成顺序（不变）**：`tool_make_courtyard.gd` → `tool_make_courtyard_nav.gd` → 回归 → 窗口取证。生成器重建会清掉两张 `NavigationRegion3D` 和 `nav_source_courtyard` 组，漏掉 nav 工具会造成 T012/T020/T026/T027 大量失败。nav 重烤后 `.tres` 无 diff。
+- 回归（2026-11-02 全量复跑）：生成器自检 **229/229**；T011 **229**、T012 **79**、T010 **95**、T013 **73**、T020 **164**、T026 **96**、T027 **96**、T030 **111**、art09 frame **48**；0 条 `SCRIPT ERROR`。鼠洞 0.24×0.30、溪缝 0.24、20 个 StaticBody、四区域、cover volumes、猫鼠路线不变。
+- **上一轮"取证超时 240 s+"的根因已解决并解除截图时效限制**：Godot `print()` 写入断裂管道会阻塞主线程（前台命令超时转后台时管道断）→ 统一改 `Tools/CaptureRun.ps1`（进程后台运行 + stdout 落文件 + `--position` 屏幕外不抢前台）。11 帧截图全部重拍刷新到 `Art/Probes/art07_after/`。
+- 6 机位 vision 复判（证据 §9.3）：A1–A4、A8、A9 **PASS**；**A5 部分通过**（灰幕消失 + 三层可辨；仍缺光影纵深/空气透视差/草带未成带）；**A6 部分通过**（溪缝 PASS；洞口机位固定判读反复，**需负责人人工复核**）；**A7 FAIL**（草插片感、棚柱/屏障接地与接缝、水岸硬切、泥舌板感、树桩底部悬浮）。未过项根因与路线见证据 §9.3（均超出"复用现有资产"边界：需地表贴图选型、接触阴影机制或资产改造）。
+- **下一任务**：B 地表贴图选型（forest_leaves_02/03/04 候选）→ C 草透光/庭院观感；正式环境资产仍受 P6/T053 依赖与负责人美术批准约束。
 
 
 ## 美术流水线（ART01 已打通，2026-10-21）

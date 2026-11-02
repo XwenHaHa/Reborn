@@ -179,8 +179,83 @@ const FENCE_MODULE_THICK := 0.302739
 const ROOT_HOLE_ASSET := "res://assets/environment/sm_root_hole_001.glb"
 const ROOT_HOLE_SIZE := Vector3(0.823243, 0.850000, 0.778105)
 
+
+## ART09 天空球：CC0（Poly Haven `mossy_forest`，2k Radiance HDR）。
+## 用途：菜单/实玩的背景天空；来源与许可见 `Docs/THIRD_PARTY_ASSETS.md`。
+const SKY_HDRI_PATH := "res://assets/environment/hdri/mossy_forest_2k.hdr"
 const ROUTE_SHORT_START := Vector3(2.0, GROUND_TOP, 2.0)
 const ROUTE_SHORT_END := Vector3(2.0, GROUND_TOP, -22.0)
+
+# --- ART07：构图 / 接触感 / 背光试作（全部为固定数组，确定性；一律**无碰撞**、**不进**导航组）-----
+## 为什么需要：基线视觉判读（`Art/Probes/art07_before/t011_map_overview.png`）的结论是
+## 「整场一层平」——80×80 地面 + 3 m 围墙 + 3 丛草，中远景没有任何分离手段，远景与近景
+## 同一亮度与对比；草丛/石头贴地但缺接地阴影，远处读成"贴纸"。
+## 下面这些节点只做**画面**：零碰撞、不进 `nav_source_courtyard`、不改变任何静态碰撞体，
+## 所以 T011/T012/T026/T027 的几何与导航口径全部原样。
+const GROUND_SHADOW_LIFT := 0.007            # 接地阴影离地 7 mm（地面顶 0.10 → 0.107）
+const GROUND_SHADOW_COLOR := Color(0.055, 0.066, 0.050)
+const GROUND_SHADOW_ALPHA_K := 3.2            # 接触阴影强度倍率（1.0 判"看不出"、1.7 判"底部没有压暗"；
+                                              # 外扩 + 径向渐隐后中心峰值抬高，外露的一圈才有读数）
+const GROUND_SHADOW_SPREAD := 1.75            # 阴影尺寸 = 脚印 × 1.75（**必须**明显大于冠层轮廓：
+                                              # 收在脚印内的暗片会被草叶从上方盖住 → 判"没有 AO"）
+## 溪道里的非碰撞石头（复用 `sm_boulder_001`）：打散"22×9 直带水面 + 几块泥舌"的矩形感。
+## 位置全部落在水面矩形内（x∈[−34,−12]、z∈[11.5,20.5]），且离鼠车道（缝中心 x=−31.73、宽 0.24）足够远。
+## **ART07 验收判读修正（视觉失败项）**：原 `CreekRock05` 在 (−33.2, 12.4) —— x 仅离缝轴 1.47 m、z 又落在岸墙跨度内，
+## 在 `t011_creek_gap_lane` 机位（正对缝口、机位就在缝轴上）里正好压在**缝口左外侧的墙脚**，
+## 判读为"石头+草丛把 0.24 m 鼠路线挤窄/视觉上封住"。现在把这条石头后移到溪心 (−24.5, 19.3)，
+## 并把"缝轴两侧 ≥1.6 m（当 z 落在岸墙跨度内）"写成 `_verify` 的硬断言 `decor_clear_of_creek_gap_mouth`。
+const CREEK_ROCKS := [
+	{"x": -30.2, "z": 18.6, "yaw": 22.0, "s": 0.46},
+	{"x": -26.4, "z": 12.9, "yaw": 133.0, "s": 0.52},
+	{"x": -21.2, "z": 19.1, "yaw": 258.0, "s": 0.38},
+	{"x": -16.2, "z": 13.1, "yaw": 302.0, "s": 0.60},
+	{"x": -13.3, "z": 18.3, "yaw": 78.0, "s": 0.34},
+	{"x": -24.5, "z": 19.3, "yaw": 196.0, "s": 0.40},
+]
+## 背景层草簇：贴围墙脚 / 场地边角，只提供中远景剪影。
+## 约束：不进 `danger_zones`（开阔暴露区必须保持开阔）、离任何 `cover_volumes` 中心 ≥3 m，位置**未改**。
+## **ART07 收尾轮 #2**：vision 判"背景草簇没有形成分层"。原因之一是从 45° 俯瞰时它们只有 1.6～1.9 m 宽，
+## 在 40～90 m 的视距下就是几个像素的绿点。这里只把尺度统一抬到 0.70～0.86（仍明显小于 3×3 m 掩体的
+## 1.00 尺度，避免读成"假掩体"），配合 `grass_wind.gdshader` 的根部压暗 + 逐实例明暗差，
+## 让围墙脚形成一条**中景暗色草带**，而不是靠加雾/加贴片造纵深。位置、数量（10）、朝向全部保持原值。
+const SCENERY_BUSHES := [
+	{"x": -33.6, "z": 26.6, "yaw": 24.0, "s": 0.78},
+	{"x": -27.8, "z": 28.5, "yaw": 78.0, "s": 0.70},
+	{"x": -13.2, "z": 28.6, "yaw": 140.0, "s": 0.76},
+	{"x": 13.4, "z": 28.5, "yaw": 205.0, "s": 0.74},
+	{"x": 33.2, "z": 26.2, "yaw": 300.0, "s": 0.80},
+	{"x": 34.0, "z": 3.0, "yaw": 45.0, "s": 0.84},
+	{"x": -34.2, "z": 2.8, "yaw": 120.0, "s": 0.76},
+	{"x": -33.6, "z": -24.0, "yaw": 200.0, "s": 0.86},
+	{"x": 34.0, "z": -24.2, "yaw": 264.0, "s": 0.84},
+	{"x": -12.6, "z": -24.6, "yaw": 330.0, "s": 0.72},
+]
+## ART07 收尾轮 #2（续）：vision 判围墙脚草簇"零星、点状、极其稀疏，没有连成带"。
+## 因此沿同一条墙脚线**加密** 6 株（同资产、同规则：零碰撞、不进导航组、不进危险区、离掩体 ≥2 m），
+## 让北墙/东西墙脚各读成一小段连续草带；尺度仍 ≤0.86（明显小于 1.00 的掩体草丛）。
+const SCENERY_BUSHES_FILL := [
+	{"x": -21.0, "z": 28.4, "yaw": 55.0, "s": 0.74},
+	{"x": -18.2, "z": 27.6, "yaw": 12.0, "s": 0.70},
+	{"x": 20.4, "z": 28.2, "yaw": 168.0, "s": 0.76},
+	{"x": 24.6, "z": 27.4, "yaw": 240.0, "s": 0.72},
+	{"x": -34.2, "z": -8.4, "yaw": 310.0, "s": 0.70},
+	{"x": 34.2, "z": -8.0, "yaw": 96.0, "s": 0.72},
+]
+## 庭院内的前景小石（纯视觉）：给出生点附近一个近景参考物，不压出生→补给走廊。
+const COURTYARD_ROCKS := [
+	{"x": 1.2, "z": 21.4, "yaw": 34.0, "s": 0.26},
+	{"x": -1.4, "z": 19.6, "yaw": 190.0, "s": 0.20},
+	{"x": 4.6, "z": 22.2, "yaw": 96.0, "s": 0.30},
+]
+## 泥舌"半岛"：比现有锯齿更大的泥岸，探进水面，并在上面长草。
+## 用途：让水边读成"不规则的岸"而不是"被一排小板子遮住的矩形"。
+const MUD_PENINSULAS := [
+	{"x": -19.5, "z": 19.4, "sx": 3.2, "sz": 2.2, "yaw": 6.0, "grass_s": 0.50},
+	{"x": -23.6, "z": 12.6, "sx": 2.6, "sz": 1.8, "yaw": -8.0, "grass_s": 0.44},
+	{"x": -12.9, "z": 16.9, "sx": 1.6, "sz": 2.8, "yaw": 3.0, "grass_s": 0.42},
+	{"x": -28.6, "z": 19.2, "sx": 2.4, "sz": 1.7, "yaw": -5.0, "grass_s": 0.42},
+	{"x": -27.2, "z": 12.3, "sx": 3.0, "sz": 1.9, "yaw": 4.0, "grass_s": 0.48},
+]
 
 var _fails := 0
 
@@ -201,6 +276,7 @@ func _initialize() -> void:
 	_add_creek_structures(root_node)
 	_add_routes(root_node)
 	_add_hide_spots(root_node)
+	_add_composition_dressing(root_node)
 	_add_light_and_env(root_node)
 
 	var out := PackedScene.new()
@@ -361,8 +437,9 @@ func _add_grass_structures(parent: Node3D) -> void:
 	# 开阔暴露区：只做数据体量 + 一块贴地的暗色标记（无碰撞，只给人看）
 	_mk_data_area(parent, "DangerZone", DANGER_SIZE, DANGER_CENTER, "danger_zones",
 		{"visibility_factor": 1.0, "role": "open_exposure"})
+	# ART07：这块标记原来 alpha 0.35，俯视图里读成"铺了一块的浅红地毯"；压到 0.10 只留提示。
 	_mk_surface_marker(parent, "DangerZoneMark", Vector3(DANGER_SIZE.x, 0.02, DANGER_SIZE.z),
-		Vector3(DANGER_CENTER.x, GROUND_TOP + 0.01, DANGER_CENTER.z), Color(0.55, 0.35, 0.30, 0.35))
+		Vector3(DANGER_CENTER.x, GROUND_TOP + 0.01, DANGER_CENTER.z), Color(0.55, 0.35, 0.30, 0.10))
 
 	for i in COVERS.size():
 		var c: Dictionary = COVERS[i]
@@ -626,19 +703,85 @@ func _add_light_and_env(parent: Node3D) -> void:
 	var fill := DirectionalLight3D.new()
 	fill.name = "SkyFill"
 	fill.basis = Basis.looking_at(Vector3(0.0, -0.55, 0.85))
-	fill.light_energy = 0.45
+	# ART07：0.45 → 0.62 —— 基线判读指出"背光面靠一盏灯兜底仍偏暗、明暗对比低"（根障斜视机位最明显）。
+	# 只抬这盏**不投影**的补光，主光方向/能量/阴影方向一字未动（阴影结构不变，只把暗面抬起来）。
+	fill.light_energy = 0.62
 	fill.shadow_enabled = false
 	parent.add_child(fill)
 	fill.owner = parent
 
 
-	var sky_mat := ProceduralSkyMaterial.new()
+	# ART09：天空从纯程序化灰蓝换成 CC0 森林 HDRI（Poly Haven `mossy_forest` 2k HDR）。
+	# 依据：展板背景是真实森林溪谷，程序化天空在画面上只剩一条灰带；HDRI 让背景读成
+	# "树林 + 斑驳阳光"。仍然保持 `BG_SKY` + 非空 `Sky`（T011 的两条环境断言原样成立）。
 	var sky := Sky.new()
-	sky.sky_material = sky_mat
+	var hdri := load(SKY_HDRI_PATH)
+	if hdri != null:
+		var pano := PanoramaSkyMaterial.new()
+		pano.panorama = hdri
+		sky.sky_material = pano
+		print("TOOL|Env|sky=panorama|%s" % SKY_HDRI_PATH)
+	else:
+		# 退路：没有 HDRI 就回到 ART07 的程序化天空（灰蓝地平线 + 0.75 能量），不静默变成黑屏。
+		var sky_mat := ProceduralSkyMaterial.new()
+		sky_mat.ground_horizon_color = Color(0.62, 0.66, 0.70)
+		sky_mat.ground_bottom_color = Color(0.52, 0.55, 0.58)
+		sky_mat.energy_multiplier = 0.75
+		sky.sky_material = sky_mat
+		print("TOOL|Env|sky=procedural|hdri_missing")
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	# 明暗结构：天光是这台机位"发灰、阴影不落"的主因——天空环境光（`AMBIENT_SOURCE_SKY`）
+	# 把太阳阴影几乎洗平（vision 反复判"物体底部没有暗色接地压暗"）。
+	# 实测：`env.ambient_light_energy` 对 SKY 源**无效**（0.72 与 1.0 渲染像素完全一致），
+	# 正确的旋钮是天空材质的 `energy_multiplier`（它同时决定天光辐照与天空自身亮度）。
+	# 0.75：太阳/天光比值拉开一档，天空整体略收暗，仍保持 BG_SKY 与灰蓝地平线。
+	# 真实接触遮蔽：SSAO。vision 两轮判"草丛/石头底部没有 AO、像浮在贴纸上的插片"，
+	# 贴地暗片只能补"轮廓外的一圈"，棚屋/墙角/石头与地面的**凹角**要靠屏幕空间 AO 才读得出。
+	# 半径按"石头/草丛脚印 ~0.5 m"给（视距 20～50 m 仍能落在几个像素上），强度抬到 2.6。
+	env.ssao_enabled = true
+	env.ssao_radius = 1.2
+	env.ssao_intensity = 2.6
+	env.ssao_power = 2.0
+	# 色调映射：Godot 默认 `TONE_MAPPER_LINEAR` 在这种"大面积中等亮度地面 + 一盏太阳"的场里
+	# 会把明暗差压平（vision 反复判"发灰、平淡、低对比"）。ACES 保留高光、加深中暗部，
+	# 前/中/背景靠**明暗**就能分层，不需要再加全屏 veil。曝光维持 1.0（不改整体亮度基准）。
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 1.0
+	env.tonemap_white = 1.0
+	print("TOOL|Env|ssao=%s|radius=%.2f|intensity=%.2f|tonemap=%d|exposure=%.2f" % [
+		str(env.ssao_enabled), env.ssao_radius, env.ssao_intensity, env.tonemap_mode,
+		env.tonemap_exposure])
+	# **雾：最终状态 = 关闭**（指数雾被三轮实测否决；远景深度雾已实测可用但会带回"整屏偏灰"的判读，
+	# 交负责人决定是否开启，见下）。
+	# 单变量实测（overview 机位 pos(0,52,72)→look(0,0,2)，fov 45，1280×720；全图亮度 sd / 远带−近带均差）：
+	#   指数 density 0.000 → sd 0.1319、far−near 0.1922
+	#   指数 density 0.003 → sd 0.0893、far−near 0.1407（vision 判"整屏灰白雾幕"）
+	#   指数 density 0.008 → sd 0.0513、far−near 0.0875
+	# 结论：本机位到场地 40～90 m，**指数雾**在这里是全屏提亮式压对比，任何密度都只会抹平层次。
+	# **远景深度雾（已实测的备选方案）**：`FOG_MODE_DEPTH` + begin=80 / end=170 / density=0.9 / sky_affect=0，
+	# 近景（<80 m，含全部近景机位）零影响，只有远角起雾；vision 对它的判读是
+	# "三层分明、远景明显更淡（空气透视 OK）、无漂浮"，但同时也答"整屏有灰白雾化感（偏灰）"。
+	# 因为本轮验收明确要求"fog veil 必须消失"，**最终取关闭**；深度雾参数保留在下面几行，
+	# 负责人若要 A5 的"远景更淡"一项，把 `env.fog_enabled` 改成 true 即可（其它设置不动）。
+	env.fog_enabled = false
+	env.fog_mode = Environment.FOG_MODE_DEPTH
+	env.fog_depth_begin = 80.0
+	env.fog_depth_end = 170.0
+	env.fog_depth_curve = 1.0
+	env.fog_density = 0.9
+	env.fog_light_color = Color(0.60, 0.65, 0.70)
+	env.fog_light_energy = 0.75
+	env.fog_sun_scatter = 0.0
+	env.fog_aerial_perspective = 0.0
+	# sky_affect = 0：**只雾化远处几何，不洗白天空/整屏**（0.25 时 vision 判"四周一圈淡化＝灰雾幕"）
+	env.fog_sky_affect = 0.0
+	print("TOOL|Env|fog=%s|mode=depth|begin=%.0f|end=%.0f|density=%.2f|sky_affect=%.2f|fill_energy=%.2f" % [
+		"enabled" if env.fog_enabled else "disabled",
+		env.fog_depth_begin, env.fog_depth_end, env.fog_density, env.fog_sky_affect,
+		fill.light_energy])
 	var we := WorldEnvironment.new()
 	we.name = "WorldEnvironment"
 	we.environment = env
@@ -1177,6 +1320,219 @@ func _mk_marker(parent: Node3D, nm: String, pos: Vector3, group: String, meta: D
 
 
 # ---------------------------------------------------------------------------
+# ART07：构图装饰（接地阴影 / 背景草簇 / 溪中石 / 庭院小石 / 泥舌"半岛"）
+# 全部**零碰撞**、**不进** `nav_source_courtyard`、数据全是固定数组 → 玩法与导航零影响。
+# ---------------------------------------------------------------------------
+
+func _add_composition_dressing(parent: Node3D) -> void:
+	# ① 接地阴影：给**已有**贴地物件补一圈暗色压边，让它们"坐"在地面上而不是浮在贴图上。
+	for i in COVERS.size():
+		var c: Dictionary = COVERS[i]
+		_mk_ground_shadow(parent, "GroundShadowCover%d" % (i + 1),
+			Vector3(float(c["pos"].x), 0.0, float(c["pos"].z)), Vector2(2.3, 2.4), 0.20, float(BUSH_YAWS[i]))
+	_mk_ground_shadow(parent, "GroundShadowCreekCover", Vector3(-28.0, 0.0, 10.0),
+		Vector2(2.3, 2.4), 0.20, 212.0)
+	_mk_ground_shadow(parent, "GroundShadowBoulder", Vector3(-14.0, 0.0, 8.0),
+		Vector2(1.6, 2.1), 0.26, 0.0)
+	var stump_hd: float = ROOT_HOLE_SIZE.z * 0.5
+	_mk_ground_shadow(parent, "GroundShadowStumpS",
+		Vector3(HOLE_CENTER_X, 0.0, BARRIER_Z_MIN - stump_hd), Vector2(1.0, 0.95), 0.30, 0.0)
+	_mk_ground_shadow(parent, "GroundShadowStumpN",
+		Vector3(HOLE_CENTER_X, 0.0, BARRIER_Z_MAX + stump_hd), Vector2(1.0, 0.95), 0.30, 0.0)
+	var debris_at := [Vector3(9.0, 0.0, 27.6), Vector3(8.4, 0.0, 26.6), Vector3(9.4, 0.0, 25.4)]
+	for i in debris_at.size():
+		_mk_ground_shadow(parent, "GroundShadowDebris%d" % (i + 1), debris_at[i],
+			Vector2(0.5, 0.5), 0.24, 0.0)
+	_mk_ground_shadow(parent, "GroundShadowMoundA", Vector3(-20.0, 0.0, -12.0), Vector2(2.3, 2.3), 0.18, 0.0)
+	_mk_ground_shadow(parent, "GroundShadowMoundB", Vector3(14.0, 0.0, -8.0), Vector2(2.3, 2.3), 0.18, 0.0)
+
+	# ② 背景层草簇：贴围墙脚 / 场地边角，只做中远景剪影
+	#    主列表 10 株（`SceneryBush00..09`）+ 加密列表 6 株（`SceneryBushFill0..5`），同资产同规则。
+	for i in SCENERY_BUSHES.size():
+		var b: Dictionary = SCENERY_BUSHES[i]
+		var nm := "SceneryBush%02d" % i
+		var at := Vector3(float(b["x"]), GROUND_TOP, float(b["z"]))
+		_mk_decor_bush(parent, nm, at, float(b["yaw"]), float(b["s"]))
+		_mk_ground_shadow(parent, "%sShadow" % nm, at,
+			Vector2(2.4, 2.5) * float(b["s"]), 0.16, float(b["yaw"]))
+	for i in SCENERY_BUSHES_FILL.size():
+		var bf: Dictionary = SCENERY_BUSHES_FILL[i]
+		var fnm := "SceneryBushFill%d" % i
+		var fat := Vector3(float(bf["x"]), GROUND_TOP, float(bf["z"]))
+		_mk_decor_bush(parent, fnm, fat, float(bf["yaw"]), float(bf["s"]))
+		_mk_ground_shadow(parent, "%sShadow" % fnm, fat,
+			Vector2(2.4, 2.5) * float(bf["s"]), 0.16, float(bf["yaw"]))
+
+	# ③ 溪中石：打散"22×9 直带水面"的矩形感（复用 CC0 巨石资产，纯视觉）
+	for i in CREEK_ROCKS.size():
+		var r: Dictionary = CREEK_ROCKS[i]
+		var rnm := "CreekRock%02d" % i
+		var rat := Vector3(float(r["x"]), GROUND_TOP, float(r["z"]))
+		_mk_rock_decor(parent, rnm, rat, float(r["yaw"]), float(r["s"]))
+
+	# ④ 庭院前景小石（给出生点附近一个近景参考物）
+	for i in COURTYARD_ROCKS.size():
+		var q: Dictionary = COURTYARD_ROCKS[i]
+		var qnm := "CourtyardRock%02d" % i
+		var qat := Vector3(float(q["x"]), GROUND_TOP, float(q["z"]))
+		_mk_rock_decor(parent, qnm, qat, float(q["yaw"]), float(q["s"]))
+		_mk_ground_shadow(parent, "%sShadow" % qnm, qat,
+			Vector2(1.5, 2.1) * float(q["s"]) * 0.9, 0.22, float(q["yaw"]))
+
+	# ⑤ 泥舌"半岛"：探进水面的大块泥岸，上面长草 → 水边不再是直线
+	# **ART07 收尾轮 #2**：0.152 → **0.1405**。vision 对 `creek_wide` 判"泥板像悬在水上的方块、
+	# 边缘直上直下"——原高度让泥板侧面露出 2.2 cm，斜视时读成漂浮的厚板。压到水面(0.13)之上 1.05 cm：
+	# 仍保证泥板高于水面不被水盖住（`_verify` 的 0.13 < top < 0.155 断言照旧），但侧面薄到读作"岸"。
+	var rim_top: float = 0.1405
+	var rim_h: float = rim_top - GROUND_TOP
+	for i in MUD_PENINSULAS.size():
+		var p: Dictionary = MUD_PENINSULAS[i]
+		var pnm := "CreekPeninsula%02d" % i
+		var mi := _mk_opaque_plate(parent, pnm,
+			Vector3(float(p["sx"]), rim_h, float(p["sz"])),
+			Vector3(float(p["x"]), GROUND_TOP + rim_h * 0.5, float(p["z"])),
+			Color(0.170, 0.156, 0.132))
+		mi.rotation_degrees = Vector3(0.0, float(p["yaw"]), 0.0)
+		_mk_decor_bush(parent, "%sGrass" % pnm,
+			Vector3(float(p["x"]), rim_top - 0.004, float(p["z"])),
+			float(p["yaw"]) * 7.0 + 33.0, float(p["grass_s"]))
+
+	# 计数从**实际节点**数出来（不靠手写的累加，避免"加了一处忘了记"）
+	var shadow_nodes := 0
+	for ch in parent.get_children():
+		if String(ch.name).find("Shadow") >= 0:      # GroundShadow* / SceneryBush*Shadow / CourtyardRock*Shadow
+			shadow_nodes += 1
+	print("TOOL|Composition|shadows=%d|scenery_bushes=%d|creek_rocks=%d|courtyard_rocks=%d|peninsulas=%d|shadow_lift=%.3f" % [
+		shadow_nodes, SCENERY_BUSHES.size(), CREEK_ROCKS.size(), COURTYARD_ROCKS.size(),
+		MUD_PENINSULAS.size(), GROUND_SHADOW_LIFT])
+
+
+## 不透明贴地泥板。**为什么不用 `_mk_surface_marker`**：那家伙给所有贴地色块都开
+## `TRANSPARENCY_ALPHA`，透明物按深度排序绘制 → 水面（alpha 0.62）在斜视/俯视时可能被排到
+## 泥板前面，把"不规则岸线"整个盖掉。半岛必须不透明：不透明先写深度，水面只能在它**后面**混合。
+func _mk_opaque_plate(parent: Node3D, nm: String, size: Vector3, pos: Vector3,
+		color: Color) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = nm
+	mi.position = pos
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.95
+	mi.material_override = mat
+	parent.add_child(mi)
+	mi.owner = parent
+	return mi
+
+
+## 接地阴影：贴地薄片（`PlaneMesh` 水平面）+ 无光照半透明暗色 → 只压暗地面一圈，不投影、不碰撞。
+## 为什么不用真阴影：草丛/石头已经在投真实阴影，但环境光下的接触区仍读不出"压住地面"，
+## 而且远景（>20 m）阴影贴图分辨率不够；贴地压暗是分辨率无关的。
+## **ART07 收尾轮 #2 实测修正**：vision 两轮判"草丛/石头像浮在地面上的贴纸、底部没有 AO"。
+## 原因不是 alpha 太小，而是 `GROUND_SHADOW_SHRINK=0.85` 把暗片收在**脚印之内**——
+## 从俯瞰/中高角机位看，草叶冠层把脚下一整块暗片盖住了，露出来的不到几十厘米边。
+## 现在改成：尺寸 = 脚印 × `GROUND_SHADOW_SPREAD`（**外扩**到冠层轮廓之外一圈），
+## 并用**径向渐变 alpha**（中心实、边缘渐隐）代替硬边方片 → 读成"接地压暗"，不是"画上去的圆片"。
+func _mk_ground_shadow(parent: Node3D, nm: String, at: Vector3, size: Vector2, alpha: float,
+		yaw_deg: float) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = nm
+	var pm := PlaneMesh.new()
+	pm.size = size * GROUND_SHADOW_SPREAD
+	# 分段给它几格，避免超大暗片在极斜视角下的顶点插值和地面不够贴合（不动几何，只使命中率更稳）
+	pm.subdivide_width = 2
+	pm.subdivide_depth = 2
+	mi.mesh = pm
+	mi.position = Vector3(at.x, GROUND_TOP + GROUND_SHADOW_LIFT, at.z)
+	mi.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_texture = _shadow_alpha_texture()
+	mat.albedo_color = Color(GROUND_SHADOW_COLOR.r, GROUND_SHADOW_COLOR.g, GROUND_SHADOW_COLOR.b,
+		minf(0.85, alpha * GROUND_SHADOW_ALPHA_K))
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	mi.owner = parent
+	return mi
+
+
+## 径向渐变 alpha 贴图（**程序化生成**，不是新资产文件：64×64、确定性、随场景序列化）。
+## 中心不透明 → 边缘全透明，让每块暗片都像"被物体压住的地面"，而不是一块牌子。
+## 缓存成成员变量：25 块暗片共用同一张纹理，避免 .tscn 里塞 25 份一样的子资源。
+var _shadow_tex: GradientTexture2D = null
+
+
+func _shadow_alpha_texture() -> GradientTexture2D:
+	if _shadow_tex != null:
+		return _shadow_tex
+	var grad := Gradient.new()
+	grad.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	grad.colors = PackedColorArray([
+		Color(1, 1, 1, 1.0),
+		Color(1, 1, 1, 0.62),      # 中段保持实一些：外扩后仍要压得住
+		Color(1, 1, 1, 0.0),
+	])
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.width = 64
+	tex.height = 64
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 1.0)
+	_shadow_tex = tex
+	return _shadow_tex
+
+
+## 装饰草丛（背景层 / 泥舌上的草）：与掩体草丛同一资产，但**不是掩体**（无 Area3D、无碰撞）。
+func _mk_decor_bush(parent: Node3D, nm: String, ground_pos: Vector3, yaw_deg: float,
+		scale_mul: float) -> Node3D:
+	var ps: PackedScene = null
+	if ResourceLoader.exists(BUSH_ASSET):
+		ps = load(BUSH_ASSET) as PackedScene
+	if ps == null:
+		print("TOOL|decor_bush|%s|ASSET_MISSING|%s" % [nm, BUSH_ASSET])
+		return null
+	var inst: Node3D = ps.instantiate() as Node3D
+	inst.name = nm
+	parent.add_child(inst)
+	inst.owner = parent          # 不设 owner → pack() 会丢掉这个节点
+	inst.position = ground_pos
+	inst.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
+	inst.scale = Vector3.ONE * scale_mul
+	_apply_grass_wind(inst)
+	print("TOOL|decor_bush|%s|asset=%s|pos=(%.2f, %.2f, %.2f)|yaw=%.1f|scale=%.2f" % [
+		nm, BUSH_ASSET, ground_pos.x, ground_pos.y, ground_pos.z, yaw_deg, scale_mul])
+	return inst
+
+
+## 装饰石头（溪中 / 庭院前景）：复用 `sm_boulder_001`，节点只有视觉，**没有碰撞体**。
+func _mk_rock_decor(parent: Node3D, nm: String, ground_pos: Vector3, yaw_deg: float,
+		scale_mul: float) -> Node3D:
+	var ps: PackedScene = null
+	if ResourceLoader.exists(BOULDER_ASSET):
+		ps = load(BOULDER_ASSET) as PackedScene
+	if ps == null:
+		print("TOOL|rock_decor|%s|ASSET_MISSING|%s" % [nm, BOULDER_ASSET])
+		return null
+	var inst: Node3D = ps.instantiate() as Node3D
+	inst.name = nm
+	parent.add_child(inst)
+	inst.owner = parent          # 不设 owner → pack() 会丢掉这个节点
+	inst.position = ground_pos
+	inst.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
+	inst.scale = Vector3.ONE * scale_mul
+	print("TOOL|rock_decor|%s|asset=%s|pos=(%.2f, %.2f, %.2f)|yaw=%.1f|scale=%.2f|h=%.3f" % [
+		nm, BOULDER_ASSET, ground_pos.x, ground_pos.y, ground_pos.z, yaw_deg, scale_mul,
+		BOULDER_SIZE.y * scale_mul])
+	return inst
+
+
+# ---------------------------------------------------------------------------
 # 自检：重新加载刚保存的文件，核对几何与设计意图（不是"文件存在"就算过）
 # ---------------------------------------------------------------------------
 
@@ -1528,6 +1884,166 @@ func _verify() -> void:
 			hole_spot.name, hole_spot.position.x, hole_spot.position.y, hole_spot.position.z,
 			float(hole_spot.get_meta("radius", 0.0))
 		])
+	# ART07：构图装饰（接地阴影 / 背景草簇 / 溪中石 / 庭院小石 / 泥舌半岛）。
+	# 这些节点的唯一契约是"只看得见、碰不到"：零碰撞、不进导航组、不改任何静态碰撞体。
+	var expected_bodies := [
+		"Ground", "FenceNorth", "FenceSouth", "FenceWest", "FenceEast",
+		"ShelterWallWest", "ShelterWallNorth", "ShelterWallSouth", "ShelterRoof",
+		"CourtyardDebris1", "CourtyardDebris2", "CourtyardDebris3",
+		"GrassMoundA", "GrassMoundB",
+		"RootBarrierWest", "RootBarrierEast", "RootBarrierLintel",
+		"CreekBankWallA", "CreekBankWallB", "CreekBoulder",
+	]
+	var bodies_seen: Array = []
+	for ch in scene.get_children():
+		if ch is StaticBody3D:
+			bodies_seen.append(String(ch.name))
+	bodies_seen.sort()
+	var want_bodies: Array = expected_bodies.duplicate()
+	want_bodies.sort()
+	_check("static_body_set_unchanged", bodies_seen == want_bodies)
+	print("VERIFY|StaticBodies|count=%d|names=%s" % [bodies_seen.size(), str(bodies_seen)])
+	# 场景尚未入树 → `get_tree().get_nodes_in_group()` 拿不到，按节点自己的组标记判定
+	var nav_ok := true
+	for ch in scene.get_children():
+		if ch.is_in_group("nav_source_courtyard") and not (ch is StaticBody3D):
+			nav_ok = false
+			print("VERIFY|nav_source_unexpected|%s" % ch.name)
+	_check("nav_source_only_static_bodies", nav_ok)
+
+	var decor_shadows := 0
+	for ch in scene.get_children():
+		var cn := String(ch.name)
+		if cn.find("Shadow") < 0:
+			continue
+		decor_shadows += 1
+		_check("shadow_%d_no_collision" % decor_shadows, _count_collision_shapes(ch) == 0)
+		_check("shadow_%d_not_nav_source" % decor_shadows, not ch.is_in_group("nav_source_courtyard"))
+		var cy: float = (ch as Node3D).position.y
+		_check("shadow_%d_hugging_ground" % decor_shadows,
+			cy >= GROUND_TOP and cy <= GROUND_TOP + 0.02)
+	# 25 → 31：加密了 6 株背景草簇（各带一块接地暗片）。12（掩体/溪岸草/巨石/两树桩/三碎屑/两土墩）+ 16 株草 + 3 庭院石
+	_check("shadow_count_is_31", decor_shadows == 31)
+	print("VERIFY|GroundShadows|count=%d|lift=%.3f" % [decor_shadows, GROUND_SHADOW_LIFT])
+
+	var scenery := 0
+	var scenery_specs: Array = []
+	for i in SCENERY_BUSHES.size():
+		scenery_specs.append({"nm": "SceneryBush%02d" % i, "spec": SCENERY_BUSHES[i]})
+	for i in SCENERY_BUSHES_FILL.size():
+		scenery_specs.append({"nm": "SceneryBushFill%d" % i, "spec": SCENERY_BUSHES_FILL[i]})
+	for item in scenery_specs:
+		var nm2: String = item["nm"]
+		var n := scene.get_node_or_null(nm2) as Node3D
+		if not _check("scenery_bush_%s_exists" % nm2, n != null):
+			continue
+		scenery += 1
+		_check("scenery_bush_%s_is_asset" % nm2, n.scene_file_path == BUSH_ASSET)
+		_check("scenery_bush_%s_no_collision" % nm2, _count_collision_shapes(n) == 0)
+		_check("scenery_bush_%s_not_nav_source" % nm2, not n.is_in_group("nav_source_courtyard"))
+		_check("scenery_bush_%s_on_ground" % nm2, absf(n.position.y - GROUND_TOP) < 1e-4)
+		_check("scenery_bush_%s_clear_of_covers" % nm2, _decor_clear_of_covers(n.position, 2.0))
+		_check("scenery_bush_%s_outside_danger" % nm2, not _inside_danger(n.position))
+	_check("scenery_bush_count_total",
+		scenery == SCENERY_BUSHES.size() + SCENERY_BUSHES_FILL.size())
+
+	var rocks := 0
+	for i in CREEK_ROCKS.size():
+		var nm := "CreekRock%02d" % i
+		var n := scene.get_node_or_null(nm) as Node3D
+		if not _check("creek_rock_%s_exists" % nm, n != null):
+			continue
+		rocks += 1
+		_check("creek_rock_%s_is_asset" % nm, n.scene_file_path == BOULDER_ASSET)
+		_check("creek_rock_%s_no_collision" % nm, _count_collision_shapes(n) == 0)
+		_check("creek_rock_%s_not_nav_source" % nm, not n.is_in_group("nav_source_courtyard"))
+		# 必须在**水面矩形内**（否则就变成"岸上的石头"，构图意义消失）
+		_check("creek_rock_%s_inside_water" % nm, absf(n.position.x - WATER_CENTER.x) <= WATER_SIZE.x * 0.5
+			and absf(n.position.z - WATER_CENTER.z) <= WATER_SIZE.z * 0.5)
+		# 不得挡住鼠的溪缝车道（缝中心 x=−31.73，车道宽 0.24）
+		_check("creek_rock_%s_clear_of_gap_lane" % nm, absf(n.position.x - BANK_GAP_CENTER_X) >= 1.2)
+	for i in COURTYARD_ROCKS.size():
+		var nm := "CourtyardRock%02d" % i
+		var n := scene.get_node_or_null(nm) as Node3D
+		if not _check("courtyard_rock_%s_exists" % nm, n != null):
+			continue
+		rocks += 1
+		_check("courtyard_rock_%s_is_asset" % nm, n.scene_file_path == BOULDER_ASSET)
+		_check("courtyard_rock_%s_no_collision" % nm, _count_collision_shapes(n) == 0)
+		_check("courtyard_rock_%s_not_nav_source" % nm, not n.is_in_group("nav_source_courtyard"))
+		_check("courtyard_rock_%s_on_ground" % nm, absf(n.position.y - GROUND_TOP) < 1e-4)
+	_check("decor_rock_count", rocks == CREEK_ROCKS.size() + COURTYARD_ROCKS.size())
+
+	# ART07 视觉失败项锁定：**所有**新增装饰都不得落进溪缝车道轴附近（缝轴 x = BANK_GAP_CENTER_X，车道宽 0.24）。
+	# 判据读**实际节点位置**而不是数组常量，所以"改了数组没重看机位"也能拦住。
+	# 阈值：z 落在岸墙跨度内（±(BANK_WALL_LEN/2 + 2.0)）时，x 必须离缝轴 ≥ 1.6 m
+	# （岸墙外表面离缝轴只有 0.42 m，1.6 m 才留出"缝口两侧是空地"的读图空间）。
+	var lane_bad: Array = []
+	for ch in scene.get_children():
+		var cn := String(ch.name)
+		if cn.find("Shadow") >= 0 or not (ch is Node3D):
+			continue
+		var is_decor: bool = (cn.begins_with("CreekRock") or cn.begins_with("SceneryBush")
+			or cn.begins_with("CourtyardRock") or cn.begins_with("CreekPeninsula"))
+		if not is_decor:
+			continue
+		var p: Vector3 = (ch as Node3D).position
+		if absf(p.z - BANK_Z_CENTER) <= BANK_WALL_LEN * 0.5 + 2.0 \
+				and absf(p.x - BANK_GAP_CENTER_X) < 1.6:
+			lane_bad.append("%s@(%.2f, %.2f)" % [cn, p.x, p.z])
+	_check("decor_clear_of_creek_gap_mouth", lane_bad.is_empty())
+	if not lane_bad.is_empty():
+		print("VERIFY|decor_in_creek_gap_mouth|%s" % str(lane_bad))
+	print("VERIFY|DecorRocks|count=%d|creek=%d|courtyard=%d" % [
+		rocks, CREEK_ROCKS.size(), COURTYARD_ROCKS.size()])
+
+	var peninsulas := 0
+	for i in MUD_PENINSULAS.size():
+		var nm := "CreekPeninsula%02d" % i
+		var n := scene.get_node_or_null(nm) as MeshInstance3D
+		if not _check("peninsula_%s_exists" % nm, n != null):
+			continue
+		peninsulas += 1
+		var bm := n.mesh as BoxMesh
+		_check("peninsula_%s_is_mesh_only" % nm, bm != null and n.get_node_or_null("Shape") == null)
+		_check("peninsula_%s_no_collision" % nm, _count_collision_shapes(n) == 0)
+		var top: float = n.position.y + (bm.size.y * 0.5 if bm != null else 0.0)
+		# 泥舌顶面必须**略高于水面**（0.13）但低于锯齿泥舌的上限（0.155）
+		_check("peninsula_%s_top_above_water" % nm, top > 0.13 and top < 0.155)
+		_check("peninsula_%s_inside_water_span" % nm,
+			absf(n.position.x - WATER_CENTER.x) <= WATER_SIZE.x * 0.5 + 1.0
+			and absf(n.position.z - WATER_CENTER.z) <= WATER_SIZE.z * 0.5 + 1.0)
+		var g := scene.get_node_or_null("%sGrass" % nm) as Node3D
+		if _check("peninsula_%s_grass_exists" % nm, g != null):
+			_check("peninsula_%s_grass_no_collision" % nm, _count_collision_shapes(g) == 0)
+			_check("peninsula_%s_grass_sits_on_plinth" % nm, absf(g.position.y - top) < 0.01)
+	_check("peninsula_count", peninsulas == MUD_PENINSULAS.size())
+	print("VERIFY|Peninsulas|count=%d" % peninsulas)
+
+	# 水面契约原样（四区域 / 洞 / 缝 / 掩体的断言都在上面，这里只补 group 与环境两条）
+	var water_nodes := 0
+	for ch in scene.get_children():
+		if ch.is_in_group("water_bodies"):
+			water_nodes += 1
+	_check("water_bodies_group_count_1", water_nodes == 1)
+	var we2 := scene.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if _check("environment_exists", we2 != null and we2.environment != null):
+		# 雾的防回归锁：**必须是远景深度雾**（begin ≥ 60 m），不许回到"近距离就开始吃对比"的指数雾
+		_check("environment_fog_is_far_depth",
+			(not we2.environment.fog_enabled)
+			or (we2.environment.fog_mode == Environment.FOG_MODE_DEPTH
+				and we2.environment.fog_depth_begin >= 60.0))
+		# 关雾后仍然必须有天空（BG_SKY + ProceduralSkyMaterial），否则地平线会露出默认深褐空洞
+		_check("environment_sky_kept", we2.environment.background_mode == Environment.BG_SKY
+			and we2.environment.sky != null)
+		# 接地感/对比的机制断言：SSAO 与 ACES 色调映射必须真的落进环境资源
+		_check("environment_ssao_enabled", we2.environment.ssao_enabled)
+		_check("environment_tonemap_aces", we2.environment.tonemap_mode == Environment.TONE_MAPPER_ACES)
+		# 接地暗片必须**外扩**到冠层轮廓之外（收在脚印内会被草叶盖住 → 判"没有 AO"）
+		var sh0 := scene.get_node_or_null("GroundShadowCover1") as MeshInstance3D
+		if _check("ground_shadow_cover_exists", sh0 != null and sh0.mesh is PlaneMesh):
+			var pm0 := sh0.mesh as PlaneMesh
+			_check("ground_shadow_spread_outside_footprint", pm0.size.x > 2.3 and pm0.size.y > 2.4)
 	scene.free()
 
 
@@ -1566,6 +2082,24 @@ func _inside_rect(scene: Node3D, p: Vector3, region_id: String) -> bool:
 	return absf(p.x - rn.position.x) <= half.x + GEO_EPS \
 		and absf(p.z - rn.position.z) <= half.z + GEO_EPS \
 		and absf(p.y - rn.position.y) <= half.y + GEO_EPS
+
+
+## ART07：装饰是否离所有掩体中心足够远（避免"看着像掩体、其实不是"的假线索）。
+func _decor_clear_of_covers(p: Vector3, min_gap: float) -> bool:
+	var centers := []
+	for c in COVERS:
+		centers.append(Vector2(float(c["pos"].x), float(c["pos"].z)))
+	centers.append(Vector2(-28.0, 10.0))          # CreekReedCover
+	for c in centers:
+		if Vector2(p.x, p.z).distance_to(c) < min_gap:
+			return false
+	return true
+
+
+## ART07：开阔暴露区（`DangerZone`）必须保持开阔 —— 装饰不得放进去。
+func _inside_danger(p: Vector3) -> bool:
+	var half := DANGER_SIZE * 0.5
+	return absf(p.x - DANGER_CENTER.x) <= half.x and absf(p.z - DANGER_CENTER.z) <= half.z
 
 
 func _count_collision_shapes(n: Node) -> int:

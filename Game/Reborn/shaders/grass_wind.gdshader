@@ -14,6 +14,14 @@ shader_type spatial;
 //   - 不用 discard、不写 NORMAL_MAP：没有贴图。
 
 render_mode cull_disabled, diffuse_burley;
+// ART07 收尾轮 #2：vision 两轮判"草丛像平贴在地上的 2D 面片 / 贴纸、底部没有 AO"。
+// 原因是这层材质只给**单色**（albedo 来自资产的 leaf 材质），叶片从根到梢没有明暗差，
+// 草团在画面里就是一块均匀色斑。这里加两件**只用顶点高度/实例世界位置**的确定性处理：
+//   ① 垂直接触 AO：根部压暗到 45%，叶片中部恢复原色 → 草团有"从地面长出来"的体积；
+//   ② 逐实例微幅明暗差（世界位置哈希，无时间、无随机数）→ 远处草团不再像复制粘贴。
+// 不动顶点风摆、不动任何几何/碰撞/资产。
+varying float v_h_norm;
+varying float v_inst_var;
 
 uniform vec3 albedo_color : source_color = vec3(0.24, 0.42, 0.26);
 uniform float roughness_value = 0.85;
@@ -34,12 +42,20 @@ void vertex() {
 
 	vec2 dir = normalize(wind_dir);
 	VERTEX.xz += dir * (sway * wind_strength * k);
+
+	// 归一化的叶片高度（0=根，1=梢），片元里用它做垂直接触 AO
+	v_h_norm = clamp(VERTEX.y / max(height_ref, 0.001), 0.0, 1.0);
+	// 逐实例确定性明暗差：只用世界位置的哈希（没有时间、没有随机数），范围 ±0.09
+	float hsh = fract(sin(dot(origin.xz, vec2(12.9898, 78.233))) * 43758.5453);
+	v_inst_var = 0.91 + hsh * 0.18;
 }
 
 void fragment() {
 	// 双面法线修正：草叶是单面网格 + cull_disabled，背面若不翻 NORMAL，从草丛内部看会发黑
 	NORMAL = FRONT_FACING ? NORMAL : -NORMAL;
-	ALBEDO = albedo_color;
+	// 垂直接触 AO：根部压暗（0.45×）→ 梢部恢复原色；叶片因此有"从地里长出来"的明暗过渡
+	float contact_ao = mix(0.45, 1.0, smoothstep(0.0, 0.70, v_h_norm));
+	ALBEDO = albedo_color * contact_ao * v_inst_var;
 	ROUGHNESS = roughness_value;
 	SPECULAR = 0.25;
 }

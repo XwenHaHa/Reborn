@@ -102,6 +102,7 @@ func _initialize() -> void:
 	_s4_structures()
 	_s5_scale_rules()
 	await _s6_probes()
+	_s7_decor()
 	_finish()
 
 
@@ -906,6 +907,142 @@ func _assert(id: String, expected: String, actual: String, ok: bool) -> bool:
 
 func _assert_near(id: String, expected: float, actual: float, eps: float) -> void:
 	_assert(id, "%.4f (±%.4f)" % [expected, eps], "%.4f" % actual, absf(expected - actual) <= eps)
+# ---------------------------------------------------------------------------
+# G ART07：构图装饰 —— 只看得见、碰不到（零碰撞、不进导航组、不改静态碰撞体）
+# ---------------------------------------------------------------------------
+
+## ART07 之前的静态碰撞体全集（20 个）。**这张表是锁**：装饰再多，这 20 个也不能动。
+const STATIC_BODY_NAMES := [
+	"Ground", "FenceNorth", "FenceSouth", "FenceWest", "FenceEast",
+	"ShelterWallWest", "ShelterWallNorth", "ShelterWallSouth", "ShelterRoof",
+	"CourtyardDebris1", "CourtyardDebris2", "CourtyardDebris3",
+	"GrassMoundA", "GrassMoundB",
+	"RootBarrierWest", "RootBarrierEast", "RootBarrierLintel",
+	"CreekBankWallA", "CreekBankWallB", "CreekBoulder",
+]
+const DECOR_SHADOW_Y := 0.107          # GROUND_TOP 0.10 + 0.007
+
+
+func _s7_decor() -> void:
+	var bodies: Array = []
+	for ch in _world.get_children():
+		if ch is StaticBody3D:
+			bodies.append(String(ch.name))
+	bodies.sort()
+	var want: Array = STATIC_BODY_NAMES.duplicate()
+	want.sort()
+	_assert("decor_static_body_set_unchanged", "%d 个且名字集合不变" % want.size(),
+		"%d 个: %s" % [bodies.size(), str(bodies)], bodies == want)
+
+	# 导航源组必须只有那 20 个静态体（装饰不许混进去）
+	var nav_nodes := get_nodes_in_group("nav_source_courtyard")
+	var nav_bad := 0
+	for n in nav_nodes:
+		if not (n is StaticBody3D):
+			nav_bad += 1
+			print("MEASURE|nav_source_unexpected|%s" % n.name)
+	_assert("decor_not_in_nav_source", "nav_source_courtyard 只含静态体 20 个",
+		"%d 个 (非静态体 %d)" % [nav_nodes.size(), nav_bad],
+		nav_bad == 0 and nav_nodes.size() == 20)
+
+	# 逐个点名核对装饰节点（名字即契约：生成器按固定数组铺，不许少也不许多）
+	var want_decor: Array = []
+	for i in 10:
+		want_decor.append("SceneryBush%02d" % i)
+	# ART07 收尾轮 #2：墙脚加密的 6 株（同资产、同规则），名字即契约
+	for i in 6:
+		want_decor.append("SceneryBushFill%d" % i)
+	for i in 6:
+		want_decor.append("CreekRock%02d" % i)
+	for i in 3:
+		want_decor.append("CourtyardRock%02d" % i)
+	for i in 5:
+		want_decor.append("CreekPeninsula%02d" % i)
+		want_decor.append("CreekPeninsula%02dGrass" % i)
+	var missing: Array = []
+	var with_collision: Array = []
+	var in_nav: Array = []
+	for nm in want_decor:
+		var n := _world.get_node_or_null(nm) as Node3D
+		if n == null:
+			missing.append(nm)
+			continue
+		if _count_collision_nodes(n) != 0:
+			with_collision.append(nm)
+		if n.is_in_group("nav_source_courtyard"):
+			in_nav.append(nm)
+	_assert("decor_nodes_all_present", "%d 个装饰节点全在" % want_decor.size(),
+		"缺 %s" % str(missing), missing.is_empty())
+	_assert("decor_nodes_have_no_collision", "0 个装饰带碰撞",
+		"%s" % str(with_collision), with_collision.is_empty())
+	_assert("decor_nodes_not_in_nav_source", "0 个装饰在导航组",
+		"%s" % str(in_nav), in_nav.is_empty())
+
+	# 贴地阴影：不许漂浮（y 必须夹在 0.10～0.12），不许有碰撞
+	var shadows := 0
+	var floating: Array = []
+	for ch in _world.get_children():
+		if String(ch.name).find("Shadow") < 0:
+			continue
+		shadows += 1
+		var y: float = (ch as Node3D).position.y
+		if y < GROUND_TOP - 1e-4 or y > GROUND_TOP + 0.02 or _count_collision_nodes(ch) != 0:
+			floating.append("%s@y=%.3f" % [String(ch.name), y])
+	_assert("decor_shadow_count", "31 个贴地阴影", "%d 个" % shadows, shadows == 31)
+	_assert("decor_shadows_hug_ground", "0 个漂浮/带碰撞", "%s" % str(floating), floating.is_empty())
+	var s0 := _world.get_node_or_null("GroundShadowCover1") as Node3D
+	if _assert("decor_shadow_sample_exists", "GroundShadowCover1", str(s0), s0 != null):
+		_assert("decor_shadow_sample_y", "%.3f" % DECOR_SHADOW_Y, "%.4f" % s0.position.y,
+			absf(s0.position.y - DECOR_SHADOW_Y) < 1e-4)
+
+	# 草丛/石头贴地高度（资产原点在脚底 → 必须正好在地面顶上）
+	var ground_bad: Array = []
+	for nm in ["SceneryBush00", "SceneryBush07", "CreekRock00", "CourtyardRock02"]:
+		var n := _world.get_node_or_null(nm) as Node3D
+		if n == null:
+			ground_bad.append("%s MISSING" % nm)
+			continue
+		if absf(n.position.y - GROUND_TOP) > 1e-4:
+			ground_bad.append("%s@y=%.4f" % [nm, n.position.y])
+	_assert("decor_props_sit_on_ground", "0 个浮空/陷地", "%s" % str(ground_bad), ground_bad.is_empty())
+
+	# 泥舌半岛的草必须长在泥舌顶面（0.1405）而不是浮在水上
+	var pen := _world.get_node_or_null("CreekPeninsula00Grass") as Node3D
+	if _assert("decor_peninsula_grass_exists", "CreekPeninsula00Grass", str(pen), pen != null):
+		_assert("decor_peninsula_grass_on_plinth", "0.1365", "%.4f" % pen.position.y,
+			absf(pen.position.y - (0.1405 - 0.004)) < 1e-4)
+
+	# 环境的纵深分离：指数雾已被实测否决；现在只允许**远景深度雾**（begin ≥ 60 m），不许回到吃对比的近距离雾
+	var we := _world.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if _assert("decor_world_environment", "WorldEnvironment", str(we),
+			we != null and we.environment != null):
+		_assert("decor_fog_is_far_depth", "off 或 DEPTH且begin>=60",
+			"enabled=%s|mode=%d|begin=%.0f" % [str(we.environment.fog_enabled),
+				we.environment.fog_mode, we.environment.fog_depth_begin],
+			(not we.environment.fog_enabled)
+			or (we.environment.fog_mode == Environment.FOG_MODE_DEPTH
+				and we.environment.fog_depth_begin >= 60.0))
+		_assert("decor_sky_background_kept", "BG_SKY",
+			"%d|sky=%s" % [we.environment.background_mode, str(we.environment.sky != null)],
+			we.environment.background_mode == Environment.BG_SKY and we.environment.sky != null)
+		print("MEASURE|art07_env|fog=%s|mode=%d|begin=%.0f|density=%.2f|sky_affect=%.2f" % [
+			str(we.environment.fog_enabled), we.environment.fog_mode,
+			we.environment.fog_depth_begin, we.environment.fog_density,
+			we.environment.fog_sky_affect])
+		_assert("decor_ssao_enabled", "true", str(we.environment.ssao_enabled),
+			we.environment.ssao_enabled)
+		_assert("decor_tonemap_aces", "ACES",
+			str(we.environment.tonemap_mode), we.environment.tonemap_mode == Environment.TONE_MAPPER_ACES)
+		var sh0 := _world.get_node_or_null("GroundShadowCover1") as MeshInstance3D
+		if _assert("decor_shadow_sample_mesh", "PlaneMesh", str(sh0),
+				sh0 != null and sh0.mesh is PlaneMesh):
+			var pm0 := sh0.mesh as PlaneMesh
+			_assert("decor_shadow_spread_outside_footprint", ">2.30 x >2.40",
+				"%.2f x %.2f" % [pm0.size.x, pm0.size.y], pm0.size.x > 2.3 and pm0.size.y > 2.4)
+	print("MEASURE|art07_decor|nodes=%d|shadows=%d|static_bodies=%d" % [
+		want_decor.size(), shadows, bodies.size()])
+
+
 
 
 func _finish() -> void:
