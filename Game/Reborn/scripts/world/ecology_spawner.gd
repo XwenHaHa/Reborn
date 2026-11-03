@@ -153,6 +153,10 @@ func setup(player: AnimalBody, origin: Vector3) -> Dictionary:
 func clear() -> void:
 	for b in _npcs:
 		if b != null and is_instance_valid(b):
+			# T035：清理时同步注销区域账本的活动登记（不扣总数——表现销毁不改账）
+			var wd := get_node_or_null("/root/WorldDirector")
+			if wd != null:
+				wd.call("unregister_region_body", b)
 			b.name = "%s_retired" % b.name
 			b.queue_free()
 	_npcs.clear()
@@ -395,6 +399,13 @@ func _spawn_one(cfg: SpeciesConfig, pos: Vector3, source: String) -> void:
 		"id": int(body.get_instance_id()),
 	})
 	_report["min_distance"] = minf(float(_report.get("min_distance", INF)), pos.distance_to(_origin))
+	# T035：登记进区域种群账本（表现层；`total_count` 才是权威数量）。
+	# 账本未初始化（调试入口等）/落点在区域外 → `register_region_body` 返回 false，
+	# 安静跳过，不影响布置计数（T027 契约不变）。
+	var wd := get_node_or_null("/root/WorldDirector")
+	if wd != null:
+		wd.call("register_region_body",
+			StringName(String(wd.call("region_id_at", pos))), cfg.species_id, body)
 
 
 func _is_active(b: AnimalBody) -> bool:

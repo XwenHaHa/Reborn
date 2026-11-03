@@ -86,6 +86,7 @@ func _ready() -> void:
 	_load_settings()
 	_setup_long_term()
 	_build_level()
+	_init_region_population()   # T035：建关卡后、铺生态前，把区域种群账本 init 一次（重生不再 init）
 	_build_ecology()
 	_build_hud()
 	# T033（ART09 遮挡遗留）：`LifeStatus` 必须在 `MainMenu` **之后**加入——
@@ -288,6 +289,18 @@ func _build_level() -> void:
 		return
 	level.name = "Level"
 	add_child(level)
+
+
+## 区域种群账本初始化（T035）：建关卡后、铺生态前，按当前关卡 `level_regions`
+## × 物种配置各建一条记录（差异只在 `*.tres` 的 Population 组，真源 Parameters:77）。
+## **只在 `_ready` 调一次**：正式死亡→重生**不重置也不再 init**（与 T034 D3
+## 时间语义同构）；`reset_for_new_game()` 后由下一次 MainEntry 构建重新 init。
+func _init_region_population() -> void:
+	if level == null:
+		return
+	var w := _wd()
+	if w != null:
+		w.call("init_region_population", _configs)
 
 
 func _build_ecology() -> void:

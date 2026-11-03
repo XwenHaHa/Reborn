@@ -80,3 +80,7 @@ third_person_pitch_max_deg = 55.0
 ; 稳定 ID 的真源在 `tool_make_courtyard.gd` 的发现点标记（进存档后不得改，T036 契约）。
 initially_unlocked = false
 unlock_discovery = &"root_hole_courtyard_01"
+; 种群（T035）：Parameters.md 第 77 行「各区鼠容量4、初始2，每240s有空额恢复1」
+region_capacity = 4
+region_initial = 2
+region_recover_interval = 240.0

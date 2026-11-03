@@ -88,3 +88,8 @@ third_person_pitch_min_deg = -35.0
 third_person_pitch_max_deg = 55.0
 ; 解锁与发现（T031，策划 §9.2）：猫默认可选（正式新游戏初始解锁）。
 initially_unlocked = true
+; 种群（T035）：Parameters.md 第 77 行「猫容量1、初始1，原型不自动增长」
+; （recover_interval = 0 = 不自动恢复）
+region_capacity = 1
+region_initial = 1
+region_recover_interval = 0.0

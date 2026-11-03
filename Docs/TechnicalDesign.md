@@ -52,7 +52,7 @@
 
 | 类型/资源路径 | 基类与职责 | 创建任务 |
 |---|---|---|
-| `res://autoload/world_director.gd` | **Autoload 单例**。统一世界时间、资源注册、NPC 生成与区域账本 | T014/T034 |
+| `res://autoload/world_director.gd` | **Autoload 单例**。统一世界时间、资源注册、区域种群账本、NPC 生成与区域账本 | T014/T034/T035 |
 | `res://autoload/game_state.gd` | **Autoload 单例**。长期记录、解锁、生命档案、当前生命状态；替代 UE GameInstance | T030/T036 |
 | `res://autoload/save_manager.gd` | **Autoload 单例**。串行保存、读档、错误处理 | T037 |
 | `res://scenes/core/main.tscn` | 主入口场景。菜单/游戏切换、生命周期状态机 | T002/T030 |
@@ -211,6 +211,19 @@ API `time_of_day() / day_index()（0 起）/ is_daytime() / phase_name()` **全�
 正式死亡→重生**不重置世界时间**（`reset_for_new_game()` 只属"新游戏"）；昼夜光照属 T057，时钟类不做任何灯光变化。
 资源恢复（`ResourcePoint` 每 180 s 恢复 1 Unit、捕获食物 300 s 失效）与失效判定**只吃世界时间**——
 门闩期间不恢复不失效，多周期一次结算并夹紧容量（断言：`run_t034_world_clock.gd`）。
+
+**区域种群账本（T035 契约）**：`world_director` 持有 §3 的 `RegionRecord` 账本（每 `level_regions` 区域 × 物种一条，
+`total_count / capacity / next_recover_at / recover_interval`，纯数据可进 `WorldSnapshot.regions`）。
+每区参数经 `SpeciesConfig.Population` 组从 `.tres` 读入（鼠 4/2/240、猫 1/1/0，真源 `Parameters.md`）。
+`total_count` 是权威数量（含未实例化个体；实例化/销毁表现不改变它），活动登记只是表现层
+（初始状态不变式 active ≤ total；按账本实例化身体属 T040）。**恢复只吃 `world_time`**：
+`region_population_advance_to()` 镜像 `ResourcePoint.advance_to`（多周期一次结算、夹紧容量、满容量清零排期），
+由 `_process` 在 `world_time += delta` 后驱动——门闩天然冻结；`set_world_time()` 快进后由下一次结算补齐经过的周期。
+**捕获只扣一次**：`report_capture` 幂等门内扣受害者区域 `total_count − 1`（下限 0）并移出登记；未登记个体区域账不动。
+快照/重建（`region_population_snapshot() / restore_region_population()`）：数量与恢复时刻从存档恢复，
+容量与间隔是配置数据不从存档恢复；未知区域/物种跳过，负数/超容量/非有限按 §8 校验修复。
+`reset_for_new_game()` 归零账本；`MainEntry._ready` 建关卡后 init 一次；**重生不重置种群**（与 T034 时间语义同构）。
+断言：`run_t035_region_population.gd`。
 
 **物理与碰撞**：
 - 用 Godot 内置 `CharacterBody3D` + `move_and_slide()` 作为两种地面动物原型。**不要一开始就自定义 `PhysicsBody`。**

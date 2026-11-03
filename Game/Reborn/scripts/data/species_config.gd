@@ -181,6 +181,18 @@ const CAMERA_THIRD_PERSON := 1
 @export var initially_unlocked: bool = false
 @export var unlock_discovery: StringName = &""
 
+## 种群（T035）：区域数量账本的**每区**参数。真源 `Parameters.md` 第 77 行：
+## 「各区鼠容量4、初始2，每240s有空额恢复1；猫容量1、初始1，原型不自动增长」。
+## 消费方：`WorldDirector.init_region_population()`（差异只在 `*.tres`，代码不写物种名分支）。
+## `region_recover_interval = 0` 表示该物种**不自动恢复**（猫原型口径）。
+@export_group("Population")
+## 每区域容量上限（只，权威数量的夹紧值）
+@export var region_capacity: int = 0
+## 每区域初始数量（只；新游戏/新账本从这值起）
+@export var region_initial: int = 0
+## 有空额时每补 1 只的间隔（**世界秒**）。0 = 不自动恢复
+@export var region_recover_interval: float = 0.0
+
 ## Godot 的 `CapsuleShape3D.height` 是含两端半球的总高
 
 ## 界面用标题：优先 `display_name`，否则回退 `species_id`（**UI 不写物种名**）
@@ -310,4 +322,12 @@ func validate_config() -> PackedStringArray:
 	# 解锁与发现（T031）：正式模式下既不初始解锁、又没有发现解锁条件 → 永远选不到
 	if not initially_unlocked and unlock_discovery == &"":
 		problems.append("initially_unlocked=false 且 unlock_discovery 为空：该物种在正式模式永远无法解锁")
+	# 种群（T035）：每区容量/初始/恢复间隔。真源 Parameters.md 第 77 行。
+	# initial 必须落在 [0, capacity] 内，否则新游戏开场就违反「恢复不超过容量」。
+	if region_capacity < 0:
+		problems.append("region_capacity 不能为负（T035 种群）")
+	if region_initial < 0 or region_initial > region_capacity:
+		problems.append("region_initial 必须在 [0, region_capacity]（T035 种群）")
+	if region_recover_interval < 0.0 or not is_finite(region_recover_interval):
+		problems.append("region_recover_interval 不能为负且必须有限（T035 种群；0 = 不自动恢复）")
 	return problems
