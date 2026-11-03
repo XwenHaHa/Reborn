@@ -47,7 +47,9 @@ func _run() -> void:
 		_check("env_ssao_on", env.ssao_enabled)
 		_check("env_fog_depth", env.fog_enabled and env.fog_mode == Environment.FOG_MODE_DEPTH)
 		_check("env_fog_starts_near", env.fog_depth_begin >= 6.0 and env.fog_depth_begin <= 14.0)
-		_check("env_exposure_in_range", env.tonemap_exposure >= 0.95 and env.tonemap_exposure <= 1.2)
+		# ART13（2026-11-02）：下界 0.95→0.85——tp 中心过曝第三轮把 exposure 收到 0.92
+		# （只动后处理层；vision 复判"过曝收住、细节未压死"，见 ART13 证据 §2）。
+		_check("env_exposure_in_range", env.tonemap_exposure >= 0.85 and env.tonemap_exposure <= 1.2)
 		var sky_mat := env.sky.sky_material
 		_check("env_sky_is_panorama", sky_mat is PanoramaSkyMaterial)
 		print("FRAME_CONTRACT|env|tonemap=%d|ssao=%s|fog=%.0f..%.0f|exposure=%.2f|sky=%s" % [
@@ -187,12 +189,22 @@ func _finish() -> void:
 
 
 ## 材质必须真的带贴图（首轮地面/河床是纯色，读起来"没有材质"）
+## ART13（2026-11-02）：展板关地面换 `ground.gdshader` 双尺度贴图材质（远景平铺感修复）——
+## 契约意图不变（"地面有贴图、不是纯色"），扩展为也接受带贴图的 ShaderMaterial。
 func _check_textured(mi: MeshInstance3D, label: String) -> void:
 	if mi == null:
 		_check(label, false)
 		return
-	var mat := mi.material_override as StandardMaterial3D
-	_check(label, mat != null and mat.albedo_texture != null and mat.normal_enabled)
+	var mat := mi.material_override
+	if mat is StandardMaterial3D:
+		var sm := mat as StandardMaterial3D
+		_check(label, sm.albedo_texture != null and sm.normal_enabled)
+	elif mat is ShaderMaterial:
+		var shm := mat as ShaderMaterial
+		_check(label, shm.get_shader_parameter(&"tex_albedo") != null
+			and float(shm.get_shader_parameter(&"tex_amount")) > 0.0)
+	else:
+		_check(label, false)
 
 
 ## glb 实例：任一网格表面的 override 材质带 albedo 贴图即算"已换材质"

@@ -177,22 +177,42 @@ func _add_ground(parent: Node3D) -> void:
 	# vision 建议：贴图近景有粉/紫灰色偏 → tint 把色偏往暖棕-苔绿拉（R/B 略压、G 相对抬高）。
 	# 第 1 轮修正（tp 判读"高反光/像水面 + 平铺重复"）：roughness 0.96→1.0、uv 15x17→24x26
 	# （小尺度贴图支持更密平铺，单 tile ~1.9 m，重复图案更难读出）。
-	var floor_mat := _make_tex_material(TEX_GROUND_DIFF, TEX_GROUND_NOR, TEX_GROUND_ARM,
-		Vector2(24.0, 26.0), 1.0)
-	if floor_mat != null:
+	# ART13（2026-11-02）：远景平铺感 → 换 `ground.gdshader` 的**世界坐标双尺度混合**材质
+	# （tile 1.9 m 与 5.4 m 两尺度 + ~17 m 低频噪声互混，打破 UV 平铺周期；无接缝、
+	# 顶/侧面连续）。tint 与原 StandardMaterial3D 轮一致（0.82/0.88/0.74）。
+	var shader_ground := load(GROUND_SHADER) as Shader
+	var tex_d := load(TEX_GROUND_DIFF) as Texture2D
+	var tex_n := load(TEX_GROUND_NOR) as Texture2D
+	var tex_m := load(TEX_GROUND_ARM) as Texture2D
+	if shader_ground != null and tex_d != null and tex_n != null and tex_m != null:
+		var smat := ShaderMaterial.new()
+		smat.shader = shader_ground
+		smat.set_shader_parameter(&"tex_amount", 1.0)
+		smat.set_shader_parameter(&"tex_albedo", tex_d)
+		smat.set_shader_parameter(&"tex_normal", tex_n)
+		smat.set_shader_parameter(&"tex_arm", tex_m)
+		smat.set_shader_parameter(&"tex_tint", Color(0.82, 0.88, 0.74))
+		smat.set_shader_parameter(&"tex_scale_a", Vector2(24.0 / 46.0, 26.0 / 50.0))
+		smat.set_shader_parameter(&"tex_scale_b", Vector2(0.185, 0.185))
+		smat.set_shader_parameter(&"grain_strength", 0.12)
+		mi.material_override = smat
+		print("TOOL|Ground|material=leafy_grass_2scale|tint=0.82,0.88,0.74|a=0.522,0.52|b=0.185")
+	elif _make_tex_material(TEX_GROUND_DIFF, TEX_GROUND_NOR, TEX_GROUND_ARM,
+			Vector2(24.0, 26.0), 1.0) != null:
+		var floor_mat := _make_tex_material(TEX_GROUND_DIFF, TEX_GROUND_NOR, TEX_GROUND_ARM,
+			Vector2(24.0, 26.0), 1.0)
 		floor_mat.albedo_color = Color(0.82, 0.88, 0.74)
 		floor_mat.uv1_scale = Vector3(24.0, 26.0, 1.0)
 		mi.material_override = floor_mat
 		print("TOOL|Ground|material=leafy_grass|tint=0.82,0.88,0.74|uv=24x26|rough=1.0")
 	else:
-		var shader_res := load(GROUND_SHADER) as Shader
-		if shader_res != null:
-			var smat := ShaderMaterial.new()
-			smat.shader = shader_res
-			smat.set_shader_parameter(&"patch_scale", 0.34)
-			smat.set_shader_parameter(&"grain_strength", 0.18)
-			smat.set_shader_parameter(&"contrast", 0.62)
-			mi.material_override = smat
+		if shader_ground != null:
+			var smat2 := ShaderMaterial.new()
+			smat2.shader = shader_ground
+			smat2.set_shader_parameter(&"patch_scale", 0.34)
+			smat2.set_shader_parameter(&"grain_strength", 0.18)
+			smat2.set_shader_parameter(&"contrast", 0.62)
+			mi.material_override = smat2
 			print("TOOL|Ground|material=shader_fallback")
 	parent.add_child(mi)
 	mi.owner = parent
@@ -550,7 +570,9 @@ func _add_light_and_env(parent: Node3D) -> void:
 	env.ssao_intensity = 2.8
 	env.ssao_power = 2.0
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_exposure = 1.05
+	# ART13（2026-11-02）：tp 机位"中心强光过曝"第三轮——只动后处理层，光照方向/能量不动。
+	# exposure 1.05→0.92（ACES 滚降区整体回压），辉光阈值 1.15→1.30（见下）。
+	env.tonemap_exposure = 0.92
 	env.tonemap_white = 1.0
 	# 空气透视：近景 9 m 内零影响，远景（石墙/围栏）淡下去做层次
 	env.fog_enabled = true
@@ -575,10 +597,12 @@ func _add_light_and_env(parent: Node3D) -> void:
 	env.volumetric_fog_temporal_reprojection_enabled = true
 	# 展板的高光是"太阳边上发亮"，给一点点辉光就够，不做整屏泛白。
 	# ART10 二轮：0.50/1.05 被判读"画面中心一片死白、吃掉水面细节"→ 收到 0.35/1.15。
+	# ART13 三轮（tp 过曝收口）：辉光阈值 1.15→1.30——只有更强的高光才进辉光，
+	# 中等亮度的草地/水面不再被泛白叠加（强度 0.35 维持）。
 	env.glow_enabled = true
 	env.glow_intensity = 0.35
 	env.glow_bloom = 0.05
-	env.glow_hdr_threshold = 1.15
+	env.glow_hdr_threshold = 1.30
 	var we := WorldEnvironment.new()
 	we.name = "WorldEnvironment"
 	we.environment = env

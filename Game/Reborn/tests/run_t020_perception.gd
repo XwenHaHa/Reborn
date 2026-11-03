@@ -475,6 +475,9 @@ func _section_h_integration() -> void:
 	root.add_child(level)
 	await _advance_frames(10)
 	_world = level
+	# ART13：等真实关卡的 nav region 应用就绪（与夹具同类竞态；2026-11-03 08:58 一跑曾在 H 段命中，4 项 FAIL）
+	var level_nav_frame := await _await_nav_ready(Vector3(24.0, 0.35, 24.0), Vector3(26.5, 0.15, 19.0), 1)
+	print("MEASURE|level_nav_ready|frames=%d" % level_nav_frame)
 
 	var spots := get_nodes_in_group("hide_spots")
 	_assert("H_level_hide_spot_count", "1", str(spots.size()), spots.size() == 1)
@@ -598,7 +601,10 @@ func _fresh_world(with_barrier := false, with_hide_spot := false, spot_outside :
 			_add_hide_spot(HOLE_POINT, "HideSpot_Fixture")
 	await _advance_frames(2)
 	_region.bake_navigation_mesh(false)
-	await _advance_frames(6)
+	# ART13：等烘焙真正被 nav server 应用（原本固定 6 帧；实测竞态下 18 帧仍可能未应用，
+	# 见 `_await_nav_ready` 注释与 `Docs/Evidence/ART13_A5A7_ROUND2.md` §T020 调查）
+	var fixture_nav_frame := await _await_nav_ready(Vector3(0.0, NPC_Y, 5.0), HOLE_POINT, 1, _region)
+	print("MEASURE|fixture_nav_ready|frames=%d|barrier=%s|hide_spot=%s" % [fixture_nav_frame, str(with_barrier), str(with_hide_spot)])
 	if block_hole:
 		_add_box(_region, "HolePlug", Vector3(HOLE_W, HOLE_H, 0.6), Vector3(0.0, HOLE_H * 0.5, 0.0))
 		await _advance_frames(2)
@@ -758,6 +764,45 @@ func _run_seconds(seconds: float, until: Callable = Callable()) -> float:
 func _advance_frames(n: int) -> void:
 	for i in n:
 		await physics_frame
+
+
+## ART13：等待导航服务器**真正把刚烘焙/加载的 region 更新应用**到地图上，再让后续断言开始。
+##
+## 背景（竞态）：`bake_navigation_mesh()` 之后，region 的网格更新是**异步**提交给
+## `NavigationServer3D` 的；固定 `await` 若干物理帧并不总能保证已应用。未应用时
+## `map_get_closest_point()` / `map_get_path()` 拿到的是旧/空地图 → `reachable()` 误判
+## 不可达 → F/G/H 段连锁 FAIL（实测：F 20 项 / G2 3 项 / H 4 项，失败段漂移）。
+## 只把夹具搭建变确定，不改任何断言。
+## 判据：目标点在地图上有最近点（≤ 0.5 m）且两点间能取到路径。
+## 注 1：**被动轮询，不调 `map_force_update`** —— 实测每帧 force_update 会把部分
+## 现烤 region 的更新吞掉（B/C/D/G1/G2 夹具 240 帧都不就绪，E/F 正常）。
+## 注 2：轮询中发现更新已应用但几何不完整（`iter` 前进、目标点有最近点、路径却为空
+## —— 烘焙时夹具碰撞体还没完全进物理空间 → 烤出残片）时，**重烤**（`region` 非空则
+## 每 20 帧最多重烤 5 次；重烤时物理状态早已就绪）。
+## 返回就绪所用帧数；超时返回 -1（后续断言照常暴露问题，不吞错），并打印地图诊断。
+func _await_nav_ready(from: Vector3, to: Vector3, layer: int,
+		region: NavigationRegion3D = null, max_frames: int = 240) -> int:
+	if _world == null:
+		return -1
+	var map := _world.get_world_3d().get_navigation_map()
+	if not map.is_valid():
+		return -1
+	var rebakes := 0
+	for i in max_frames:
+		await physics_frame
+		var closest := NavigationServer3D.map_get_closest_point(map, to)
+		var has_point := closest.distance_to(to) <= 0.5
+		var has_path := NavigationServer3D.map_get_path(map, from, to, true, layer).size() > 0
+		if has_point and has_path:
+			return i
+		if region != null and i > 0 and i % 20 == 0 and rebakes < 5:
+			region.bake_navigation_mesh(false)
+			rebakes += 1
+	print("MEASURE|nav_ready_timeout|iter=%d|closest_dist=%.3f|path_size=%d|rebakes=%d" % [
+		NavigationServer3D.map_get_iteration_id(map),
+		NavigationServer3D.map_get_closest_point(map, to).distance_to(to),
+		NavigationServer3D.map_get_path(map, from, to, true, layer).size(), rebakes])
+	return -1
 
 
 func _clip(s: String) -> String:

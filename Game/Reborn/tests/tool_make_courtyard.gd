@@ -86,6 +86,10 @@ const WATER_SHADER := "res://shaders/creek_water.gdshader"
 const GRASS_WIND_SHADER := "res://shaders/grass_wind.gdshader"
 ## ART03-⑫：地面程序化材质（草地/土/干草斑块），只换材质不动几何
 const GROUND_SHADER := "res://shaders/ground.gdshader"
+## ART13：庭院地表贴图（复用 ART11 已入库 CC0 leafy_grass，见 Docs/THIRD_PARTY_ASSETS.md §9.1）
+const GROUND_TEX_DIFF := "res://assets/environment/tex/leafy_grass_diff_1k.jpg"
+const GROUND_TEX_NOR := "res://assets/environment/tex/leafy_grass_nor_gl_1k.jpg"
+const GROUND_TEX_ARM := "res://assets/environment/tex/leafy_grass_arm_1k.jpg"
 ## ART03-⑬：土墩与棚顶的正式资产（极低面数，原点在脚印中心 + 底面 y=0）
 const MOUND_ASSET := "res://assets/environment/sm_mound_001.glb"
 const ROOF_ASSET := "res://assets/environment/sm_roof_001.glb"
@@ -317,6 +321,27 @@ func _add_ground(parent: Node3D) -> void:
 	var ground := _mk_box(parent, "Ground", GROUND_SIZE, Vector3.ZERO, Vector3.ZERO,
 		Color(0.32, 0.34, 0.36))
 	_apply_material_override(ground, GROUND_SHADER, "ground")
+	# ART13（2026-11-02）：庭院地表接 leafy_grass（复用 ART11 已入库 CC0 贴图，双尺度混合）。
+	# 判读依据：vision 对 t011_grass_danger 的头号不满="地表贴图糊脏、与植被割裂"——
+	# 程序化三色斑块在近景读成迷彩。贴图路径保留程序化低频斑块作明度调制（草/土区域感不丢）。
+	# tint 偏冷绿（庭院是冷天光，展板关的 0.82/0.88/0.74 偏暖是 golden hour 用的）。
+	var mi := ground.get_node_or_null("Mesh") as MeshInstance3D
+	if mi != null and mi.material_override is ShaderMaterial:
+		var smat := mi.material_override as ShaderMaterial
+		var tex_d := load(GROUND_TEX_DIFF) as Texture2D
+		var tex_n := load(GROUND_TEX_NOR) as Texture2D
+		var tex_m := load(GROUND_TEX_ARM) as Texture2D
+		if tex_d != null and tex_n != null and tex_m != null:
+			smat.set_shader_parameter(&"tex_amount", 1.0)
+			smat.set_shader_parameter(&"tex_albedo", tex_d)
+			smat.set_shader_parameter(&"tex_normal", tex_n)
+			smat.set_shader_parameter(&"tex_arm", tex_m)
+			smat.set_shader_parameter(&"tex_tint", Color(0.85, 0.90, 0.78))
+			smat.set_shader_parameter(&"tex_scale_a", Vector2(0.50, 0.50))
+			smat.set_shader_parameter(&"tex_scale_b", Vector2(0.17, 0.17))
+			print("TOOL|Ground|material=leafy_grass_2scale|tint=0.85,0.90,0.78|a=0.50|b=0.17")
+		else:
+			print("TOOL|Ground|material=procedural_fallback|tex_missing")
 	print("TOOL|Ground|size=%s|top=%.3f" % [GROUND_SIZE, GROUND_TOP])
 
 
@@ -611,6 +636,21 @@ func _add_creek_shore(parent: Node3D) -> void:
 				Vector3(x, rim_y, z), Color(mud.r * tone, mud.g * tone, mud.b * tone))
 			mi.rotation_degrees = Vector3(0.0, 11.0 * side * cos(float(i) * 1.5), 0.0)
 			seg += 1
+
+	# ③ ART13 S5：水线湿泥带（A7"水岸硬切"）——半透明暗棕贴地片，中线压在水线上：
+	# 伸进水里的半幅沉在水面(0.13)之下、透过半透明水面读作湿泥；上岸的半幅渐隐读作水渍。
+	# 北/南岸各 2 段，只铺缝口保护区（x∈[-33.3,-30.1]，缝轴两侧 1.6 m）以东。
+	# 规格原文写"径向渐变"，实测长条用径向会中段成团（S4 围栏脚同结论），改用 S4 的线性带状渐变。
+	for side in [-1.0, 1.0]:
+		var shore_z: float = WATER_CENTER.z + side * half_z
+		var side_tag := "S" if side < 0.0 else "N"
+		for seg_i in 2:
+			var seg_len: float = 9.5 if seg_i == 0 else 9.0
+			var seg_min_x: float = -30.0 if seg_i == 0 else -20.5
+			_mk_wet_band(parent, "CreekWetBand%s%d" % [side_tag, seg_i + 1],
+				Vector3(seg_min_x + seg_len * 0.5, 0.0, shore_z + side * 0.15),
+				Vector2(seg_len, 0.9), 0.30, 0.0)
+	print("TOOL|CreekWetBand|segments=4|alpha=0.30|y=%.3f" % (GROUND_TOP + GROUND_SHADOW_LIFT))
 	print("TOOL|CreekShore|segments=%d|rim_top=%.3f|bed_y=%.3f" % [
 		seg, rim_top, GROUND_TOP + 0.003])
 
@@ -779,14 +819,18 @@ func _add_light_and_env(parent: Node3D) -> void:
 	# "三层分明、远景明显更淡（空气透视 OK）、无漂浮"，但同时也答"整屏有灰白雾化感（偏灰）"。
 	# 因为本轮验收明确要求"fog veil 必须消失"，**最终取关闭**；深度雾参数保留在下面几行，
 	# 负责人若要 A5 的"远景更淡"一项，把 `env.fog_enabled` 改成 true 即可（其它设置不动）。
-	env.fog_enabled = false
+	# ART13 S6（2026-11-03，A5 空气透视）：按上述预留开启深度雾，并把雾光压暗——
+	# 上轮判"整屏偏灰"的根因是雾光 energy 0.75 偏亮；0.45 + 更暗的冷灰色 (0.50,0.55,0.62)
+	# 让远角只"退淡"不"提亮"。sky_affect=0 保持不变（只雾化远处几何，不洗天空/整屏）。
+	# 若 vision 复判仍出现灰幕，回退 = 把 fog_enabled 改回 false（其余参数保留）。
+	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_DEPTH
 	env.fog_depth_begin = 80.0
 	env.fog_depth_end = 170.0
 	env.fog_depth_curve = 1.0
 	env.fog_density = 0.9
-	env.fog_light_color = Color(0.60, 0.65, 0.70)
-	env.fog_light_energy = 0.75
+	env.fog_light_color = Color(0.50, 0.55, 0.62)
+	env.fog_light_energy = 0.45
 	env.fog_sun_scatter = 0.0
 	env.fog_aerial_perspective = 0.0
 	# sky_affect = 0：**只雾化远处几何，不洗白天空/整屏**（0.25 时 vision 判"四周一圈淡化＝灰雾幕"）
@@ -1359,6 +1403,47 @@ func _add_composition_dressing(parent: Node3D) -> void:
 	_mk_ground_shadow(parent, "GroundShadowMoundA", Vector3(-20.0, 0.0, -12.0), Vector2(2.3, 2.3), 0.18, 0.0)
 	_mk_ground_shadow(parent, "GroundShadowMoundB", Vector3(14.0, 0.0, -8.0), Vector2(2.3, 2.3), 0.18, 0.0)
 
+	# ART13 S4（A7 结构接地）：棚柱 / 棚内地坪 / 根障基座 / 围栏基脚 +9 块 → 阴影总数 39→48。
+	# vision 对 courtyard_shelter 判"棚柱底下没有压暗、像插在贴图上"，对 roots_barrier_oblique 判
+	# "根障与地面接触处生硬"，对 map_overview 判"围栏脚是悬空直线"。全部零碰撞、不进导航组，
+	# 与既有接地暗片同一机制（unshaded 贴地薄片），只是长条结构改用线性渐变（见 `_mk_ground_band`）。
+	# 棚柱×2：东侧两根立柱（x = SHELTER_X_MAX + PROUD − POST_W/2 = −6.54，z 贴南北短墙内侧）。
+	# 脚印 0.16×0.36，传 (0.28, 0.50) 经 ×1.75 外扩 → 最终 0.49×0.88，读作柱脚一圈压暗。
+	var post_x: float = SHELTER_X_MAX + SHELTER_POST_PROUD - SHELTER_POST_W * 0.5
+	_mk_ground_shadow(parent, "GroundShadowShelterPostS",
+		Vector3(post_x, 0.0, SHELTER_Z_MIN + FENCE_THICK * 0.5), Vector2(0.28, 0.50), 0.28, 0.0)
+	_mk_ground_shadow(parent, "GroundShadowShelterPostN",
+		Vector3(post_x, 0.0, SHELTER_Z_MAX - FENCE_THICK * 0.5), Vector2(0.28, 0.50), 0.28, 0.0)
+	# 棚内地坪×1：棚内（三面矮墙 + 顶）环境光被遮，地面整片应比外面暗一档。
+	# 室内 x∈[−9.4,−6.5] z∈[25.7,28.9]，中心 (−7.95, 27.3)，传 footprint/1.75 → 最终 2.9×3.2。
+	_mk_ground_shadow(parent, "GroundShadowShelterFloor",
+		Vector3(-7.95, 0.0, 27.3), Vector2(2.9 / 1.75, 3.2 / 1.75), 0.08, 0.0)
+	# 根障基座×2：RootBarrierWest x∈[10, 26.38]、East x∈[26.62, 36]（中间是鼠洞缝，留空不压暗），
+	# z∈[18.5, 19.5]。长条 → `_mk_ground_band`，尺寸即最终尺寸，宽 1.4（脚印 1.0 + 两侧渐隐）。
+	_mk_ground_band(parent, "GroundShadowBarrierW",
+		Vector3(18.19, 0.0, 19.0), Vector2(16.38, 1.4), 0.10, 0.0)
+	_mk_ground_band(parent, "GroundShadowBarrierE",
+		Vector3(31.31, 0.0, 19.0), Vector2(9.38, 1.4), 0.10, 0.0)
+	# 围栏基脚×4：北/南沿 x 长 72.2，东/西沿 z 长 56.2，条宽 0.9 居中压在可玩边界线上。
+	# alpha 故意压很低（0.08 → 最终 0.256）：只要"墙脚有一道暗线"，不能把 72 m 边界读成黑框。
+	_mk_ground_band(parent, "GroundShadowFenceN",
+		Vector3(0.0, 0.0, PLAY_MAX_Z), Vector2(72.2, 0.9), 0.08, 0.0)
+	_mk_ground_band(parent, "GroundShadowFenceS",
+		Vector3(0.0, 0.0, PLAY_MIN_Z), Vector2(72.2, 0.9), 0.08, 0.0)
+	var mid_z: float = (PLAY_MIN_Z + PLAY_MAX_Z) * 0.5
+	_mk_ground_band(parent, "GroundShadowFenceW",
+		Vector3(PLAY_MIN_X, 0.0, mid_z), Vector2(56.2, 0.9), 0.08, 90.0)
+	_mk_ground_band(parent, "GroundShadowFenceE",
+		Vector3(PLAY_MAX_X, 0.0, mid_z), Vector2(56.2, 0.9), 0.08, 90.0)
+	# ART13 S5：缝口两道岸墙的基脚压暗×2（长条 → `_mk_ground_band`）。岸墙高 1.0 m、
+	# 立在溪区，是"水岸硬切"读感的来源之一；Shadow 名按缝口净空断言的设计豁免（压暗是
+	# 贴地贴花，不会像石头/草丛那样在视觉上挤窄 0.24 m 鼠车道）。
+	_mk_ground_band(parent, "GroundShadowBankWallA",
+		Vector3(BANK_WALL_A_CENTER_X, 0.0, BANK_Z_CENTER), Vector2(0.9, 8.6), 0.12, 0.0)
+	_mk_ground_band(parent, "GroundShadowBankWallB",
+		Vector3(BANK_WALL_A_CENTER_X + BANK_WALL_THICK + BANK_GAP, 0.0, BANK_Z_CENTER),
+		Vector2(0.9, 8.6), 0.12, 0.0)
+
 	# ② 背景层草簇：贴围墙脚 / 场地边角，只做中远景剪影
 	#    主列表 10 株（`SceneryBush00..09`）+ 加密列表 14 株（`SceneryBushFill0..13`，ART12 增 8），同资产同规则。
 	for i in SCENERY_BUSHES.size():
@@ -1377,11 +1462,14 @@ func _add_composition_dressing(parent: Node3D) -> void:
 			Vector2(2.4, 2.5) * float(bf["s"]), 0.16, float(bf["yaw"]))
 
 	# ③ 溪中石：打散"22×9 直带水面"的矩形感（复用 CC0 巨石资产，纯视觉）
+	#    ART13 S5：每块补脚下暗片（贴地 0.107 沉在水面之下，读作"泡在水里"），与庭院石同规格。
 	for i in CREEK_ROCKS.size():
 		var r: Dictionary = CREEK_ROCKS[i]
 		var rnm := "CreekRock%02d" % i
 		var rat := Vector3(float(r["x"]), GROUND_TOP, float(r["z"]))
 		_mk_rock_decor(parent, rnm, rat, float(r["yaw"]), float(r["s"]))
+		_mk_ground_shadow(parent, "%sShadow" % rnm, rat,
+			Vector2(1.5, 2.1) * float(r["s"]) * 0.9, 0.22, float(r["yaw"]))
 
 	# ④ 庭院前景小石（给出生点附近一个近景参考物）
 	for i in COURTYARD_ROCKS.size():
@@ -1499,6 +1587,94 @@ func _shadow_alpha_texture() -> GradientTexture2D:
 	tex.fill_to = Vector2(0.5, 1.0)
 	_shadow_tex = tex
 	return _shadow_tex
+
+
+## ART13 S4：长条结构的接地压暗纹理——沿短轴的**对称线性渐变**（横向白、中线实）。
+## 为什么不共用径向贴图：72 m 长的围栏脚用径向渐变会"中段一坨实、两端全虚"，
+## 读成墙中间的黑斑；线性渐变沿长度均匀、只在横向渐隐，才是"墙脚接触 AO"。
+var _shadow_band_tex: GradientTexture2D = null
+
+
+func _shadow_band_texture() -> GradientTexture2D:
+	if _shadow_band_tex != null:
+		return _shadow_band_tex
+	var grad := Gradient.new()
+	grad.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	grad.colors = PackedColorArray([
+		Color(1, 1, 1, 0.0),
+		Color(1, 1, 1, 0.62),      # 中线（压在结构脚下）最实，往两侧渐隐
+		Color(1, 1, 1, 0.0),
+	])
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.width = 16
+	tex.height = 64
+	tex.fill = GradientTexture2D.FILL_LINEAR
+	tex.fill_from = Vector2(0.5, 0.0)
+	tex.fill_to = Vector2(0.5, 1.0)
+	_shadow_band_tex = tex
+	return _shadow_band_tex
+
+
+## ART13 S4：长条接地压暗（围栏脚 / 根障基座）。与 `_mk_ground_shadow` 同机制
+## （unshaded 贴地薄片、无碰撞、不投影、名字带 "Shadow" 进计数断言），差别两处：
+##   1. 纹理用线性渐变（见 `_shadow_band_texture`）——沿长度均匀，不是径向团块；
+##   2. **size 即最终尺寸**，不做 ×1.75 外扩——外扩是为"冠层盖住脚印"的草丛设计的，
+##      72 m 围栏再外扩会戳出场地角落。
+func _mk_ground_band(parent: Node3D, nm: String, at: Vector3, size: Vector2, alpha: float,
+		yaw_deg: float) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = nm
+	var pm := PlaneMesh.new()
+	pm.size = size
+	pm.subdivide_width = 8
+	pm.subdivide_depth = 2
+	mi.mesh = pm
+	mi.position = Vector3(at.x, GROUND_TOP + GROUND_SHADOW_LIFT, at.z)
+	mi.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_texture = _shadow_band_texture()
+	mat.albedo_color = Color(GROUND_SHADOW_COLOR.r, GROUND_SHADOW_COLOR.g, GROUND_SHADOW_COLOR.b,
+		minf(0.85, alpha * GROUND_SHADOW_ALPHA_K))
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	mi.owner = parent
+	return mi
+
+
+## ART13 S5：水线湿泥带。与 `_mk_ground_band` 同机制（线性渐变、unshaded、半透明、
+## 零碰撞、不投影），差别三处：
+##   1. 颜色是湿泥暗棕，不是阴影色——它表达"材质变湿"，不是"被遮挡"；
+##   2. alpha 即最终值（不乘 `GROUND_SHADOW_ALPHA_K` 倍率）；
+##   3. 名字不含 "Shadow" → 不进阴影计数，进 T011 want_decor 点名。
+## 贴地 y = GROUND_TOP + GROUND_SHADOW_LIFT = 0.107：高于地面、低于水面(0.13)——
+## 伸进水里的半幅透过水面读作湿泥，上岸的半幅是水渍。
+func _mk_wet_band(parent: Node3D, nm: String, at: Vector3, size: Vector2, alpha: float,
+		yaw_deg: float) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = nm
+	var pm := PlaneMesh.new()
+	pm.size = size
+	pm.subdivide_width = 8
+	pm.subdivide_depth = 2
+	mi.mesh = pm
+	mi.position = Vector3(at.x, GROUND_TOP + GROUND_SHADOW_LIFT, at.z)
+	mi.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_texture = _shadow_band_texture()
+	mat.albedo_color = Color(0.155, 0.128, 0.098, alpha)
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	mi.owner = parent
+	return mi
 
 
 ## 装饰草丛（背景层 / 泥舌上的草）：与掩体草丛同一资产，但**不是掩体**（无 Area3D、无碰撞）。
@@ -1935,9 +2111,11 @@ func _verify() -> void:
 		var cy: float = (ch as Node3D).position.y
 		_check("shadow_%d_hugging_ground" % decor_shadows,
 			cy >= GROUND_TOP and cy <= GROUND_TOP + 0.02)
-	# 25 → 31（ART07 #2：加密 6 株背景草簇各带一块接地暗片）→ 39（ART12：再加密 8 株）。
-	# 12（掩体/溪岸草/巨石/两树桩/三碎屑/两土墩）+ 24 株草 + 3 庭院石
-	_check("shadow_count_is_39", decor_shadows == 39)
+	# 25 → 31（ART07 #2：加密 6 株背景草簇各带一块接地暗片）→ 39（ART12：再加密 8 株）
+	# → 48（ART13 S4：棚柱×2 + 棚内地坪×1 + 根障基座×2 + 围栏基脚×4）
+	# → 56（ART13 S5：缝口岸墙基脚×2 + 溪中石脚下暗片×6）。
+	# 12（掩体/溪岸草/巨石/两树桩/三碎屑/两土墩）+ 24 株草 + 3 庭院石 + 9 结构件 + 8 溪区件
+	_check("shadow_count_is_56", decor_shadows == 56)
 	print("VERIFY|GroundShadows|count=%d|lift=%.3f" % [decor_shadows, GROUND_SHADOW_LIFT])
 
 	var scenery := 0
@@ -1998,7 +2176,8 @@ func _verify() -> void:
 		if cn.find("Shadow") >= 0 or not (ch is Node3D):
 			continue
 		var is_decor: bool = (cn.begins_with("CreekRock") or cn.begins_with("SceneryBush")
-			or cn.begins_with("CourtyardRock") or cn.begins_with("CreekPeninsula"))
+			or cn.begins_with("CourtyardRock") or cn.begins_with("CreekPeninsula")
+			or cn.begins_with("CreekWetBand"))
 		if not is_decor:
 			continue
 		var p: Vector3 = (ch as Node3D).position
@@ -2033,6 +2212,19 @@ func _verify() -> void:
 			_check("peninsula_%s_grass_sits_on_plinth" % nm, absf(g.position.y - top) < 0.01)
 	_check("peninsula_count", peninsulas == MUD_PENINSULAS.size())
 	print("VERIFY|Peninsulas|count=%d" % peninsulas)
+
+	# ART13 S5：水线湿泥带契约——4 段全在、零碰撞、不进导航组、贴地 0.107、都在缝口保护区以东
+	var wet_bands := ["CreekWetBandN1", "CreekWetBandN2", "CreekWetBandS1", "CreekWetBandS2"]
+	for wnm in wet_bands:
+		var wn := scene.get_node_or_null(wnm) as MeshInstance3D
+		if _check("wet_band_%s_exists" % wnm, wn != null):
+			_check("wet_band_%s_no_collision" % wnm, _count_collision_shapes(wn) == 0)
+			_check("wet_band_%s_not_nav_source" % wnm, not wn.is_in_group("nav_source_courtyard"))
+			_check("wet_band_%s_hugging_ground" % wnm,
+				absf(wn.position.y - (GROUND_TOP + GROUND_SHADOW_LIFT)) < 1e-4)
+			_check("wet_band_%s_east_of_gap" % wnm,
+				wn.position.x - BANK_GAP_CENTER_X > 1.6 and wn.position.x > WATER_CENTER.x - WATER_SIZE.x * 0.5)
+	print("VERIFY|CreekWetBands|count=%d" % wet_bands.size())
 
 	# 水面契约原样（四区域 / 洞 / 缝 / 掩体的断言都在上面，这里只补 group 与环境两条）
 	var water_nodes := 0

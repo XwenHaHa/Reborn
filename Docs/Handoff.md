@@ -735,3 +735,39 @@ $proj = 'E:\Reborn\Game\Reborn'
   `powershell -File E:\Reborn\Tools\CaptureRun.ps1 -Script tests/tool_capture_creek.gd -UserArgs creek`。
 - **下一步**：等负责人终审（sss_strength 0.55 vs 0.45；ART10 各 awaiting-review 项授权）；
   视觉线暂停时回到 T031（地点发现与老鼠解锁）。
+
+## ART13：A5/A7 收口轮 2 + tp 过曝与远景平铺遗留清理（2026-11-03，**done**）
+
+规格 `Docs/Tasks/ART13_A5A7_ROUND2.md`，证据 `Docs/Evidence/ART13_A5A7_ROUND2.md`。
+六步逐项试完并同机位复判，**U1～U7 全部判到 PASS**（vision + 终局回归全绿）：
+
+- **S1 tp 过曝**：`tonemap_exposure` 1.05→0.92、`glow_hdr_threshold` 1.15→1.30（只动后处理层，
+  不动已判 PASS 的光照方向）；对比板判读"过曝收住、暗部未压死"。
+- **S2 远景平铺**：triplanar 判定不能治平地平铺（重复由 tile 尺寸决定）→ `ground.gdshader`
+  双尺度贴图路径（同贴图 1.9/5.4 m 两尺度 + 世界坐标低频噪声互混打破周期，`tex_amount`
+  默认 0 = 既有使用者零变化）；帧契约 `_check_textured` 接受带贴图 ShaderMaterial，48/48。
+- **S3 庭院地面**接 leafy_grass：糊脏迷彩大幅降低（定性）。
+- **S4 结构接地阴影 +9**（棚柱/棚内地坪/根障基座/围栏基脚，→48）：vision **8/9/9.5**。
+- **S5 湿泥带 4 段 + 溪中石暗片 6**（→56）：vision **8.5/8/9**；剩"暗片边缘稍硬（creek_low）"记录项。
+- **S6 远景深度雾**（energy 0.75→0.45、色 (0.50,0.55,0.62)）：overview vision **9/9.5/9**，
+  整屏灰白治好、纵深仍在、无新雾墙/发脏。
+
+**ART07 A5/A7 收口为 PASS**；ART07 因 **A6 洞口机位待负责人人工复核**维持 awaiting-review
+（最小清单见 ART07 证据 §10）。对比板 14 张相邻状态对比（`Tools/make_art13_compare.ps1`；
+规则：after 一律指步骤快照 `art13_steps/sN/`，不指 `art13_after/`，防后续步骤污染）。
+
+**顺带修掉 T020 导航就绪竞态**（带 shader 时 6/8 FAIL 的真因）：初烤偶发几何不完整 +
+每帧 `map_force_update` 吞现烤 region 更新 → `tests/run_t020_perception.gd` 加
+`_await_nav_ready()`（240 帧有界轮询 + 每 20 帧最多重烤 5 次），断言零改动；
+修复后带 shader 连过 3 次 + 终局 164/164（全记录见 ART13 证据 §7）。
+
+终局回归（2026-11-03，全走 `Tools/CaptureRun.ps1 -Headless`，exit 全 0，SCRIPT ERROR 0）：
+生成器自检 0 FAIL（56 阴影）、nav 重建 228/180 polys 且 `.tres` 无 diff、T011 229/229、
+T012 79/79、帧契约 48/48、T020 164/164、T026 96/96、T027 96/96。
+
+边界守住：未删 `menu_creek.png`/`forest_floor`；未做溪水折射与菜单磨砂玻璃；未动猫鼠模型
+与动作；未改玩法/碰撞/导航/鼠洞溪缝尺寸。
+
+**剩余授权项**：① ART07 A6 洞口机位人工复核（负责人）；② `forest_floor` 三件套去留；
+③ 溪中石暗片边缘若后续处理水岸资产时顺带。**下一任务**：T031（P4 首个任务，
+`Docs/Tasks/T031.md`；T030 已 done）。

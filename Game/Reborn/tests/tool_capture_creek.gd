@@ -89,7 +89,8 @@ func _report_nodes() -> void:
 		if String(c.name).begins_with("CreekReed"):
 			reeds += 1
 	print("CREEK|reeds|count=%d" % reeds)
-	for nm in ["CreekWetBankSouth", "CreekWetBankNorth", "CreekWetBankWest", "CreekWetBankEast"]:
+	# ART13 S5：湿泥带节点名契约（旧 CreekWetBank* 早已随 ART03 迭代移除，检查一直空跑 false）
+	for nm in ["CreekWetBandN1", "CreekWetBandN2", "CreekWetBandS1", "CreekWetBandS2"]:
 		print("CREEK|wetband|%s=%s" % [nm, str(_world.get_node_or_null(nm) != null)])
 
 

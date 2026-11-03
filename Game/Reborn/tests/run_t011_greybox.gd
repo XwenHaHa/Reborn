@@ -960,6 +960,9 @@ func _s7_decor() -> void:
 	for i in 5:
 		want_decor.append("CreekPeninsula%02d" % i)
 		want_decor.append("CreekPeninsula%02dGrass" % i)
+	# ART13 S5：水线湿泥带（零碰撞、不进导航组；名字即契约）
+	for wnm in ["CreekWetBandN1", "CreekWetBandN2", "CreekWetBandS1", "CreekWetBandS2"]:
+		want_decor.append(wnm)
 	var missing: Array = []
 	var with_collision: Array = []
 	var in_nav: Array = []
@@ -989,7 +992,9 @@ func _s7_decor() -> void:
 		var y: float = (ch as Node3D).position.y
 		if y < GROUND_TOP - 1e-4 or y > GROUND_TOP + 0.02 or _count_collision_nodes(ch) != 0:
 			floating.append("%s@y=%.3f" % [String(ch.name), y])
-	_assert("decor_shadow_count", "39 个贴地阴影", "%d 个" % shadows, shadows == 39)
+	# 39（ART12）→ 48（ART13 S4：棚柱×2 + 棚内地坪×1 + 根障基座×2 + 围栏基脚×4）
+	# → 56（ART13 S5：缝口岸墙基脚×2 + 溪中石脚下暗片×6）
+	_assert("decor_shadow_count", "56 个贴地阴影", "%d 个" % shadows, shadows == 56)
 	_assert("decor_shadows_hug_ground", "0 个漂浮/带碰撞", "%s" % str(floating), floating.is_empty())
 	var s0 := _world.get_node_or_null("GroundShadowCover1") as Node3D
 	if _assert("decor_shadow_sample_exists", "GroundShadowCover1", str(s0), s0 != null):

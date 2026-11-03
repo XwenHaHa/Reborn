@@ -1,6 +1,6 @@
 # ART13：A5/A7 收口轮 2 + tp 过曝与远景平铺遗留清理（2026-11-02）
 
-状态：in-progress
+状态：**done（2026-11-03）**——U1～U7 全部按可验证标准判到 PASS（vision 判读 + 终局回归全绿），证据 `Docs/Evidence/ART13_A5A7_ROUND2.md`；ART07 A5/A7 收口为 PASS，ART07 因 A6 洞口机位待负责人人工复核维持 awaiting-review。不是正式美术 approved。
 
 ## 0. 背景与授权
 
