@@ -22,6 +22,9 @@ func _run() -> void:
 		print("CAP|board|ERROR|main_load_failed")
 		return
 	var main := packed.instantiate()
+	# T033：取证工具要选第二物种；正式模式下它呈锁定卡、会被选择门拒绝——
+	# 开测试模式放行全部物种（菜单呈现层 + `LifeCycle.begin_spawn` 双层门都吃 test_mode）。
+	(main as MainEntry).test_mode = true
 	root.add_child(main)
 	for i in SETTLE:
 		await process_frame

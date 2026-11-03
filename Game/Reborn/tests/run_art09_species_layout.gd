@@ -21,6 +21,10 @@ func _run() -> void:
 		_finish()
 		return
 	var main := packed.instantiate()
+	# T033 口径：正式模式下第二物种呈锁定卡、`menu.select_species` 会拒绝它；
+	# 本套件断言的是**布局**（大卡/缩略图行随选中刷新），不是解锁门——开测试模式
+	# 让两个物种都可玩（解锁门语义由 run_t033_formal_species 固化）。
+	(main as MainEntry).test_mode = true
 	root.add_child(main)
 	for i in 12:
 		await process_frame

@@ -98,6 +98,11 @@ var _spin_speed := 0.35
 var _initial_settings: Dictionary = {}
 ## 设置滑块的当前值（`settings_values()` 读它，证据/断言用）
 var _sliders: Dictionary = {}
+## T033 解锁集：`species_id` → true。真源在 `GameState.unlocked_species`，
+## 由 `MainEntry` 通过 `build(..., unlocked_ids)` / `set_unlocked()` 推进来（本文件不读 `GameState`）
+var _unlocked: Dictionary = {}
+## 最近一次「点选/按键选择锁定物种」的反馈文字（断言/证据用）
+var _lock_feedback := ""
 
 
 ## 灵敏度基准（= `AnimalBody.mouse_sensitivity` 的默认值）；设置里的滑块是**倍数**
@@ -118,9 +123,20 @@ func _ready() -> void:
 
 ## 建立界面（必须在**入树之后**调用：卡片预览要用 `look_at` 与 `World3D`）。
 ## `initial_settings` 来自 `GameSettings`（已存盘的灵敏度/FOV），只用来回填滑块初值。
-func build(configs: Array[SpeciesConfig], initial_settings: Dictionary = {}) -> void:
+## `unlocked_ids`（T033）= 当前解锁的物种：**缺省空数组 = 全部可玩**（不传解锁信息的
+## 回退兼容，取证工具/旧调用方不受影响）；正式路径由 `MainEntry` 显式传入
+## `GameState.unlocked_species` 的内容。
+func build(configs: Array[SpeciesConfig], initial_settings: Dictionary = {},
+		unlocked_ids: Array = []) -> void:
 	_configs = configs.duplicate()
 	_initial_settings = initial_settings.duplicate()
+	_unlocked.clear()
+	if unlocked_ids.is_empty():
+		for cfg in _configs:
+			_unlocked[cfg.species_id] = true
+	else:
+		for id in unlocked_ids:
+			_unlocked[id] = true
 	_clear()
 
 	_build_scrim()
@@ -130,8 +146,11 @@ func build(configs: Array[SpeciesConfig], initial_settings: Dictionary = {}) -> 
 	_build_mvp_note()
 	_build_hint()
 	_build_settings()
-	if not _configs.is_empty():
-		select_species(_configs[0].species_id)
+	_apply_lock_states()
+	# 默认选中第一个**已解锁**物种（正式模式下锁定物种不可被默认选中，数据驱动）
+	var pick := _first_unlocked_id()
+	if pick != &"":
+		select_species(pick)
 	show_page(Page.MAIN)
 
 
@@ -142,6 +161,7 @@ func open_menu(previous_text: String = "") -> void:
 	set_process(true)
 	_set_previews_running(true)
 	_settings_panel.visible = false
+	_apply_lock_states()   # 解锁集可能在上次打开后变化；呈现层幂等刷新
 	if _record_label != null:
 		_record_label.text = previous_text
 		_record_label.visible = not previous_text.is_empty()
@@ -182,14 +202,105 @@ func show_page(page: int) -> void:
 	_refresh_hint()
 
 
-func select_species(species_id: StringName) -> void:
+## 选中一个物种（T033）：锁定物种被拒（false）并给文字反馈，选中不变。
+func select_species(species_id: StringName) -> bool:
 	if _index_of(species_id) < 0:
-		return
+		return false
+	if is_locked(species_id):
+		_notify_locked(species_id)
+		return false
 	var changed := _selected != species_id
 	_selected = species_id
 	_refresh_cards()
 	if changed:
 		selection_changed.emit(_selected)
+	return true
+
+
+# ---------------------------------------------------------------------------
+# 解锁集（T033，`Docs/Tasks/T033.md` D2/D3）
+# ---------------------------------------------------------------------------
+
+## 锁定卡上的两句固定文案（不写物种名；物种名来自 `SpeciesConfig.display_title()`）
+const LOCK_TAGLINE := "尚未解锁"
+const LOCK_NOTE := "用已解锁的动物探索世界 · 发现线索后解锁"
+
+## 是否锁定（供断言/调用方读取）。出生权威门在 `LifeCycle.begin_spawn`；
+## 这里只把**选择呈现层**收紧到同一份解锁集。
+func is_locked(species_id: StringName) -> bool:
+	return _index_of(species_id) >= 0 and not bool(_unlocked.get(species_id, false))
+
+
+## 当前锁定的物种（`species_id` 排序；断言/证据用）
+func locked_list() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for cfg in _configs:
+		if is_locked(cfg.species_id):
+			out.append(cfg.species_id)
+	return out
+
+
+## 显式覆盖解锁集（空数组 = 全部锁定）。由 `MainEntry` 在解锁状态变化时调用。
+## 与 `build()` 的 `unlocked_ids` 缺省参数（空 = **全部可玩**）语义相反——
+## 显式调用不做回退兼容，避免"忘传解锁集 = 全部放行"的坑。
+func set_unlocked(ids: Array) -> void:
+	_unlocked.clear()
+	for id in ids:
+		_unlocked[id] = true
+	_apply_lock_states()
+	# 防御：选中项因解锁集变化而锁定（正常流程不会发生）→ 回落到第一个已解锁物种
+	if _selected != &"" and is_locked(_selected):
+		_selected = &""
+		var pick := _first_unlocked_id()
+		if pick != &"":
+			select_species(pick)
+		_refresh_cards()
+
+
+## 最近一次「点选/按键选择锁定物种」的反馈文字（断言/证据用；不做动画，只做可读）
+func last_lock_feedback() -> String:
+	return _lock_feedback
+
+
+## 第一个已解锁物种（无则 `&""`）
+func _first_unlocked_id() -> StringName:
+	for cfg in _configs:
+		if not is_locked(cfg.species_id):
+			return cfg.species_id
+	return &""
+
+
+## 锁定反馈（D3）：明确告诉玩家"这个物种还没解锁"；选中不变、不出生、无动画
+func _notify_locked(species_id: StringName) -> void:
+	var i := _index_of(species_id)
+	var title := _configs[i].display_title() if i >= 0 else String(species_id)
+	_lock_feedback = "「%s」%s · %s" % [title, LOCK_TAGLINE, LOCK_NOTE]
+	if _hint_label != null:
+		_hint_label.text = _lock_feedback
+	print("MENU|locked_feedback|%s" % String(species_id))
+
+
+## 把当前解锁集套到已建好的卡片/缩略图槽上（锁定只是**呈现层**差异：
+## 结构不变，压暗 + 换两句文案 + 悬停提示；解锁时复原）
+func _apply_lock_states() -> void:
+	for cfg in _configs:
+		var id := cfg.species_id
+		var locked := is_locked(id)
+		var entry: Dictionary = _cards.get(id, {})
+		var card := entry.get("card") as Control
+		if card != null:
+			card.modulate = Color(0.45, 0.45, 0.45, 1.0) if locked else Color(1.0, 1.0, 1.0, 1.0)
+			card.tooltip_text = "%s %s" % [LOCK_TAGLINE, LOCK_NOTE] if locked else ""
+			var tag := card.get_node_or_null("Row/Text/Tagline") as Label
+			if tag != null:
+				tag.text = LOCK_TAGLINE if locked else cfg.display_tagline
+			var note := card.get_node_or_null("Row/Text/Note") as Label
+			if note != null:
+				note.text = LOCK_NOTE if locked else cfg.display_note
+		var slot := _strip_slots.get(id) as Control
+		if slot != null:
+			slot.modulate = Color(0.55, 0.55, 0.55, 1.0) if locked else Color(1.0, 1.0, 1.0, 1.0)
+			slot.tooltip_text = "%s %s" % [LOCK_TAGLINE, LOCK_NOTE] if locked else ""
 
 func selected_species() -> StringName:
 	return _selected
@@ -282,12 +393,17 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	# 数字键 1..N：直接选中第 N 个物种（与 `life_select_1/2` 的设置标签一致，
-	# 但这里只**选中**，进入世界还要再按回车 —— 避免误按直接出生）
+	# 但这里只**选中**，进入世界还要再按回车 —— 避免误按直接出生）。
+	# T033：锁定物种不选中，只给反馈（选中不变、不出生、无动画）
 	for i in _configs.size():
 		var action := "life_select_%d" % (i + 1)
 		if InputMap.has_action(action) and event.is_action_pressed(action):
-			select_species(_configs[i].species_id)
-			show_page(Page.SPECIES)
+			var id := _configs[i].species_id
+			if not is_locked(id):
+				select_species(id)
+				show_page(Page.SPECIES)
+			else:
+				_notify_locked(id)
 			get_viewport().set_input_as_handled()
 			return
 
@@ -808,7 +924,10 @@ func _build_mvp_note() -> void:
 	box.anchor_right = 1.0
 	box.offset_left = -BoardTokens.RAIL_WIDTH - 300.0
 	box.offset_right = -BoardTokens.RAIL_WIDTH - 18.0
-	box.offset_top = 34.0
+	# T033（ART09 遗留）：顶部状态文字两行占 y≈12–64（`LifeStatus` 顶部居中偏右），
+	# 原先 offset_top=34 会把第二行「选择物种：…」整个压住。下移到 84 避开，
+	# 两块文字互不覆盖（`run_t033_formal_species` 的 OCCL 断言盯住这里）。
+	box.offset_top = 84.0
 	box.add_theme_constant_override("separation", 4)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.alignment = BoxContainer.ALIGNMENT_BEGIN
@@ -867,24 +986,24 @@ func _make_species_card(cfg: SpeciesConfig) -> PanelContainer:
 	var name_label := _label(cfg.display_title(), BoardTokens.FONT_CARD_NAME, COLOR_TEXT)
 	name_label.name = "Name"
 	text.add_child(name_label)
-	if not cfg.display_tagline.is_empty():
-		var tag := _label(cfg.display_tagline, BoardTokens.FONT_CARD_TAG,
-			Color(0.812, 0.769, 0.639))
-		tag.name = "Tagline"
-		text.add_child(tag)
-	if not cfg.display_note.is_empty():
-		var note := _label(cfg.display_note, BoardTokens.FONT_CARD_NOTE, COLOR_DIM)
-		note.name = "Note"
-		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		text.add_child(note)
+	# T033：Tagline/Note **无条件创建**——锁定态要往里写「尚未解锁/解锁提示」
+	# （art09 卡契约要求这两个子节点存在；可玩态文本为空时也无碍）
+	var tag := _label(cfg.display_tagline, BoardTokens.FONT_CARD_TAG, Color(0.812, 0.769, 0.639))
+	tag.name = "Tagline"
+	text.add_child(tag)
+	var note := _label(cfg.display_note, BoardTokens.FONT_CARD_NOTE, COLOR_DIM)
+	note.name = "Note"
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text.add_child(note)
 
 	var id := cfg.species_id
 	card.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton \
 				and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT \
 				and (event as InputEventMouseButton).pressed:
-			select_species(id)
-			show_page(Page.SPECIES)
+			# T033：锁定物种点击 → `select_species` 返回 false（已给反馈），不进物种页
+			if select_species(id):
+				show_page(Page.SPECIES)
 	)
 
 	_cards[id] = {

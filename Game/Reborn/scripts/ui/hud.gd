@@ -80,6 +80,7 @@ func _ready() -> void:
 	_build_vitals_bars()
 	_build_compass()
 	_build_skill_ring()
+	_build_toast()
 	if not player_path.is_empty():
 		var p := get_node_or_null(player_path)
 		if p is AnimalBody:
@@ -93,6 +94,10 @@ func _process(_delta: float) -> void:
 	_refresh_interaction()
 	_refresh_compass()
 	_refresh_skills()
+	# Toast 超时收口（T033）：真实毫秒对比，不跟帧率走
+	if _toast_label != null and _toast_label.visible \
+			and _toast_until_ms > 0 and Time.get_ticks_msec() > _toast_until_ms:
+		_toast_label.visible = false
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +232,53 @@ func hud_text() -> String:
 	if not i.is_empty():
 		parts.append(i)
 	return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Toast（T033 发现/解锁反馈，`Docs/Tasks/T033.md` D5）
+# ---------------------------------------------------------------------------
+
+## 顶部居中的临时提示文字。最小可读版：无动画、无弹窗、超时隐藏；
+## 不进 `hud_text()`（不碰 T018 的 HUD 文本契约）。
+const TOAST_FONT := 16
+const TOAST_DURATION := 4.0
+
+var _toast_label: Label = null
+var _toast_until_ms := 0
+
+func show_toast(text: String, duration: float = TOAST_DURATION) -> void:
+	if _toast_label == null:
+		return
+	_toast_label.text = text
+	# 空文本 = 立即隐藏；非零时长 = 按真实毫秒截止（`_process` 里统一收口）
+	var show := not text.is_empty() and duration > 0.0
+	_toast_label.visible = show
+	_toast_until_ms = Time.get_ticks_msec() + int(duration * 1000.0) if show else 0
+
+
+func toast_text() -> String:
+	return _toast_label.text if _toast_label != null else ""
+
+
+func toast_visible() -> bool:
+	return _toast_label.visible if _toast_label != null else false
+
+
+func _build_toast() -> void:
+	_toast_label = Label.new()
+	_toast_label.name = "ToastLabel"
+	_toast_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_toast_label.offset_top = 56.0
+	_toast_label.offset_bottom = 82.0
+	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast_label.add_theme_font_size_override("font_size", TOAST_FONT)
+	# 暖金 + 深色描边：压在 3D 画面上也读得清（与菜单 GOLD 同族色，无动画）
+	_toast_label.add_theme_color_override("font_color", Color(0.980, 0.855, 0.530))
+	_toast_label.add_theme_color_override("font_outline_color", Color(0.03, 0.05, 0.06, 0.92))
+	_toast_label.add_theme_constant_override("outline_size", 5)
+	_toast_label.visible = false
+	add_child(_toast_label)
 
 
 # ---------------------------------------------------------------------------

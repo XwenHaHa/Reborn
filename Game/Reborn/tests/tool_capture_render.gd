@@ -150,6 +150,10 @@ func _initialize() -> void:
 	# T032：生命结算页两帧（结算覆盖层 / 关闭后的选物种画面）。只在显式传 `-- t032` 时执行。
 	if OS.get_cmdline_user_args().has("t032"):
 		await _capture_t032_frames(lab)
+	# T033：正式选择三帧（锁定呈现+遮挡修复 / 解锁 Toast / 解锁后选择画面）。
+	# 只在显式传 `-- t033` 时执行。
+	if OS.get_cmdline_user_args().has("t033"):
+		await _capture_t033_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -2305,6 +2309,118 @@ func _capture_t032_frames(lab: Node) -> void:
 	for i in 4:
 		await process_frame
 	print("CAP|t032|done")
+
+
+## T033 正式物种选择三帧：`-- t033`（**不开测试模式**——取证对象就是正式门与锁定呈现）。
+## - 帧 1 `t033_locked_select`：选物种画面——鼠呈锁定卡（压暗+「尚未解锁」），点选它被拒、
+##   底部 hint 显示反馈文字；状态文字两行与右上 MVP 说明同帧可读。
+##   （ART09 遮挡修复的"后"帧；"前"帧 = 已入库的 `t031_locked_select.png`，MVP 块压住第二行。）
+## - 帧 2 `t033_unlock_toast`：存活中触发发现→解锁，HUD 顶部 Toast 可见可读。
+## - 帧 3 `t033_unlocked_select`：死亡回选物种画面——鼠已解锁为可选卡，状态文字两行完整可读。
+func _capture_t033_frames(lab: Node) -> void:
+	print("CAP|t033|start")
+	lab.visible = false
+	var packed: PackedScene = load(T030_MAIN)
+	if packed == null:
+		print("CAP|t033|ERROR|main.tscn load failed")
+		return
+	var main: Node = packed.instantiate()
+	root.add_child(main)
+	for i in 12:
+		await process_frame
+	var entry := main as MainEntry
+	if entry == null or entry.menu == null:
+		print("CAP|t033|ERROR|main entry/menu missing")
+		if main != null:
+			main.queue_free()
+		return
+	var cam := _t030_overview_camera()
+	var configs := entry.species_configs()
+	if configs.is_empty():
+		print("CAP|t033|ERROR|no species configs")
+		main.queue_free()
+		return
+	var locked := entry.menu.locked_list()
+	if locked.is_empty():
+		print("CAP|t033|ERROR|no locked species (unexpected in formal mode)")
+		main.queue_free()
+		return
+	# 点选锁定物种 → 被拒 + 反馈文字落在底部 hint 行（取证帧 1 里要逐字可读）
+	var ok_locked := entry.menu.select_species(locked[0])
+	print("CAP|t033|locked_click|refused=%s|feedback=%s" % [
+		str(not ok_locked), entry.menu.last_lock_feedback()
+	])
+	if entry.status_label != null:
+		entry.status_label.visible = true   # 取证侧强制可见（同 t031 口径）
+	var mvp := _t033_find(entry.menu, "MvpNote") as Control
+	if entry.status_label != null and mvp != null:
+		var sr := entry.status_label.get_global_rect()
+		var mr := mvp.get_global_rect()
+		print("CAP|t033|occl|status=%.0f,%.0f %.0fx%.0f|mvp=%.0f,%.0f %.0fx%.0f|intersects=%s" % [
+			sr.position.x, sr.position.y, sr.size.x, sr.size.y,
+			mr.position.x, mr.position.y, mr.size.x, mr.size.y, str(sr.intersects(mr))
+		])
+	print("CAP|t033|locked|locked_cards=%s|status=%s" % [
+		str(locked), entry.status_text().replace("\n", " / ")
+	])
+	await _capture_view("t033_locked_select", cam, 12)
+
+	# 出生初始解锁物种 → 挪到鼠洞发现半径内触发发现→解锁（Toast 在 HUD 顶部，存活中可见）
+	var ok := entry.select_species(configs[0].species_id)
+	for i in 12:
+		await process_frame
+	if not ok or entry.player == null or not is_instance_valid(entry.player):
+		print("CAP|t033|ERROR|spawn failed|state=%s" % entry.lifecycle_state_name())
+		main.queue_free()
+		return
+	entry.player.global_position = T031_HOLE_APPROACH
+	var discovered := false
+	for i in 60:
+		await process_frame
+		var gs := root.get_node_or_null("GameState")
+		if gs != null and bool(gs.call("is_place_discovered", T031_ROOT_HOLE)):
+			discovered = true
+			break
+	print("CAP|t033|discovered=%s|toast=%s|visible=%s|unlocked=%s" % [
+		str(discovered), entry.hud.toast_text(), str(entry.hud.toast_visible()),
+		str(entry.selectable_slots())
+	])
+	if not discovered:
+		print("CAP|t033|ERROR|no discovery")
+		main.queue_free()
+		return
+	cam.current = true
+	await _capture_view("t033_unlock_toast", cam, 6)
+
+	# 死亡回选物种画面：鼠已解锁、状态文字两行完整可读（与 t031_unlocked_select 前帧对照）
+	if entry.player.survival != null:
+		entry.player.survival.apply_damage(9999.0, &"t033_capture")
+	for i in 12:
+		await process_frame
+	entry.dismiss_settle()
+	if entry.status_label != null:
+		entry.status_label.visible = true
+	print("CAP|t033|unlocked|locked_cards=%s|status=%s" % [
+		str(entry.menu.locked_list()), entry.status_text().replace("\n", " / ")
+	])
+	await _capture_view("t033_unlocked_select", cam, 12)
+	main.queue_free()
+	for i in 4:
+		await process_frame
+	print("CAP|t033|done")
+
+
+## 按名递归找节点（只给取证打印用；不进入任何游戏逻辑）
+func _t033_find(node: Node, target: String) -> Node:
+	if node == null:
+		return null
+	if String(node.name) == target:
+		return node
+	for child in node.get_children():
+		var found := _t033_find(child, target)
+		if found != null:
+			return found
+	return null
 
 
 ## ART07：t011 取景隔离（同 `_t021_isolate_lab` 的规矩：lab 不要出现在庭院画面里）

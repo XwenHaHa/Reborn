@@ -29,6 +29,9 @@ func _run() -> void:
 		print("CAP|art04|ERROR|main_load_failed")
 		return
 	var main := packed.instantiate()
+	# T033：本工具要选/出生第二个物种；正式模式下它呈锁定卡、会被选择门拒绝
+	# （菜单呈现层 + `LifeCycle.begin_spawn` 双层门）——开测试模式放行全部物种。
+	(main as MainEntry).test_mode = true
 	root.add_child(main)
 	for i in SETTLE:
 		await process_frame

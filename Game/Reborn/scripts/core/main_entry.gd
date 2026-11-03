@@ -88,10 +88,14 @@ func _ready() -> void:
 	_build_level()
 	_build_ecology()
 	_build_hud()
-	_build_status()
+	# T033（ART09 遮挡遗留）：`LifeStatus` 必须在 `MainMenu` **之后**加入——
+	# 同 canvas 后加入者绘制在上，状态文字才不会被菜单（尤其右上 MvpNote）盖住；
+	# `LifeSettlePanel` 仍最后加入、绘制在最上（T032 A9 契约）。
 	_build_menu()
+	_build_status()
 	_build_settle_panel()
 	_build_lifecycle()
+	_wire_gamestate_signals()
 	_enter_select()
 	print("ENTRY|ready|species=%d|test_mode=%s|unlocked=%s" % [
 		_configs.size(), str(test_mode), str(_unlocked_ids())
@@ -358,6 +362,41 @@ func _on_place_discovered(place_id: String) -> void:
 		place_id, lifecycle.life_id if lifecycle != null else "",
 		str(_unlocked_ids())
 	])
+
+
+# ---------------------------------------------------------------------------
+# 发现/解锁的玩家可见反馈（T033，`Docs/Tasks/T033.md` D4/D5）
+# ---------------------------------------------------------------------------
+
+## 接线 `GameState` 的长期层信号：菜单/入口都**只观察**，不写回 GameState。
+func _wire_gamestate_signals() -> void:
+	var gs := _game_state()
+	if gs == null:
+		return
+	if not gs.is_connected("species_unlocked", _on_species_unlocked):
+		gs.connect("species_unlocked", _on_species_unlocked)
+	# 走 GameState 信号而不是 DiscoveryTracker 的：测试/取证直接调
+	# `record_place_discovery()` 的路径同样有提示（解锁链两步走同一条接线）。
+	if not gs.is_connected("place_discovered", _on_place_discovered_toast):
+		gs.connect("place_discovered", _on_place_discovered_toast)
+
+
+## 解锁发生（发现→解锁链、或未来其它解锁途径）：菜单即时刷新 + HUD Toast。
+## 显示名来自 `SpeciesConfig.display_title()`——入口不写物种名（配套要求 §1）。
+func _on_species_unlocked(species_id: StringName) -> void:
+	if menu != null:
+		menu.set_unlocked(_unlocked_ids())
+	var cfg := _config_for(species_id)
+	if hud != null and cfg != null:
+		hud.show_toast("新物种已解锁：%s" % cfg.display_title())
+	_refresh_status()
+	print("ENTRY|unlock|%s|unlocked=%s" % [String(species_id), str(_unlocked_ids())])
+
+
+## 发现新地点：Toast 只报稳定 ID（地点没有配置化显示名，不编名字）。
+func _on_place_discovered_toast(place_id: String) -> void:
+	if hud != null:
+		hud.show_toast("发现新地点：%s" % place_id)
 
 
 # ---------------------------------------------------------------------------
@@ -685,8 +724,10 @@ func _build_menu() -> void:
 	add_child(menu)
 	# 选中项变化 → 主视觉换人（ART06：主视觉跟着选中的物种走）
 	menu.selection_changed.connect(_on_menu_selection_changed)
-	# 入树之后再 build：卡片预览要用 `World3D` 与 `look_at`
-	menu.build(_configs, current_settings())
+	# 入树之后再 build：卡片预览要用 `World3D` 与 `look_at`。
+	# T033：显式传入当前解锁集（正式模式只有初始解锁物种可玩；test_mode 全解锁）——
+	# 菜单据此呈现锁定卡（数据来自 `GameState.unlocked_species`，入口不写物种名）
+	menu.build(_configs, current_settings(), _unlocked_ids())
 	menu.species_committed.connect(_on_menu_species_committed)
 	menu.setting_changed.connect(_on_menu_setting_changed)
 	menu.quit_requested.connect(_on_menu_quit)

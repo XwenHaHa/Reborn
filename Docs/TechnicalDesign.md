@@ -299,6 +299,26 @@ signal life_ended(record: LifeRecord)
 - 重复伤害只结算一次（`LifeCycle.end_life`）→ 面板只呈现一次（`present_count()` 断言）。
 - 捕猎/逃脱计数**只作展示**，与解锁零连接（§7.1 固化）。
 
+### 7.3 正式选择呈现与解锁反馈（T033 实现口径）
+
+- **UI 树序**：`MainEntry._ready` 构建 `hud → MainMenu → LifeStatus（状态文字）→ LifeSettlePanel`。
+  状态文字绘制在菜单**之上**（修 ART09 遮挡遗留：同 canvas 后加入者绘制在上）；结算页仍最后加入=最上
+  （§7.2 不动）；`MvpNote` 下移到 y=84 避开状态文字两行——两层文字同帧可读（`intersects=false` 断言）。
+- **锁定呈现（数据驱动）**：`MainMenu.build(configs, settings, unlocked_ids)`——空数组=**全部可玩**
+  （不传解锁信息的回退兼容，取证/旧调用方语义不变）；正式路径由入口传入 `GameState.unlocked_list()`。
+  锁定卡与可玩卡**同构**（`Card_<id>`/`Thumb_<id>`/`Tagline`/`Note`，art09 契约不破），差异只是
+  整卡压暗 + `Tagline=尚未解锁` + 解锁提示 Note + tooltip；真实显示名保留（不保密，与 MVP 说明一致）。
+- **选择门只收在呈现层**：`MainMenu.select_species(锁定) → false` + 底部 hint 反馈文字
+  （`last_lock_feedback()` 供断言），数字键对锁定物种同样只反馈；**出生权威门仍在 `LifeCycle.begin_spawn`**
+  （§7.1 语义一字不动，入口 `selectable_slots` 未改）。
+- **解锁即时刷新**：入口消费 `GameState.species_unlocked → menu.set_unlocked()`（显式调用，空=全锁，
+  与 `build` 缺省语义相反——显式调用不回退，防"忘传=全放行"）。
+- **Toast（最小可读版）**：`PlayerHud.show_toast(text, duration:=4.0)`——顶部居中金色 Label+深描边、
+  无动画、真实毫秒截止隐藏；**不进 `hud_text()`**（T018 契约不动）。解锁文案=「新物种已解锁：
+  `<SpeciesConfig.display_title()>`」；发现文案=「发现新地点：`<稳定 ID>`」（地点无配置显示名前照实显示 ID）。
+- **重生整备**：旧身体由 `LifeCycle._release_body()` 改名+释放（T022/T030 已有）；断言固化
+  两世后关卡 `Player` 恰好 1 个、无 `*_retired` 残留、`DiscoveryTracker.player` 重绑新身体。
+
 ## 8. 保存与恢复策略
 
 一个逻辑进度槽，物理上用 `Reborn_A` / `Reborn_B` 双槽（`user://`）。
