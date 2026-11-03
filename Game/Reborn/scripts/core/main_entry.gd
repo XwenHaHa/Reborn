@@ -668,8 +668,15 @@ func _refresh_status() -> void:
 		LifeCycle.State.SPAWNING:
 			status_label.text = "出生中…"
 		LifeCycle.State.ALIVE:
-			status_label.text = "%s %s｜存活 %.1f s" % [
-				lifecycle.life_id, String(lifecycle.species_id), _life_elapsed()
+			# T034 D5：存活读数带昼夜时钟（数据来自 WorldDirector 纯函数，入口不存平行时钟）
+			var day := 1
+			var phase := "白天"
+			var wd := _wd()
+			if wd != null:
+				day = int(wd.call("day_index")) + 1
+				phase = "白天" if bool(wd.call("is_daytime")) else "夜晚"
+			status_label.text = "%s %s｜第 %d 天·%s｜存活 %.1f s" % [
+				lifecycle.life_id, String(lifecycle.species_id), day, phase, _life_elapsed()
 			]
 
 

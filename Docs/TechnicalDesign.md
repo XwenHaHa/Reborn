@@ -204,6 +204,14 @@ signal life_ended(record: LifeRecord)
 **暂停 / 结算 / 选择 / 加载不推进**（用 `get_tree().paused` 或显式门闩）。
 低频消耗可 0.2 s 更新但**必须使用实际 `delta`**；动作/移动依赖 `_physics_process`，**不能固定每帧扣值**。
 
+**昼夜时钟（T034 契约）**：`world_director` 在 `world_time` 之上提供昼夜刻度——一天 `day_length = 1200 s`
+（真源 `Parameters.md`「初始昼夜周期」），白天 `[0, 600)` / 夜晚 `[600, 1200)`（对半，新增实现默认值待并入起测值），
+API `time_of_day() / day_index()（0 起）/ is_daytime() / phase_name()` **全部是 `world_time` 的纯函数**：
+不存平行状态、门闩天然冻结昼夜读数；`set_world_time()` 是权威时间指令（读档/取证快进），门闩不阻止它。
+正式死亡→重生**不重置世界时间**（`reset_for_new_game()` 只属"新游戏"）；昼夜光照属 T057，时钟类不做任何灯光变化。
+资源恢复（`ResourcePoint` 每 180 s 恢复 1 Unit、捕获食物 300 s 失效）与失效判定**只吃世界时间**——
+门闩期间不恢复不失效，多周期一次结算并夹紧容量（断言：`run_t034_world_clock.gd`）。
+
 **物理与碰撞**：
 - 用 Godot 内置 `CharacterBody3D` + `move_and_slide()` 作为两种地面动物原型。**不要一开始就自定义 `PhysicsBody`。**
 - 起测碰撞层集中定义在 `project.godot`：`1 = world_static`、`2 = animal`、`3 = interactable`、`4 = safe_spot`；**不新增未经验证的层**。

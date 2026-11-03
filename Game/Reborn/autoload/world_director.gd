@@ -103,3 +103,41 @@ func report_capture(captor_id: String, target_id: String, position: Vector3,
 ## 该目标是否已被结算过捕获（T021）
 func is_captured(target_id: String) -> bool:
 	return captured_target_ids.has(target_id)
+
+
+# ---------------------------------------------------------------------------
+# 昼夜时钟（T034）
+# ---------------------------------------------------------------------------
+
+## 一天多长（世界秒）。真源：`Docs/Parameters.md` 第 83 行「初始昼夜周期 1200s」。
+## 昼夜边界对半（白天 600 s + 夜晚 600 s，`NIGHT_START_RATIO`）是 T034 决策——
+## 策划只给了周期与「WorldTime=0 为白天起点」，未定义边界；待负责人并入正式起测值。
+## 昼夜**光照**属 T057：本类只提供时钟读数，不做任何渲染/灯光变化。
+var day_length: float = 1200.0
+const NIGHT_START_RATIO := 0.5
+
+
+## 当天内的世界秒（`fmod` 取余）。负 `world_time` 或非法 `day_length` 一律按 0 处理。
+func time_of_day() -> float:
+	if day_length <= 0.0 or world_time < 0.0:
+		return 0.0
+	return fmod(world_time, day_length)
+
+
+## 第几天，0 起（呈现层 +1 得「第 N 天」）。
+func day_index() -> int:
+	if day_length <= 0.0 or world_time < 0.0:
+		return 0
+	return int(floor(world_time / day_length))
+
+
+## 是否白天：`[0, day_length/2)`。昼夜 API 全部是 `world_time` 的**纯函数**——
+## 不存平行状态、不推进时间；门闩（`time_advancing=false`）天然冻结昼夜读数。
+func is_daytime() -> bool:
+	if day_length <= 0.0:
+		return true   # 防呆：非法周期视为恒白天
+	return time_of_day() < day_length * NIGHT_START_RATIO
+
+
+func phase_name() -> StringName:
+	return &"day" if is_daytime() else &"night"

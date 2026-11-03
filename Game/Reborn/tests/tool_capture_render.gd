@@ -154,6 +154,9 @@ func _initialize() -> void:
 	# 只在显式传 `-- t033` 时执行。
 	if OS.get_cmdline_user_args().has("t033"):
 		await _capture_t033_frames(lab)
+	# T034：世界时钟读数两帧（白天读数 / 权威快进后的夜晚读数）。只在显式传 `-- t034` 时执行。
+	if OS.get_cmdline_user_args().has("t034"):
+		await _capture_t034_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -2421,6 +2424,67 @@ func _t033_find(node: Node, target: String) -> Node:
 		if found != null:
 			return found
 	return null
+
+
+## T034 世界时钟读数两帧：`-- t034`（正式模式）。
+## - 帧 1 `t034_day_readout`：存活中（世界时间 < 600 s）状态行读「第 1 天·白天」。
+## - 帧 2 `t034_night_readout`：权威快进到 650 s 后读「第 1 天·夜晚」。
+## 口径：状态行在存活期默认隐藏（菜单打开时隐藏、出生后不恢复——既有呈现），
+## 取证侧强制可见（同 t031/t033 口径），证据里如实记录。
+func _capture_t034_frames(lab: Node) -> void:
+	print("CAP|t034|start")
+	lab.visible = false
+	var packed: PackedScene = load(T030_MAIN)
+	if packed == null:
+		print("CAP|t034|ERROR|main.tscn load failed")
+		return
+	var main: Node = packed.instantiate()
+	root.add_child(main)
+	for i in 12:
+		await process_frame
+	var entry := main as MainEntry
+	if entry == null or entry.menu == null:
+		print("CAP|t034|ERROR|main entry/menu missing")
+		if main != null:
+			main.queue_free()
+		return
+	var cam := _t030_overview_camera()
+	var configs := entry.species_configs()
+	if configs.is_empty():
+		print("CAP|t034|ERROR|no species configs")
+		main.queue_free()
+		return
+	# 出生初始解锁物种（正式模式，Cat 可选）
+	var ok := entry.select_species(configs[0].species_id)
+	for i in 12:
+		await process_frame
+	if not ok or entry.player == null or not is_instance_valid(entry.player):
+		print("CAP|t034|ERROR|spawn failed|state=%s" % entry.lifecycle_state_name())
+		main.queue_free()
+		return
+	if entry.status_label != null:
+		entry.status_label.visible = true   # 取证侧强制可见（同 t031/t033 口径）
+	var wd := root.get_node_or_null("WorldDirector")
+	for i in 14:
+		await process_frame   # 状态行 10 帧一刷
+	print("CAP|t034|day|wt=%.2f|status=%s" % [
+		float(wd.get("world_time")), entry.status_text().replace("\n", " / ")
+	])
+	cam.current = true
+	await _capture_view("t034_day_readout", cam, 12)
+
+	# 权威快进到 650 s（夜晚起点之后）→ 状态行读数翻成「第 1 天·夜晚」
+	wd.call("set_world_time", 650.0)
+	for i in 14:
+		await process_frame
+	print("CAP|t034|night|wt=%.2f|status=%s" % [
+		float(wd.get("world_time")), entry.status_text().replace("\n", " / ")
+	])
+	await _capture_view("t034_night_readout", cam, 12)
+	main.queue_free()
+	for i in 4:
+		await process_frame
+	print("CAP|t034|done")
 
 
 ## ART07：t011 取景隔离（同 `_t021_isolate_lab` 的规矩：lab 不要出现在庭院画面里）
