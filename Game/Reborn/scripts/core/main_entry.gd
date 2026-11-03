@@ -55,6 +55,9 @@ var status_label: Label = null
 
 ## 主菜单 / 物种选择界面（ART04）。**运行期建立**；`main.tscn` 仍是"只有根节点 + 本脚本"。
 var menu: MainMenu = null
+## 生命结算覆盖层（T032，策划 §9.3/§9.4）：**运行期建立**，加在 `menu` **之后** →
+## 同 canvas 后加入者绘制在上，死亡后盖在选物种画面上方（`_enter_select` 时序不变，决策 D1/D5）。
+var settle_panel: LifeSettlePanel = null
 ## 选物种时的展示相机（挂在关卡里）；玩家出生后由玩家相机接管
 var menu_camera: Camera3D = null
 ## 菜单补光（挂在菜单相机下、不投阴影）：展示动物的正脸常被主光甩进阴影，加一盏只用于菜单的补光
@@ -87,6 +90,7 @@ func _ready() -> void:
 	_build_hud()
 	_build_status()
 	_build_menu()
+	_build_settle_panel()
 	_build_lifecycle()
 	_enter_select()
 	print("ENTRY|ready|species=%d|test_mode=%s|unlocked=%s" % [
@@ -356,6 +360,45 @@ func _on_place_discovered(place_id: String) -> void:
 	])
 
 
+# ---------------------------------------------------------------------------
+# 生命结算覆盖层（T032）
+# ---------------------------------------------------------------------------
+
+## 结算页与菜单同层、**后加入**（同 canvas 后加入者绘制在上；不是 CanvasLayer——T030 H8 契约）。
+func _build_settle_panel() -> void:
+	settle_panel = LifeSettlePanel.new()
+	settle_panel.name = "LifeSettlePanel"
+	add_child(settle_panel)
+
+
+## `life_settled` 之后呈现结算页（决策 D1：`_enter_select()` 时序不变，面板只是盖在上面的呈现层）。
+## 数据全部来自刚归档的结算记录 + `GameState.events_for()`（决策 D2：零平行数据结构）。
+func _present_settle(record: Dictionary) -> void:
+	if record.is_empty() or settle_panel == null:
+		return
+	var titles := {}
+	for cfg in _configs:
+		titles[String(cfg.species_id)] = cfg.display_title()
+	var kinds := {}
+	var gs := _game_state()
+	if gs != null:
+		var evs: Array = gs.call("events_for", String(record.get("life_id", "")))
+		for e in evs:
+			var k := String((e as Dictionary).get("kind", ""))
+			kinds[k] = int(kinds.get(k, 0)) + 1
+	settle_panel.present(record, {"species_titles": titles, "event_kinds": kinds})
+	print("ENTRY|settle|life=%s|duration=%.1f|end=%s|damage=%s" % [
+		String(record.get("life_id", "?")), float(record.get("duration", -1.0)),
+		String(record.get("end_reason", "")), String(record.get("damage_reason", "")),
+	])
+
+
+## 关闭结算页（测试 / 取证工具用；面板自己的确认路径见 `LifeSettlePanel`）。
+func dismiss_settle() -> void:
+	if settle_panel != null:
+		settle_panel.dismiss()
+
+
 func _enter_select() -> void:
 	if lifecycle == null:
 		return
@@ -426,10 +469,13 @@ func _on_life_settled(record: Dictionary) -> void:
 	if discovery != null:
 		discovery.player = null
 	_enter_select()
+	_present_settle(record)
 
 
 ## 创建玩家身体并回呼 `mark_spawned()`（决策 D1：状态机不建节点）。
 func _spawn_player(species_id: StringName) -> void:
+	# 出生即离开结算页（决策 D7：`select_species()` 直接出生时也要收起）
+	dismiss_settle()
 	var cfg := _config_for(species_id)
 	if cfg == null or level == null:
 		push_error("MainEntry: 无法出生 %s" % species_id)

@@ -106,6 +106,17 @@ func _run() -> void:
 	_check("K4_menu_visible_again", "true", str(_entry.menu.visible), _entry.menu.visible)
 	_check("K4_record_text_present", "含 上一世", _entry.status_text(),
 		_entry.status_text().contains("上一世"))
+	# T032：死亡后入口会在菜单上方弹出「生命结算」覆盖层（可见期间消费全部按键与点击）。
+	# 结算页的键盘路径（Enter/Esc）与数据口径由 run_t032_settle_page 固化；
+	# **点击消隐**只有真实窗口能测（headless 根视口没有鼠标进入事件），就在这里点掉再继续。
+	# 点 (40,40)：结算卡片居中 ±300/±220 px，这个点落在它的 scrim 上。
+	_check("K4a_settle_panel_visible", "true", str(_entry.settle_panel.visible),
+		_entry.settle_panel.visible)
+	await _click(Vector2(40.0, 40.0))
+	for i in 4:
+		await process_frame
+	_check("K4b_settle_click_dismissed", "false", str(_entry.settle_panel.visible),
+		not _entry.settle_panel.visible)
 
 	# --- M1：鼠标点击第一个物种的卡片 ---
 	var card := _find_node(_entry.menu, "Card_%s" % String(first)) as Control

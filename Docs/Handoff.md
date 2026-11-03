@@ -1,4 +1,4 @@
-# 开发交接：2026-11-03（T031 地点发现与老鼠解锁落地 —— **P4 进行中，下一步 T032**）
+# 开发交接：2026-11-03（T032 生命档案与结算页落地 —— **P4 进行中，下一步 T033**）
 
 ## 真实状态
 
@@ -38,6 +38,7 @@
 | T028 | **awaiting-review（2026-10-25）** | 第一轮概念试玩（**自测半边完成、U01 真人半边 NOT-RUN**）：新增 `tests/tool_t028_walkthrough.gd`（`extends SceneTree` 走查工具：把玩家 `player_controlled=false`，每帧"朝下一个**按层**导航路点 `look_at` + `move_intent=(0,-1)`"驱动），在可玩入口 `scenes/debug/ecology_entry.tscn` 上跑两条真实路线。**猫线**：11.18 m 内 **0.90 s** 看见鼠（`sense: seen=true`）→ **1 次扑击 3.9 s 捕获**（`route_len 10.96 / straight 11.18 / ratio 0.98`、`prey_states=["explore","alert"]`、`prey_min_gap 1.10 m`、捕获后生态 2→1）。**鼠线**：0.43 s 被猫看见（探针复核 = `alert/saw_prey` @8.92 m ≈ 猫 `vision_range 9.0` 的**视觉**触发，**不是**初始化 alert）→ **14.1 s 进洞**（`hole_gap 0.24 m`；逃段 `21.39 m / straight 21.12 / ratio 1.01` = 几乎直线）、**猫最近只到洞心 6.99 m**、12 s 内回 `explore` 且 `giveups=1`；两线 `hp 100→100`。**W1~W4 4/4 ×3 次源码 + 包内 4/4**；全量回归 **25 套 2847 条全绿**；包 **Reborn.pck 263,052 B（与 T027 相同 → 生产代码零改动）/ SelfTest.pck 905,604 B**；视觉 2 帧（`t028_cat_chase` 210,342 B 判读通过；`t028_mouse_hole` 221,923 B **只部分确认**：墙+缺口+HUD `pos:(26.68,0.12,19.00)`=洞口坐标，角色辨识 vision 未确认 → 不编造）。**暴露 2 个体验问题候选交 T029**：A 鼠 `ALERT` 0.3 s 在猫 `sprint 4.5` 下形同虚设；B 猫 AI 追击**从不 `want_sprint`**（walk 1.8 < 鼠 sprint 3.0 → 追不上） |
 | T030 | **done（2026-10-27）** | `Docs/Evidence/T030.md`、`Docs/Tasks/T030.md`、`autoload/game_state.gd`、`scripts/core/life_cycle.gd`、`scripts/core/main_entry.gd`、`scenes/core/main.tscn`（占位 → 真入口）、`tests/run_t030_lifecycle.gd`（111 条） | **生命周期状态与事件记录**：`LifeCycle` 四态（`ALIVE/SETTLING/SELECTING/SPAWNING`）+ 迁移表，非法迁移**不改状态/不写档案/不占 `LifeId`**；`GameState` 存档案（策划 §9.5 全字段）与事件（`seq` 单调、封顶 1024、跨世保留）、`LifeId L%04d` 单调；**死亡只结算一次**（连打 3 次 → 1 条档案 / 1 次信号）；结算期冻结世界时间与输入、**不留尸体**、NPC 数不变；`main.tscn` 改为真入口（关卡/HUD/状态栏运行期构建 → T013/T018/T026 旧断言继续全绿）；**111/111 ×3 + 包内 111/111，全量 27 套 2998 条全绿**；包 **289,832 / 968,900 B**；视觉 `t030_settled` 判读通过。**顺带修掉 2 个真实缺陷**：树外绝对路径取 autoload 报错、包内 `*.tres.remap` 导致 0 物种。遗留：`test_mode=true` 临时开发态（正式解锁属 T031）、真实按键选择 NOT-RUN |
 | T031 | **done（2026-11-03，系统时钟）** | `Docs/Evidence/T031.md`、`Docs/Tasks/T031.md`、`scripts/data/species_config.gd`（Progression 组）、`resources/species/{cat,mouse}.tres`、`autoload/game_state.gd`（长期发现）、`scripts/systems/discovery_tracker.gd`（新）、`scripts/core/main_entry.gd`、`tests/tool_make_courtyard.gd` + `l_courtyard.tscn`（生成器重产）+ 重烤导航、`tests/run_t031_discovery.gd`（72 条）、`tool_capture_render.gd -- t031` | **地点发现与老鼠解锁**（策划 §9.2）：**正式模式初始只解锁猫**（数据驱动 `initially_unlocked`，代码零物种名）；作为猫走到指定鼠洞（稳定 ID `root_hole_courtyard_01`，2.0 m 水平发现半径）→ 新组件 `DiscoveryTracker`（只观察）触发 `GameState.record_place_discovery()`：**长期记录**（跨世去重、reset 才清）+ 本世档案 + 事件 `discovery` + 按 `unlock_discovery` 规则**永久解锁鼠**；**死亡不取消、捕猎计数不参与解锁**（断言固化）；`test_mode` 默认 **false**（T030 遗留收口），4 个测生命/输入/取证的套件与工具显式开测试模式。**72/72 ×3 + 变异校验（改错 ID → 5 FAIL）+ 包内 72/72；全量 headless 41 套 3597 条 0 失败 + 非 headless 输入 20/20；视觉 2 帧（锁定帧逐字「选择物种：1=Cat」）**。包 66,881,764 / 67,821,776 B（较 T030 暴涨是 ART 轮资产入包，非 T031 新增）。遗留交 T033：菜单内锁定物种无可见反馈、菜单层压状态文字 z 序；发现提示 UI 与自动存档触发（T037）待定 |
+| T032 | **done（2026-11-03，系统时钟）** | `Docs/Evidence/T032.md`、`Docs/Tasks/T032.md`、`scripts/ui/life_settle_panel.gd`（新 `LifeSettlePanel`）、`scripts/core/main_entry.gd`、`tests/run_t032_settle_page.gd`（54 条）、`tests/run_art05_input.gd`（+2）、`tool_capture_render.gd -- t032`、`Art/Probes/t032_*.png` | **生命档案与结算页**（策划 §9.3/§9.4）：死亡后在选物种画面**上方**弹「生命结算」覆盖层——`_enter_select()` 时序**不变**（T030 H 契约、`run_t030` 111 条不动），纯 `Control` 加在 `MainMenu` **之后**（非 CanvasLayer，同 canvas 后加入者绘制在上，天然盖住菜单含 MVP 块、**不碰 ART09 遗留**）；内容 = `life_settled` 档案 + `events_for()` 计数 + `display_title()` **照实呈现**，**零平行数据**（`game_state.gd` 零改动、`panel.record()==last_record()` 断言固化）；**重复伤害只呈现一次**；可见时消费全部按键，Enter/Esc/点击/「继续」消隐，出生自动隐藏；捕猎计数只作展示。**54/54 ×3（重点批/全量批/包内）+ 变异校验 20 FAIL；全量 headless 42 套 3651 条 0 失败 + 非 headless 输入 22/22（含真实点击消隐 K4a/K4b）；包内 T032 54/54、T030 111/111、T031 72/72；视觉 2 帧（结算帧 vision 逐字判读与日志一致、关闭帧无残留）**。包 66,890,684 / 67,842,508 B。遗留：发现/解锁提示（T033）、结算页正式美术（P6）、死亡触发保存（T037） |
 | ART01 | **done（2026-10-21，系统时钟）** | `Docs/Evidence/ART01.md`、`Docs/Tasks/ART01.md`、`Tools/Blender/art01_bush_001.py`、`Game/Reborn/assets/environment/sm_bush_001.glb`、`tests/run_art01_bush.gd`、`tests/tool_capture_art01.gd` | **AI 建模工作流打通 + 首个静态资产接入**：草丛掩体 `ENV_BUSH_001`（2040 tris、2 材质、双面、**零碰撞**）替换半透明绿盒子，并补上**溪边掩体原本完全没有视觉**的缺陷；`tool_make_courtyard.gd` 生成器接入（**不手改 .tscn**）；**83/83 + 全量 29 套 3081 条全绿**；3 轮返工（泥土墩过高→躲进草丛相机在土里、草叶像"板条"、密度/取景缺陷）；**不是正式美术 approved**，也**没有**越过 P6 阶段门 |
 | ART03-② | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Tasks/ART03_BOULDER.md`、`Docs/Evidence/ART03_BOULDER.md`、`Tools/Blender/art05_boulder_001.py`、`Art/Exports/Environment/SM_Boulder_001.glb`、`Game/Reborn/assets/environment/sm_boulder_001.glb`、`tests/tool_capture_art05.gd` | **溪边巨石换成真实岩石**：Poly Haven `boulder_01`（CC0）实测 66,122 tris / **1.27 m 米制（推翻旧结论"12.7 m 需缩放"）** → 焊接后单轮减面 **7,500 tris** → `_mk_boulder()` 接入 `CreekBoulder`（视觉 .glb、碰撞 Godot 侧 `BoxShape3D` = 视觉 AABB）；生成器 7/7 + **全量 29 套 3,127 条全绿**；实机 4 机位自查通过（无浮空/陷地）；修掉两个真缺陷（glTF 接缝拆点致减面卡死、T012 溪缝断言依赖导航 tie-break） |
 | ART03-③ | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Tasks/ART03_FENCE.md`、`Docs/Evidence/ART03_FENCE.md`、`Tools/Blender/art06_fence_from_ref.py`、`Art/Exports/Environment/SM_Fence_Module_001.glb`、`Game/Reborn/assets/environment/sm_fence_module_001.glb`、`tests/tool_capture_art06.gd` | **围栏 + 庇护棚墙换成石墙模块**：`wall_stefan_wr`（CC-BY）取最高件 1,244 tris → ÷100 后等比到 **3.68 长 × 3.00 高 × 0.30 厚**，材质重建为 Principled（否则无贴图），`_mk_clad_wall()` 平铺 **90 件**、碰撞盒不变、`Backing` 衬板遮通孔；生成器 41 条墙断言 OK + **全量 29 套 3,127 条全绿**；修掉 4 个真缺陷（Y-up 烘错轴、旧式材质导出丢贴图、通孔看穿、北墙全黑→加 `SkyFill`）；代价 **120,668 tris 未测帧率** |
@@ -76,12 +77,13 @@
 | ART07 | **awaiting-review（2026-10-28；不是正式美术 approved）** | `Docs/Tasks/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`、`Docs/Evidence/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`、`Game/Reborn/tests/tool_make_courtyard.gd`、`Game/Reborn/shaders/grass_wind.gdshader`、`Game/Reborn/scenes/maps/l_courtyard.tscn`、`tests/run_t011_greybox.gd`、`Art/Probes/art07_{before,after}/` | 只复用现有资产的庭院表现层试作：16 株背景草簇、6 溪心石、3 庭院石、5 泥舌半岛、31 无碰撞阴影；草根明暗/实例差异、SSAO/ACES；指数雾关闭，远景 depth fog 参数保留但关闭；`CreekRock05` 移离溪缝机位视线。几何/碰撞/导航不变量未改。生成器装饰断言 229/229；回归 T011 229、T012 79、T020 164、T026 96、T027 96，全绿共 664 条；nav `.tres` 无 diff。视觉：overview 已无均匀雾幕、地标清楚但背景层次弱；溪缝清晰；courtyard/grass 仍有草石贴纸感/接地感不足。最后一轮窗口取证超时，当前截图对最后 shader 状态的对应关系未能复核；A5/A7 未通过，不提交为完成。P6/T053 未完成；**下一任务仍回到 T031** |
 | ART08 | **awaiting-review（2026-10-28；不是正式美术 approved）** | `Docs/Tasks/ART08_BOARD_BASELINE.md`、`Docs/Tasks/ART08_MENU.md`、`Docs/Tasks/ART08_CHARACTER_PIPELINE.md`、`Docs/Tasks/ART08_ENVIRONMENT_BOARD.md`、`Docs/Tasks/ART08_INTEGRATION.md`；`Docs/Evidence/ART08_*.md`；整合图 `Art/Probes/art08_integration/` | 按批准的视觉纵切片完成菜单结构、真实截图、角色资产授权门和环境不变量保护。ART08 契约 9/9、角色 15/15、环境 9/9；菜单/角色/环境/玩法相关回归全绿。**展板整体视觉 FAIL**：当前仍为庭院围墙与直线溪水，猫鼠仍用 `sm_cat_002` / `sm_mouse_002`，未新增猫扑击/鼠逃跑动作，右栏仍是实时 3D 卡片；非 headless 截图已留，但外部 vision 判读 NOT-RUN。提交 `d493cc6` / `c0ae0e9` / `6090559` / `07c1bc5`，未 push。**后续需要负责人逐项授权猫鼠新模型/动作及环境资产来源/许可**，再继续真正的美术替换；ART07 原有未提交改动仍保留，A5/A7 未通过。|
 
-**未完成**：游戏玩法实现（T032 起：档案页 / 重生 / 存档）、正式角色与骨骼资产（P6）、真实按键输入验证、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T032～T063 全部 pending（T031 已 done）。**
+**未完成**：游戏玩法实现（T033 起：重生 / 提示 / 存档）、正式角色与骨骼资产（P6）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T033～T063 全部 pending（T032 已 done）。**
 
 
-**T030 的边界声明**：① 只做生命周期与记录，**没做**结算页美术/动效（P6/T032）、存档（T037）；② ~~`MainEntry.test_mode = true` 临时开发态~~ **已于 T031 收口为默认 `false`（正式解锁门接入）**；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。
-**T031 的边界声明**：① 解锁只落 `GameState` 内存长期层，**持久化属 T036/T037**；② 发现/解锁无玩家可见提示（只有日志 + 信号），策划 §9.2 未要求、接入时机待 T032/T033 定；③ 正式模式点未解锁物种的「开始游戏」只有日志拒绝，菜单内无锁定态反馈——交 **T033**；④ 菜单打开时状态文字第二行（选择物种行）被菜单 MVP 块压住（t030 基线同样，ART09 遗留）——交 **T033**。
-**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 进行中（T030、T031 done）** → **下一步 T032 生命档案与结算页**。
+**T030 的边界声明**：① 只做生命周期与记录，~~没做结算页（T032）~~ **T032 已落结算页（见下）**、存档仍属 T037；② ~~`MainEntry.test_mode = true` 临时开发态~~ **已于 T031 收口为默认 `false`（正式解锁门接入）**；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。
+**T031 的边界声明**：① 解锁只落 `GameState` 内存长期层，**持久化属 T036/T037**；② 发现/解锁无玩家可见提示（只有日志 + 信号）——**T032 只做了结算页呈现，发现时仍无提示，交 T033**；③ 正式模式点未解锁物种的「开始游戏」只有日志拒绝，菜单内无锁定态反馈——交 **T033**；④ 菜单打开时状态文字第二行（选择物种行）被菜单 MVP 块压住（t030 基线同样，ART09 遗留）——交 **T033**。
+**T032 的边界声明**：① 结算页是 BoardTokens 风格**功能版**，无动效/肖像（正式美术 P6 再定）；② `game_state.gd`/`life_cycle.gd` **零改动**（档案字段实测够用、`_enter_select()` 时序不变），结算页是纯呈现层（`Docs/TechnicalDesign.md` §7.2）；③ headless 下鼠标 GUI 命中不触发（能力门）→ **点击消隐只在非 headless `run_art05_input` 里验证**（K4a/K4b），headless 套件只走键盘/断言路径；④ 死亡结算应触发保存（策划 §9）→ 仍属 T036/T037。
+**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 进行中（T030、T031、T032 done）** → **下一步 T033 正式物种选择与重生**。
 
 > ## ⚠ 本次最重要的教训
 >
@@ -165,6 +167,11 @@ $proj = 'E:\Reborn\Game\Reborn'
 & $g --headless --path $proj --script 'res://tests/run_t027_ecology.gd' --quit-after 300000
 & $g --headless --path $proj --script 'res://tests/run_t029_sprint_chase.gd' --quit-after 300000
 
+# P4 轮回线（T030 生命周期 / T031 发现与解锁 / T032 结算页）
+& $g --headless --path $proj --script 'res://tests/run_t030_lifecycle.gd' --quit-after 300000
+& $g --headless --path $proj --script 'res://tests/run_t031_discovery.gd' --quit-after 300000
+& $g --headless --path $proj --script 'res://tests/run_t032_settle_page.gd' --quit-after 300000
+
 # 走查工具（T028，切换玩家物种跑两条真实路线；不是断言套件）
 & $g --headless --path $proj --script 'res://tests/tool_t028_walkthrough.gd' --quit-after 300000
 
@@ -176,7 +183,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 & $g --headless --path $proj --script 'res://tests/tool_dump_scene_tree.gd' --quit-after 600 `
     -- 'res://assets/tests/sk_rig_probe.glb'
 
-# 视觉（**不能 headless**；`-- t005` 正交对照，`-- t006` 骨骼两帧，`-- t020` 感知三帧，`-- t021` 扑击/撞墙/命中三帧，`-- t022` 死亡 HUD / 重开后捕获两帧，`-- t023` 巡游 / 警戒后接近两帧，`-- t024` 追击 / 失视后搜索两帧，`-- t025` 预警 / 命中两帧，`-- t026` 草丛掩护 / 洞口外等待两帧，`-- t027` 猫玩家 / 鼠玩家两帧，`-- t028` 猫追鼠 / 鼠在洞口两帧，`-- t029` 追击冲刺一帧，`-- t030` 选物种 / 存活 / 结算三帧）
+# 视觉（**不能 headless**；`-- t005` 正交对照，`-- t006` 骨骼两帧，`-- t020` 感知三帧，`-- t021` 扑击/撞墙/命中三帧，`-- t022` 死亡 HUD / 重开后捕获两帧，`-- t023` 巡游 / 警戒后接近两帧，`-- t024` 追击 / 失视后搜索两帧，`-- t025` 预警 / 命中两帧，`-- t026` 草丛掩护 / 洞口外等待两帧，`-- t027` 猫玩家 / 鼠玩家两帧，`-- t028` 猫追鼠 / 鼠在洞口两帧，`-- t029` 追击冲刺一帧，`-- t030` 选物种 / 存活 / 结算三帧，`-- t031` 正式解锁门两帧，`-- t032` 结算页 / 关闭后两帧）
 & $g --path $proj --script 'res://tests/tool_capture_render.gd' --quit-after 1200 -- t006
 & $g --path $proj --script 'res://tests/tool_capture_render.gd' --quit-after 30000 -- t020
 & $g --path $proj --script 'res://tests/tool_capture_render.gd' --quit-after 60000 -- t021
@@ -423,7 +430,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 ## 下一步（按建议优先级）
 
-1. **T032（生命档案与结算页）**（前置 T031 **已满足**）：`GameState` 已备好档案/事件/长期发现（T031 又落了 `discovered_places` 与解锁集），T032 在其上做结算页 UI。**T033（正式物种选择与重生）紧随其后**，T031 已交它两件：① 正式模式锁定物种的菜单内反馈/锁定态视觉；② 菜单层压住状态文字（选择物种行）的 z 序问题（`Docs/Evidence/T031.md` §7/§8）。
+1. **T033（正式物种选择与重生）**（前置 T032 **已满足**）：`main.tscn` + 菜单/结算页/生命周期三件已齐，T033 做正式物种选择/重生整备。**T031/T032 交给它三件**：① 正式模式锁定物种的菜单内反馈/锁定态视觉；② 菜单层压住状态文字（选择物种行）的 z 序问题（`Docs/Evidence/T031.md` §7/§8）；③ 发现/解锁的玩家可见提示（T032 只做了结算页呈现，发现时仍只有日志 + 信号）。**动菜单层时注意**：`LifeSettlePanel` 树序在 `MainMenu` **之后**（后加入者绘制在上，`Docs/TechnicalDesign.md` §7.2），别把结算页盖回去。
    必须带上 T029 的两条**待决策**（`Docs/Evidence/T029.md` §6）：**① 鼠洞不是安全区**（洞里能被打中）/ **② 冲刺会把 AI 冲出无护栏平台**（`split_platform` 实测 `y=-210 m`）。
    **U01 真人半边仍 NOT-RUN**：2～3 位外部试玩者的最小请求在 `Docs/Tasks/T028.md` §7 与 `Docs/Evidence/T028.md` §10，等负责人安排。
 2. 带上 T027 的 3 条待定（`Docs/Evidence/T027.md` §7）：**正式启动链已落地（T030）**、**区域 NPC 账本属 T035**、
@@ -449,7 +456,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 | **ART04 的两个待决（已由 ART05 落实）** | ① 玩家自己的模型顶在镜头前 → **已做第三人称**（`camera_mode`，臂长撞墙收臂）；② 设置不持久化 → **已做** `GameSettings`（`user://settings.cfg`）。仍未做：第三人称镜头平滑、撞墙实拍帧、其它设置项 |
 | **Git 提交** | 已获授权并执行：**每完成一个任务提交一次**（T010 → `8140d6f`，T011 → `1f71f46`，T012 → `2968909`，T013 → `89ac039`，T014 → `b6351d9`，T015 → `79f2bbd`，T016 → `692fe9a`，T017 → `ab6225e`，T018 → `a2070bc`，T019 → `5bfb1c7`，T020 → `38be427`，T021 → `c36fff2`，T022 → `5b922be`，T023 → `899444c`，T024 → `cd66a9f`，T025 → `80b7eba`，T026 → `2769811`，T027 → `3ae16b9`，T028 → `d8374b3`，**T029 → `36d5944`**）；当前 `main` 比 `origin/main` **ahead 以 `git rev-list --count origin/main..main` 为准（当时累计 50 个提交未推送，含 T029 / T030）；**已于 2026-10-27 推送成功：`origin/main` = `8da9eeb`，ahead=0 / behind=0，LFS 54/54 对象（10 MB）已上传** |
 | **Git 推送 / 发布** | **推送于 2026-10-27 已打通并执行**（`origin/main` = `8da9eeb`）。原因与修法：① 直连 github.com 超时 → 需代理 `127.0.0.1:7897`；② 远端 LFS locking API 经该代理不可达 → 必须关掉锁校验。两项都已写在**仓库本地配置**（不动全局），见"关键环境事实"。**对外发布（新构建给别人）仍需负责人确认** |
-| 是否发布新构建 | `Builds/P0-Win64/` 已按 **T031**（2026-11-03）重新导出两个预设（exit 0）：`Reborn.pck` **66,881,764 B** / `RebornSelfTest.pck` **67,821,776 B**（体积较 T030 的 ~290 KB/969 KB 暴涨来自其后各 ART 轮入库的贴图/HDRI/肖像资产入包，**非玩法任务新增**）；包内 t031 72/72、t030 111/111。**发布动作本身仍需负责人确认**，且**建议先定体积策略再对外发** |
+| 是否发布新构建 | `Builds/P0-Win64/` 已按 **T032**（2026-11-03）重新导出两个预设（exit 0）：`Reborn.pck` **66,890,684 B** / `RebornSelfTest.pck` **67,842,508 B**（较 T031 各 +9 KB/+21 KB，为 T032 新脚本/测试；体积大头仍是此前各 ART 轮资产）；包内 t032 54/54、t030 111/111、t031 72/72。**发布动作本身仍需负责人确认**，且**建议先定体积策略再对外发** |
 | 真实按键输入验证方式 | 需受审查的输入自动化工具（**需授权**），或真人操作录像。**不要盲发按键** |
 | 相机轴语义 D1 / 蹲姿高度 D2 | 见上方"关键事实"：D1 已按竖直偏移实现并断言锁定；D2 需并入 `Parameters.md` 正式起测值 |
 | **T020 感知新增的 4 个默认值** | `footstep_interval_base` 0.5 s、`flee_timeout` 3.0 s、`reach_tolerance` 0.5 m、`hide_arrive_radius` 0.30 m —— `Parameters.md` 原本没有，需负责人并入正式起测值（`Docs/Evidence/T020.md` §8） |
@@ -489,7 +496,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 > 改完脚本**先跑 `--check-only`**，再跑 `--headless ... --quit-after N`（**不加 `--quit-after` 会挂死**）；
 > **新增/修改 `class_name` 脚本后先跑一次 `--import`**（否则引用方报 "Identifier not declared"）。
 > Godot 用**米**，Parameters.md 是**厘米**，需 ÷100。`CapsuleShape3D.height` 是含半球的总高。
-> **验收脚本模板**：`run_t002.gd`(18)、`run_t005_asset.gd`(50)、`run_t006_rig.gd`(65)、`run_t008_species.gd`(118)、`run_t009_cat_movement.gd`(81)、`run_t010_mouse_movement.gd`(95)、`run_t011_greybox.gd`(210)、`run_t012_navigation.gd`(79)、`run_t007_input.gd`(22)、`probe_step_height.gd`(6)、`run_t013_debug_entry.gd`(159)、`run_t013_movement_regression.gd`(73)、`run_t014_survival.gd`(106)、`run_t015_costs.gd`(93)、`run_t016_interaction.gd`(118)、`run_t017_food_water.gd`(128)、`run_t018_hud.gd`(73)、`run_t019_mouse_ai.gd`(72)、`run_t020_perception.gd`(164)、`run_t021_capture.gd`(279)、`run_t022_loop.gd`(168)、`run_t023_cat_ai.gd`(177)、`run_t024_chase_search.gd`(136)、`run_t025_attack.gd`(175)、`run_t026_cover.gd`(96)、`run_t027_ecology.gd`(96)、`run_t030_lifecycle.gd`(111)、`run_t031_discovery.gd`(72)。
+> **验收脚本模板**：`run_t002.gd`(18)、`run_t005_asset.gd`(50)、`run_t006_rig.gd`(65)、`run_t008_species.gd`(118)、`run_t009_cat_movement.gd`(81)、`run_t010_mouse_movement.gd`(95)、`run_t011_greybox.gd`(210)、`run_t012_navigation.gd`(79)、`run_t007_input.gd`(22)、`probe_step_height.gd`(6)、`run_t013_debug_entry.gd`(159)、`run_t013_movement_regression.gd`(73)、`run_t014_survival.gd`(106)、`run_t015_costs.gd`(93)、`run_t016_interaction.gd`(118)、`run_t017_food_water.gd`(128)、`run_t018_hud.gd`(73)、`run_t019_mouse_ai.gd`(72)、`run_t020_perception.gd`(164)、`run_t021_capture.gd`(279)、`run_t022_loop.gd`(168)、`run_t023_cat_ai.gd`(177)、`run_t024_chase_search.gd`(136)、`run_t025_attack.gd`(175)、`run_t026_cover.gd`(96)、`run_t027_ecology.gd`(96)、`run_t030_lifecycle.gd`(111)、`run_t031_discovery.gd`(72)、`run_t032_settle_page.gd`(54)。
 > **走查工具（不是断言套件）**：`tool_t028_walkthrough.gd` —— 用 `player_controlled=false` + 按层导航路径驱动玩家，跑"猫追鼠"与"鼠逃洞"两条真实路线，输出 `WALK|` 客观量 + 4 条硬判据（W1 猫能捕获 / W2 鼠能进洞 / W3 猫不穿洞 / W4 玩家存活）。
 > **资产链已打通**：Blender → `.glb` → Godot（T005 静态 / T006 骨骼）；脚本在 `Tools/Blender/`；
 > 结构 dump 用 `tests/tool_dump_scene_tree.gd`（支持骨骼/动画/蒙皮）。
@@ -505,14 +512,14 @@ $proj = 'E:\Reborn\Game\Reborn'
 > **测试生态入口（T027）**：`scenes/debug/ecology_entry.tscn`（= `debug_entry.gd` + `ecology_enabled = true`）——
 > 玩家是猫 → 场上 **2 只鼠 NPC**（可捕）；玩家是鼠 → 场上 **1 只猫 NPC**（要躲）；F1/F2 换物种会**先清再重铺**；
 > `debug_entry.tscn` 本身保持生态关闭（**既有 24 套夹具语义不变**）。
-> **视觉捕获**：`tests/tool_capture_render.gd -- t009` / `-- t010` / `-- t011` / `-- t012` / `-- t018` / `-- t020` / `-- t021` / `-- t022` / `-- t023` / `-- t024` / `-- t025` / `-- t026` / `-- t027` / `-- t028` / `-- t029` / `-- t030` / `-- t031`（**不能加 `--headless`**，`--quit-after` 给到 30000+；
+> **视觉捕获**：`tests/tool_capture_render.gd -- t009` / `-- t010` / `-- t011` / `-- t012` / `-- t018` / `-- t020` / `-- t021` / `-- t022` / `-- t023` / `-- t024` / `-- t025` / `-- t026` / `-- t027` / `-- t028` / `-- t029` / `-- t030` / `-- t031` / `-- t032`（**不能加 `--headless`**，`--quit-after` 给到 30000+；
 > **必须检查 `CAP|done` 与每张 `save_result=OK`** —— T011 实测遇到过一次"中途静默退出、退出码却仍是 0"）。
-> **取证一律走 `Tools/CaptureRun.ps1`（隐藏桌面，零窗口）**：`powershell -File E:\Reborn\Tools\CaptureRun.ps1 -Script tests/xxx.gd [-UserArgs t031] [-Headless]`。
+> **取证一律走 `Tools/CaptureRun.ps1`（隐藏桌面，零窗口）**：`powershell -File E:\Reborn\Tools\CaptureRun.ps1 -Script tests/xxx.gd [-UserArgs t032] [-Headless]`。
 > **不要写物种名分支**：能力差异走配置字段（`can_jump` / `can_pounce` / `can_use_mouse_tunnel`，T031 后还有
 > `initially_unlocked` / `unlock_discovery`），有静态断言守着。
 > 打包：`export_presets.cfg` 两个预设；**导出产物拒绝 `--script`**，包内断言用 `--main-pack` + 编辑器二进制。
-> **P0 / P1 / P2 / P3 已完成；P4 进行中（T030、T031 done）**。下一个动作：**T032 生命档案与结算页**
-> （带上 T029 的两条待决策：**鼠洞不是安全区**、**冲刺会把 AI 冲出平台**；T031 交给 T033 的两件见上）。
+> **P0 / P1 / P2 / P3 已完成；P4 进行中（T030、T031、T032 done）**。下一个动作：**T033 正式物种选择与重生**
+> （带上 T029 的两条待决策：**鼠洞不是安全区**、**冲刺会把 AI 冲出平台**；T031/T032 交给 T033 的三件见上）。
 > 已知阻塞：真实按键输入无安全自动化手段（**禁止盲发按键**）。
 > 不要在没有实测证据时把任何游戏任务标为 done；不要因无头断言通过就宣称画面正确。
 
@@ -773,5 +780,5 @@ T012 79/79、帧契约 48/48、T020 164/164、T026 96/96、T027 96/96。
 与动作；未改玩法/碰撞/导航/鼠洞溪缝尺寸。
 
 **剩余授权项**：① ART07 A6 洞口机位人工复核（负责人）；② `forest_floor` 三件套去留；
-③ 溪中石暗片边缘若后续处理水岸资产时顺带。**下一任务**：T032（P4，
-`Docs/Tasks/T031.md` 已收口；T030、T031 已 done）。
+③ 溪中石暗片边缘若后续处理水岸资产时顺带。**下一任务**：T033（P4；
+T030、T031、T032 已 done，`Docs/Tasks/T032.md` 已收口）。

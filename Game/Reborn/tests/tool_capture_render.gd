@@ -147,6 +147,9 @@ func _initialize() -> void:
 	# 只在显式传 `-- t031` 时执行。
 	if OS.get_cmdline_user_args().has("t031"):
 		await _capture_t031_frames(lab)
+	# T032：生命结算页两帧（结算覆盖层 / 关闭后的选物种画面）。只在显式传 `-- t032` 时执行。
+	if OS.get_cmdline_user_args().has("t032"):
+		await _capture_t032_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -2150,6 +2153,7 @@ func _capture_t030_frames(lab: Node) -> void:
 			String(rec.get("life_id", "")), String(rec.get("species_id", "")),
 			float(rec.get("duration", -1.0)), String(rec.get("end_reason", ""))
 		])
+	entry.dismiss_settle()   # T032：死亡后结算页盖在选物种画面上；关掉再捕（口径与 T030 时期一致）
 	cam.current = true
 	await _capture_view("t030_settled", cam, 12)
 	main.queue_free()
@@ -2227,6 +2231,7 @@ func _capture_t031_frames(lab: Node) -> void:
 		entry.player.survival.apply_damage(9999.0, &"t031_capture")
 	for i in 12:
 		await process_frame
+	entry.dismiss_settle()   # T032：死亡后结算页盖在选物种画面上；关掉再捕（口径与 T031 时期一致）
 	if entry.status_label != null:
 		entry.status_label.visible = true   # _present_menu 又把它隐藏了，取证再次强制可见
 	print("CAP|t031|settled|state=%s|slots=%s|status=%s" % [
@@ -2237,6 +2242,69 @@ func _capture_t031_frames(lab: Node) -> void:
 	for i in 4:
 		await process_frame
 	print("CAP|t031|done")
+
+
+## T032 生命结算页两帧：`-- t032`。
+## - 帧 1 `t032_settle`：死亡后弹出结算覆盖层（盖在选物种画面上方）。
+## - 帧 2 `t032_after_dismiss`：确认关闭后露出的选物种画面（应与 t030_settled 同性质）。
+## 档案做轻度富化（捕猎/逃脱/食物/水/发现地点各一项）让结算页有真实内容可读；
+## 全部走 `GameState` 既有 API，不旁路数据。
+func _capture_t032_frames(lab: Node) -> void:
+	print("CAP|t032|start")
+	lab.visible = false
+	var packed: PackedScene = load(T030_MAIN)
+	if packed == null:
+		print("CAP|t032|ERROR|main.tscn load failed")
+		return
+	var main: Node = packed.instantiate()
+	root.add_child(main)
+	for i in 12:
+		await process_frame
+	var entry := main as MainEntry
+	if entry == null or entry.settle_panel == null:
+		print("CAP|t032|ERROR|main entry/settle panel missing")
+		if main != null:
+			main.queue_free()
+		return
+	var cam := _t030_overview_camera()
+	var configs := entry.species_configs()
+	if configs.is_empty():
+		print("CAP|t032|ERROR|no species configs")
+		main.queue_free()
+		return
+	var ok := entry.select_species(configs[0].species_id)
+	for i in 12:
+		await process_frame
+	if not ok or entry.player == null or not is_instance_valid(entry.player):
+		print("CAP|t032|ERROR|spawn failed|state=%s" % entry.lifecycle_state_name())
+		main.queue_free()
+		return
+	# 轻度富化档案（既有 API；数值只为本帧可读，不入任何断言口径）
+	var gs := root.get_node_or_null("GameState")
+	if gs != null:
+		gs.call("add_to_life", "captures", 1)
+		gs.call("add_to_life", "escapes", 1)
+		gs.call("add_to_life", "food_gained", 0.75)
+		gs.call("add_to_life", "water_gained", 0.50)
+		gs.call("record_discovery", T031_ROOT_HOLE)
+	var wd := root.get_node_or_null("WorldDirector")
+	if wd != null:
+		wd.call("set_world_time", float(wd.get("world_time")) + 5.0)
+	entry.player.survival.apply_damage(9999.0, &"t032_capture")
+	for i in 12:
+		await process_frame
+	print("CAP|t032|presented=%s|count=%d|summary=%s" % [
+		str(entry.settle_panel.is_presenting()), entry.settle_panel.present_count(),
+		entry.settle_panel.summary_text().replace("\n", " / ")
+	])
+	cam.current = true
+	await _capture_view("t032_settle", cam, 12)
+	entry.dismiss_settle()
+	await _capture_view("t032_after_dismiss", cam, 12)
+	main.queue_free()
+	for i in 4:
+		await process_frame
+	print("CAP|t032|done")
 
 
 ## ART07：t011 取景隔离（同 `_t021_isolate_lab` 的规矩：lab 不要出现在庭院画面里）

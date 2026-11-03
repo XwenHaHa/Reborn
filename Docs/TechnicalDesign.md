@@ -286,6 +286,19 @@ signal life_ended(record: LifeRecord)
 - 参数与待定项（发现半径 2.0 m、扫描间隔 0.25 s、是否要求"看见"）见 `Docs/Parameters.md`
   「地点发现与解锁（T031 落地口径）」；命令与实测见 `Docs/Evidence/T031.md`。
 
+### 7.2 生命结算页（T032 实现口径）
+
+- **呈现层，不改状态机**：`LifeSettlePanel`（`scripts/ui/life_settle_panel.gd`，纯 `Control`）
+  在 `life_settled` 之后盖在选物种画面**上方**；`_enter_select()` 时序不变
+  （`SETTLING → SELECTING` 仍在结算记录形成后立即发生，本节 §7 契约不动）。
+- **零平行数据**：面板只格式化入口传入的结算档案 + `events_for(life_id)` 按 kind 计数
+  + `SpeciesConfig.display_title()`；不读 `GameState`、不新增字段/事件/存档数据。
+- **只记录事实**（策划 §9.4）：`end_reason` / `damage_reason` / snapshot 四项数值照实呈现，不编造。
+- **不是 CanvasLayer**（T030 H8 契约）：入口把面板加在 `MainMenu` **之后**（同 canvas 后加入者
+  绘制在上）；可见时消费全部按键，`ui_accept`/`ui_cancel`/点击/「继续」消隐，出生自动隐藏。
+- 重复伤害只结算一次（`LifeCycle.end_life`）→ 面板只呈现一次（`present_count()` 断言）。
+- 捕猎/逃脱计数**只作展示**，与解锁零连接（§7.1 固化）。
+
 ## 8. 保存与恢复策略
 
 一个逻辑进度槽，物理上用 `Reborn_A` / `Reborn_B` 双槽（`user://`）。
