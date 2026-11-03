@@ -33,9 +33,11 @@ const ACTION_SELECT_1 := "life_select_1"
 const ACTION_SELECT_2 := "life_select_2"
 const SELECT_ACTIONS: Array[StringName] = [ACTION_SELECT_1, ACTION_SELECT_2]
 
-## 开发测试模式（策划 §9.2）：解锁条件尚未接入（后续任务），默认放行全部物种。
-## 接入正式解锁后改 false，届时正式模式只允许已解锁物种 + 初始物种（非捕食者）。
-@export var test_mode: bool = true
+## 开发测试模式（策划 §9.2）：允许直接选择两个物种；**正式体验与测试模式明确区分**
+## （T030 遗留收口，T031 已接入正式解锁）：默认 false = 正式模式——
+## 只有初始解锁物种（`SpeciesConfig.initially_unlocked`，当前数据下即猫）可选，
+## 其余靠「发现指定地点」永久解锁（`SpeciesConfig.unlock_discovery` + `DiscoveryTracker`）。
+@export var test_mode: bool = false
 ## 结算/选物种界面文字刷新间隔（帧）。
 @export var status_refresh_frames: int = 10
 ## 生态：每个物种的 NPC 数（按 `can_attack` 分派：捕食者少、猎物多）。
@@ -46,6 +48,8 @@ var level: Node3D = null
 var hud: PlayerHud = null
 var lifecycle: LifeCycle = null
 var player: AnimalBody = null
+## 地点发现（T031）：只观察组件；长期记录与解锁规则都在 `GameState`。
+var discovery: DiscoveryTracker = null
 var ecology: EcologySpawner = null
 var status_label: Label = null
 
@@ -232,14 +236,21 @@ func _setup_long_term() -> void:
 		push_error("MainEntry: 缺少 GameState autoload")
 		return
 	gs.set("test_mode", test_mode)
+	# 发现 → 解锁规则（T031）：从物种配置 `unlock_discovery` 汇总（接线数据，覆盖式重写）
+	var rules := {}
+	for cfg in _configs:
+		if cfg.unlock_discovery != &"":
+			rules[String(cfg.unlock_discovery)] = cfg.species_id
+	gs.call("set_discovery_unlock_rules", rules)
 	if (gs.get("unlocked_species") as Dictionary).is_empty():
 		if test_mode:
 			gs.call("set_default_unlock", _all_ids())
 		else:
-			# 正式模式：初始只解锁非捕食者（策划 §9.2 起手为鼠；不写物种名）。
+			# 正式模式（T031，策划 §9.2「猫默认可选」）：初始解锁 = 配置里
+			# `initially_unlocked` 的物种；不写物种名（数据在 `resources/species/*.tres`）。
 			var initial: Array[StringName] = []
 			for cfg in _configs:
-				if not cfg.can_attack:
+				if cfg.initially_unlocked:
 					initial.append(cfg.species_id)
 			gs.call("set_default_unlock", initial)
 
@@ -325,6 +336,24 @@ func _build_lifecycle() -> void:
 	lifecycle.spawn_requested.connect(_on_spawn_requested)
 	lifecycle.life_settled.connect(_on_life_settled)
 	lifecycle.state_changed.connect(_on_state_changed)
+	_build_discovery_tracker()
+
+
+## 地点发现（T031）：只观察组件。出生时注入玩家，结算时置空；记录与解锁都在 `GameState`。
+func _build_discovery_tracker() -> void:
+	discovery = DiscoveryTracker.new()
+	discovery.name = "DiscoveryTracker"
+	add_child(discovery)
+	discovery.place_discovered.connect(_on_place_discovered)
+
+
+func _on_place_discovered(place_id: String) -> void:
+	# 发现 + 解锁都已在 `GameState` 落档（事件 discovery / species_unlock）；
+	# 这里只留一行可检索的运行证据（世界时间见事件本体）。
+	print("ENTRY|discovery|%s|life=%s|unlocked=%s" % [
+		place_id, lifecycle.life_id if lifecycle != null else "",
+		str(_unlocked_ids())
+	])
 
 
 func _enter_select() -> void:
@@ -394,6 +423,8 @@ func _on_life_settled(record: Dictionary) -> void:
 	if hud != null:
 		hud.unbind()
 	player = null
+	if discovery != null:
+		discovery.player = null
 	_enter_select()
 
 
@@ -427,6 +458,9 @@ func _spawn_player(species_id: StringName) -> void:
 
 	player = body
 	lifecycle.mark_spawned(body, spawn)
+	if discovery != null:
+		discovery.player = body
+		discovery.refresh_points()
 
 	if hud != null:
 		hud.bind_player(body)

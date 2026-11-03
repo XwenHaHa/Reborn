@@ -229,3 +229,23 @@
 - **不做**：不改任何 `walk_speed` / `sprint_speed`（速度差是设计）；不改 `AnimalBody` 的冲刺门控；不动鼠的 `ALERT` 停留（T028 候选 A 留给 U01）。
 - **已知未解**：**鼠洞当前不是安全区** —— 鼠进洞（距洞心 0.24 m）后，猫在洞外 0.79 m 处仍在攻击距离（0.65+0.05）内，
   实测把鼠咬死（`hp 100 → 0`）。这回答了 T026 的"洞里能否被打中=未测"，且**与冲刺无关**（关掉冲刺同样发生）→ 需设计决策。
+
+## 地点发现与解锁（T031 落地口径）
+
+- **稳定 ID（进存档后不得改，T036 契约）**：`root_hole_courtyard_01` = 庭院树根屏障的唯一鼠洞（`HOLE_CENTER_X 26.5`，z∈[18.5, 19.5]）。
+  真源在关卡发现点标记 `Discovery_RootHole` 的 `discovery_id` meta（`tool_make_courtyard.gd` 生成）；
+  消费方（`mouse.tres` 的 `unlock_discovery`、`GameState.discovered_places`、事件 `discovery` 的 `label`）都读这同一个字符串。
+- **T031 新增实现默认值（原文没有，需负责人并入正式起测值）**：
+  - 发现半径 `200 cm = 2.0 m`（**水平距离**，玩家到发现点标记；写在标记 `radius` meta，`DiscoveryTracker.DEFAULT_RADIUS` 兜底同值）。
+    依据：策划 §9.2 只说"发现入口"，未定义看见/听见；原型确定性优先选半径判定。两侧入口距洞心 ≤ 1.0 m，半径 2.0 m 时洞前 1.0 m 空地即触发。
+  - 扫描间隔 `0.25 s`（`DiscoveryTracker.DEFAULT_SCAN_INTERVAL`）：发现不需要亚秒级精度，远小于走路步长。
+- **正式初始解锁（策划 §9.2「猫默认可选」）**：`SpeciesConfig.initially_unlocked`——猫 `true` / 鼠 `false`（数据驱动，代码不写物种名）。
+- **解锁条件（策划 §9.2「作为猫首次发现指定鼠洞入口后，老鼠永久解锁；不要求捕食数量」）**：
+  `SpeciesConfig.unlock_discovery`——鼠 = `root_hole_courtyard_01`；首次发现 → `unlock_species()`（跨世保留，死亡不取消）。
+  捕获计数与解锁**无任何连接**（断言固化：`run_t031_discovery.gd` D2）。
+- **`MainEntry.test_mode` 默认 `false`（T030 遗留收口）**：正式模式只放行已解锁物种；测试模式（显式 `true`）放行全部物种
+  （策划 §9.2「开发测试模式允许直接选择两种物种，但正式体验与测试模式需明确区分」）。
+- **待定（需负责人定）**：
+  - 发现是否要求"看见"（视锥/遮挡）——当前只按距离；
+  - 发现时的 HUD/菜单提示（当前只有日志 + 信号 `place_discovered`，UI 接入属后续任务）；
+  - 菜单内"锁定物种"的视觉/提示（点「开始游戏」被拒后无可见反馈，属 T033 正式物种选择）。

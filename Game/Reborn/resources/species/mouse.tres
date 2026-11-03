@@ -76,3 +76,7 @@ third_person_aim_height = 0.08
 third_person_down_tilt_deg = 11.0
 third_person_pitch_min_deg = -30.0
 third_person_pitch_max_deg = 55.0
+; 解锁与发现（T031，策划 §9.2）：鼠不初始解锁——作为猫首次发现指定鼠洞入口后永久解锁。
+; 稳定 ID 的真源在 `tool_make_courtyard.gd` 的发现点标记（进存档后不得改，T036 契约）。
+initially_unlocked = false
+unlock_discovery = &"root_hole_courtyard_01"

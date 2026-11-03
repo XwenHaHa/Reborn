@@ -14,6 +14,8 @@ signal life_started(record: Dictionary)
 signal life_ended(record: Dictionary)
 signal event_recorded(entry: Dictionary)
 signal species_unlocked(species_id: StringName)
+## 首次发现一个地点时发出（T031）。UI 提示/自动存档触发（T037）从这条接。
+signal place_discovered(place_id: String)
 
 ## 事件条数上限（内存保护）。超出时丢最旧的条目。
 const MAX_EVENTS := 1024
@@ -39,6 +41,13 @@ var life_records: Array = []
 var current_life: Dictionary = {}
 ## 跨世事件（长期记录）：`{seq, life_id, kind, world_time, data}`。
 var events: Array = []
+## 长期地点发现（T031，策划 §9「跨世循环保留发现与解锁」）：
+## 键 = 稳定地点 ID（真源在关卡发现点标记的 `discovery_id` meta），值 = 首次发现的世界时间。
+## **跨世保留、按 ID 去重**；只有 `reset_for_new_game()` 清空（T036 持久化契约里的「长期发现」）。
+var discovered_places: Dictionary = {}
+## 发现 → 解锁规则（T031）：键 = 稳定地点 ID，值 = StringName(species_id)。
+## 这是**接线数据**（入口从物种配置写入），不是进度数据：`reset_for_new_game()` 保留它。
+var discovery_unlock_rules: Dictionary = {}
 
 var _life_counter: int = 0
 var _event_seq: int = 0
@@ -57,13 +66,15 @@ func reset_for_new_game() -> void:
 	_life_counter = 0
 	_event_seq = 0
 	unlocked_species = {}
+	discovered_places = {}
 	test_mode = false
 	var wd := _world_director()
 	if wd != null and wd.has_method("reset_for_new_game"):
 		wd.call("reset_for_new_game")
 
 
-## 写入默认解锁集（覆盖式）。正式：只有鼠；测试：全解锁由调用方决定。
+## 写入默认解锁集（覆盖式）。正式初始解锁 = 配置里 `initially_unlocked` 的物种（T031：猫默认可选）；
+## 测试模式全解锁由调用方决定。
 func set_default_unlock(species_ids: Array) -> void:
 	unlocked_species = {}
 	for id in species_ids:
@@ -181,6 +192,48 @@ func record_discovery(label: StringName) -> bool:
 	current_life["discoveries"] = list
 	record_event(String(current_life.get("life_id", "")), EVENT_DISCOVERY, {"label": String(label)})
 	return true
+
+
+## 覆盖式写入发现 → 解锁规则（T031）。`rules`：键 = 地点稳定 ID，值 = species_id。
+## 接线数据：入口从物种配置 `unlock_discovery` 汇总后写入；`reset_for_new_game()` 不清。
+func set_discovery_unlock_rules(rules: Dictionary) -> void:
+	discovery_unlock_rules = {}
+	for k in rules:
+		discovery_unlock_rules[String(k)] = StringName(rules[k])
+
+
+## 记录一次**长期地点发现**（T031，策划 §9.2）：长期层去重（跨世保留），
+## 同时写本世档案 `discoveries` + 事件 `discovery`；首次记录时按
+## `discovery_unlock_rules` 解锁对应物种（**不按捕猎计数解锁**，决策 D6）。
+## 返回是否**新**记录。没有进行中的生命也允许记录（只写长期层 + 事件，`life_id` 为空串）。
+func record_place_discovery(place_id: StringName, world_time: float = -1.0) -> bool:
+	var pid := String(place_id)
+	if pid == "" or discovered_places.has(pid):
+		return false
+	var now := _now(world_time)
+	discovered_places[pid] = now
+	if not current_life.is_empty():
+		var list := current_life.get("discoveries", []) as Array
+		if not list.has(pid):
+			list.append(pid)
+			current_life["discoveries"] = list
+	record_event(current_life_id(), EVENT_DISCOVERY, {"label": pid}, now)
+	place_discovered.emit(pid)
+	if discovery_unlock_rules.has(pid):
+		unlock_species(StringName(discovery_unlock_rules[pid]))
+	return true
+
+
+func is_place_discovered(place_id: StringName) -> bool:
+	return discovered_places.has(String(place_id))
+
+
+func discovered_place_list() -> Array[String]:
+	var out: Array[String] = []
+	for k in discovered_places.keys():
+		out.append(String(k))
+	out.sort()
+	return out
 
 
 func archive_count() -> int:

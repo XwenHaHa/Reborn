@@ -32,6 +32,9 @@ func _run() -> void:
 
 	var main := (load(MAIN) as PackedScene).instantiate()
 	(main as MainEntry).settings_path = SETTINGS_TMP
+	# T031 起 test_mode 默认 false（正式解锁门）；本取证要出生两个物种拍第三人称，
+	# 所以显式开测试模式（解锁门由 run_t031_discovery 固化）。
+	(main as MainEntry).test_mode = true
 	root.add_child(main)
 	for i in SETTLE:
 		await process_frame

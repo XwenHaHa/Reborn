@@ -44,6 +44,9 @@ func _run() -> void:
 	var main := packed.instantiate()
 	if main is MainEntry:
 		(main as MainEntry).settings_path = SETTINGS_TMP
+		# T031 起 MainEntry.test_mode 默认 false（正式解锁门）。本套件测输入链路
+		# （要出生第二物种做按键验证），不测解锁门，所以显式开测试模式。
+		(main as MainEntry).test_mode = true
 	root.add_child(main)
 	root.size = Vector2i(1280, 720)
 	for i in 8:

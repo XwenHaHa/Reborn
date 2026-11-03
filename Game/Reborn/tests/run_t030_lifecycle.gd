@@ -382,6 +382,9 @@ func _section_h_entry() -> void:
 	_gs.call("reset_for_new_game")
 	_wd.set_world_time(0.0)
 	var main := (load(MAIN) as PackedScene).instantiate() as Node3D
+	# T031 起 MainEntry.test_mode 默认 false（正式解锁门）。本段测的是生命周期闭环
+	# （出生→存活→结算→选物种），不是解锁门（那属 run_t031_discovery），所以显式开测试模式。
+	(main as MainEntry).test_mode = true
 	root.add_child(main)
 	await _advance_frames(4)
 	if not (main is MainEntry):

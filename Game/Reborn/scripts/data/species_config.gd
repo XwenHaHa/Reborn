@@ -170,6 +170,17 @@ const CAMERA_THIRD_PERSON := 1
 ## 为空时 UI 回退到实时 3D 缩略图（`_make_preview()`），所以旧配置不会坏。
 @export var display_portrait: Texture2D = null
 
+## 解锁与发现（T031，策划 v1.1 §9.2）：**差异只写在这里**，代码不写物种名。
+## - 正式新游戏的初始解锁：猫 true（「猫默认可选」）；鼠 false（靠发现解锁）。
+## - `unlock_discovery`：解锁本物种所需的**地点稳定 ID**（「作为猫首次发现指定鼠洞入口后，
+##   老鼠永久解锁」）。ID 的真源在关卡发现点标记的 `discovery_id` meta（生成器写死），
+##   **进存档后不得改**（T036 长期发现契约）。空 = 没有发现解锁条件。
+## `initially_unlocked` 与 `unlock_discovery` 都为空的物种在正式模式**永远选不到**
+## （`validate_config()` 守着）；测试模式不受此门。
+@export_group("Progression")
+@export var initially_unlocked: bool = false
+@export var unlock_discovery: StringName = &""
+
 ## Godot 的 `CapsuleShape3D.height` 是含两端半球的总高
 
 ## 界面用标题：优先 `display_name`，否则回退 `species_id`（**UI 不写物种名**）
@@ -296,4 +307,7 @@ func validate_config() -> PackedStringArray:
 			problems.append("%s 必须 > 0（can_attack 为 true）" % pair[0])
 		if not can_attack and v != 0.0:
 			problems.append("%s 应为 0（can_attack 为 false 的物种不该有攻击参数）" % pair[0])
+	# 解锁与发现（T031）：正式模式下既不初始解锁、又没有发现解锁条件 → 永远选不到
+	if not initially_unlocked and unlock_discovery == &"":
+		problems.append("initially_unlocked=false 且 unlock_discovery 为空：该物种在正式模式永远无法解锁")
 	return problems

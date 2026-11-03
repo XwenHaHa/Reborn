@@ -293,6 +293,7 @@ func _initialize() -> void:
 	_add_creek_structures(root_node)
 	_add_routes(root_node)
 	_add_hide_spots(root_node)
+	_add_discovery_points(root_node)
 	_add_composition_dressing(root_node)
 	_add_light_and_env(root_node)
 
@@ -741,6 +742,23 @@ func _add_hide_spots(parent: Node3D) -> void:
 		"hide_spots", {"species": "Mouse", "kind": "mouse_hole", "radius": 0.30})
 	print("TOOL|HideSpots|count=1|id=%s|pos=(%.2f, %.2f, %.2f)" % [
 		spot.name, spot.position.x, spot.position.y, spot.position.z
+	])
+
+## 地点发现（T031，策划 §9.2「作为猫首次发现指定鼠洞入口后，老鼠永久解锁」）：
+## 给**指定鼠洞**（庭院树根屏障的唯一鼠洞）放一个稳定发现点。
+## `discovery_id` 是**稳定 ID**：`mouse.tres` 的 `unlock_discovery`、`GameState` 长期发现、
+## 事件 `discovery` 的 label、（T036 后）存档键都以它对齐——**进存档后不得再改**。
+## 位置 = 洞中心（两侧入口都在 2.0 m 发现半径内）；`radius` 单位米，与 `DiscoveryTracker` 契约一致。
+const DISCOVERY_ID_ROOT_HOLE := "root_hole_courtyard_01"
+const DISCOVERY_RADIUS := 2.0
+
+func _add_discovery_points(parent: Node3D) -> void:
+	var hole_z: float = (BARRIER_Z_MIN + BARRIER_Z_MAX) * 0.5
+	var disc := _mk_marker(parent, "Discovery_RootHole", Vector3(HOLE_CENTER_X, GROUND_TOP, hole_z),
+		"discovery_points", {"discovery_id": DISCOVERY_ID_ROOT_HOLE, "radius": DISCOVERY_RADIUS})
+	print("TOOL|DiscoveryPoints|count=1|id=%s|pos=(%.2f, %.2f, %.2f)|radius=%.2f" % [
+		disc.get_meta("discovery_id"), disc.position.x, disc.position.y, disc.position.z,
+		float(disc.get_meta("radius"))
 	])
 
 func _add_light_and_env(parent: Node3D) -> void:
@@ -2072,6 +2090,21 @@ func _verify() -> void:
 		print("VERIFY|HideSpot|id=%s|pos=(%.2f, %.2f, %.2f)|radius=%.2f" % [
 			hole_spot.name, hole_spot.position.x, hole_spot.position.y, hole_spot.position.z,
 			float(hole_spot.get_meta("radius", 0.0))
+		])
+	# T031：指定鼠洞的稳定发现点（只发现，不碰撞、不进导航组）
+	var disc_spot := scene.get_node_or_null("Discovery_RootHole") as Marker3D
+	if _check("discovery_root_hole_exists", disc_spot != null) and disc_spot != null:
+		_check("discovery_root_hole_group", disc_spot.is_in_group("discovery_points"))
+		_check("discovery_root_hole_id",
+			String(disc_spot.get_meta("discovery_id", "")) == DISCOVERY_ID_ROOT_HOLE)
+		var hole_z2: float = (BARRIER_Z_MIN + BARRIER_Z_MAX) * 0.5
+		_check("discovery_root_hole_pos",
+			disc_spot.position.distance_to(Vector3(HOLE_CENTER_X, GROUND_TOP, hole_z2)) < GEO_EPS)
+		_check("discovery_root_hole_radius_2.0",
+			absf(float(disc_spot.get_meta("radius", 0.0)) - DISCOVERY_RADIUS) < GEO_EPS)
+		print("VERIFY|DiscoveryPoint|id=%s|pos=(%.2f, %.2f, %.2f)|radius=%.2f" % [
+			String(disc_spot.get_meta("discovery_id")), disc_spot.position.x,
+			disc_spot.position.y, disc_spot.position.z, float(disc_spot.get_meta("radius", 0.0))
 		])
 	# ART07：构图装饰（接地阴影 / 背景草簇 / 溪中石 / 庭院小石 / 泥舌半岛）。
 	# 这些节点的唯一契约是"只看得见、碰不到"：零碰撞、不进导航组、不改任何静态碰撞体。

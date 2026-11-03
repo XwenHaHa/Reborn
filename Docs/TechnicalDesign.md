@@ -267,6 +267,25 @@ signal life_ended(record: LifeRecord)
 
 **初始化普通新游戏**：世界时间 0、猫解锁、资源满量、各区域初始数量；**只有明确新游戏确认才执行**。
 
+### 7.1 地点发现与解锁门（T031 实现口径）
+
+- **`GameState` 是唯一权威**（§1 既定分工）：长期发现 `discovered_places`（键 = 稳定地点 ID，跨世保留、
+  按 ID 去重，`reset_for_new_game()` 才清）、发现→解锁规则 `discovery_unlock_rules`（**接线数据**：
+  入口从 `SpeciesConfig.unlock_discovery` 汇总写入，reset 不清）、`record_place_discovery()`
+  （首次记录 → 本世档案 + 事件 `discovery` + 按规则 `unlock_species()`）。
+- **`DiscoveryTracker`（`scripts/systems/discovery_tracker.gd`）只观察**（仿 `Perception` 边界）：
+  轮询玩家与 `discovery_points` 组标记的**水平距离**，进半径 → 调 `GameState.record_place_discovery()`；
+  不改移动、不建节点、不含"发现者必须是猫"特判——正式门（初始只解锁猫）结构性保证第一个发现者必是猫。
+- **解锁只挂在发现上**：捕获计数与解锁无任何连接（策划 §9.2「不要求捕食数量」）；
+  解锁跨世保留、死亡不取消。
+- **差异全部数据驱动**：`SpeciesConfig` 新增 `initially_unlocked`（猫 true / 鼠 false）与
+  `unlock_discovery`（鼠 = `root_hole_courtyard_01`，稳定 ID 真源在关卡标记 meta，进存档后不得改）。
+  `MainEntry` 与 `GameState` 不出现物种名。
+- **`MainEntry.test_mode` 默认 `false`**（正式解锁接入后从 T030 的临时 true 收口）：
+  正式模式只放行已解锁物种；测试模式显式打开后放行全部（策划 §9.2 的"明确区分"）。
+- 参数与待定项（发现半径 2.0 m、扫描间隔 0.25 s、是否要求"看见"）见 `Docs/Parameters.md`
+  「地点发现与解锁（T031 落地口径）」；命令与实测见 `Docs/Evidence/T031.md`。
+
 ## 8. 保存与恢复策略
 
 一个逻辑进度槽，物理上用 `Reborn_A` / `Reborn_B` 双槽（`user://`）。

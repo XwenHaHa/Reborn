@@ -86,3 +86,5 @@ third_person_aim_height = 0.18
 third_person_down_tilt_deg = 12.0
 third_person_pitch_min_deg = -35.0
 third_person_pitch_max_deg = 55.0
+; 解锁与发现（T031，策划 §9.2）：猫默认可选（正式新游戏初始解锁）。
+initially_unlocked = true

@@ -143,6 +143,10 @@ func _initialize() -> void:
 	# T030：生命周期两帧（存活 / 结算→选物种）。只在显式传 `-- t030` 时执行。
 	if OS.get_cmdline_user_args().has("t030"):
 		await _capture_t030_frames(lab)
+	# T031：正式解锁门两帧（只解锁初始物种的选物种画面 / 发现鼠洞后的选物种画面）。
+	# 只在显式传 `-- t031` 时执行。
+	if OS.get_cmdline_user_args().has("t031"):
+		await _capture_t031_frames(lab)
 
 	print("CAP|done")
 	quit(0)
@@ -2095,6 +2099,9 @@ func _capture_t030_frames(lab: Node) -> void:
 		print("CAP|t030|ERROR|main.tscn load failed")
 		return
 	var main: Node = packed.instantiate()
+	# T031 起 test_mode 默认 false（正式解锁门）；本取证要直接出生第二物种做三帧，
+	# 所以显式开测试模式（测试模式与正式模式行为的区分由 run_t031_discovery 固化）。
+	(main as MainEntry).test_mode = true
 	root.add_child(main)
 	for i in 12:
 		await process_frame
@@ -2149,6 +2156,87 @@ func _capture_t030_frames(lab: Node) -> void:
 	for i in 4:
 		await process_frame
 	print("CAP|t030|done")
+
+
+## T031 正式解锁门两帧：`-- t031`（**不开测试模式**——取证对象就是正式门）。
+## - 帧 1 `t031_locked_select`：正式模式选物种画面，状态文字只列初始解锁物种（1=Cat）。
+## - 帧 2 `t031_unlocked_select`：出生初始物种 → 挪到鼠洞发现半径内触发发现 → 解锁 →
+##   死亡回选物种画面，状态文字列出两个物种（1=Cat 2=Mouse）+ 上一世档案行。
+## 取证注记：菜单打开时游戏会把状态文字隐藏（`_present_menu`）——**取证侧**强制把它
+## 设为可见（只改呈现、不改任何状态；与 t013 翻碰撞线框同一性质），否则两帧无差异可读。
+const T031_HOLE_APPROACH := Vector3(26.5, 0.34, 17.5)   # 洞南 1.5 m，进 2.0 m 发现半径
+const T031_ROOT_HOLE := "root_hole_courtyard_01"
+
+func _capture_t031_frames(lab: Node) -> void:
+	print("CAP|t031|start")
+	lab.visible = false
+	var packed: PackedScene = load(T030_MAIN)
+	if packed == null:
+		print("CAP|t031|ERROR|main.tscn load failed")
+		return
+	var main: Node = packed.instantiate()
+	# 注意：**不**写 test_mode——默认 false 即正式模式，解锁门就是取证对象
+	root.add_child(main)
+	for i in 12:
+		await process_frame
+	var entry := main as MainEntry
+	if entry == null:
+		print("CAP|t031|ERROR|main.tscn 根节点不是 MainEntry")
+		main.queue_free()
+		return
+	var cam := _t030_overview_camera()
+	if entry.status_label != null:
+		entry.status_label.visible = true   # 取证侧强制可见（见函数头注记）
+	print("CAP|t031|locked|state=%s|slots=%s|status=%s" % [
+		entry.lifecycle_state_name(), str(entry.selectable_slots()), entry.status_text()
+	])
+	await _capture_view("t031_locked_select", cam, 12)
+
+	# 出生初始解锁物种（正式模式唯一可选；不写物种名，取排序后的第一个）
+	var configs := entry.species_configs()
+	if configs.is_empty():
+		print("CAP|t031|ERROR|no species configs")
+		main.queue_free()
+		return
+	var ok := entry.select_species(configs[0].species_id)
+	for i in 12:
+		await process_frame
+	if not ok or entry.player == null or not is_instance_valid(entry.player):
+		print("CAP|t031|ERROR|spawn failed|state=%s" % entry.lifecycle_state_name())
+		main.queue_free()
+		return
+	# 挪到鼠洞发现半径内，推进到 DiscoveryTracker 的下一次扫描
+	entry.player.global_position = T031_HOLE_APPROACH
+	var discovered := false
+	for i in 60:
+		await process_frame
+		var gs := root.get_node_or_null("GameState")
+		if gs != null and bool(gs.call("is_place_discovered", T031_ROOT_HOLE)):
+			discovered = true
+			break
+	print("CAP|t031|discovered=%s|slots_after=%s" % [
+		str(discovered), str(entry.selectable_slots())
+	])
+	if not discovered:
+		print("CAP|t031|ERROR|no discovery")
+		main.queue_free()
+		return
+
+	# 死亡回选物种画面：解锁保留（策划 §9.2 死亡不取消）
+	if entry.player.survival != null:
+		entry.player.survival.apply_damage(9999.0, &"t031_capture")
+	for i in 12:
+		await process_frame
+	if entry.status_label != null:
+		entry.status_label.visible = true   # _present_menu 又把它隐藏了，取证再次强制可见
+	print("CAP|t031|settled|state=%s|slots=%s|status=%s" % [
+		entry.lifecycle_state_name(), str(entry.selectable_slots()), entry.status_text()
+	])
+	await _capture_view("t031_unlocked_select", cam, 12)
+	main.queue_free()
+	for i in 4:
+		await process_frame
+	print("CAP|t031|done")
 
 
 ## ART07：t011 取景隔离（同 `_t021_isolate_lab` 的规矩：lab 不要出现在庭院画面里）
