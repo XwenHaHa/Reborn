@@ -289,22 +289,47 @@
 - **新游戏/重生（T035 D8）**：`reset_for_new_game()` 把账本彻底归零（只有明确新游戏确认才可调）；`MainEntry._ready`
   建关卡后 init 一次；正式死亡→重生**不重置种群**（与 T034 时间语义同构，断言 F2）。
 
-### 存档（T037 落地口径）
+### 存档（T037 格式 + T038 写入队列落地口径）
 
 - **路径**：主档 `user://savegame_v1.json`，上一版快照 `user://savegame_v1.json.bak`，坏档隔离
-  `user://savegame_v1.json.corrupt-<unix秒>`。只写 `user://`，**不含个人绝对路径/用户名/令牌**（测试断言 A7）。
-  测试专用路径 `user://t037_tests/`（套件结束清理）。
+  `user://savegame_v1.json.corrupt-<unix秒>`；写临时 `*.tmp`、替换中间 `*.old`、备份中间 `*.bak.tmp/.prev`。
+  只写 `user://`，**不含个人绝对路径/用户名/令牌**（T037 断言 A7）。
+  测试专用路径 `user://t037_tests/`、`user://t038_tests/`（套件结束清理）。
 - **格式**：UTF-8 JSON 纯数据。`save_version=1`、`revision` 单调递增、`world_time` 秒。
   契约 10 键（`resources/regions/discovered_ids/unlocked_species/life_records/current_life/pending_settlement_life_id` 等）
   + 实现扩展 `events/life_counter/event_seq` + 诊断 `saved_reason`（只写不读）。
   `Transform3D→{"$t":[12 floats]}`、`Vector3→{"$v":[3 floats]}`；`last_safe_spot_id` **预留未建**（T042）。
-- **原子写**：`*.tmp` 写完关闭 → 复制现主档为 `.bak` → `rename_absolute(tmp, 主档)`；失败保留旧档并返回
-  `write_failed`（不产生半写主档）。重复保存幂等（除 `revision/saved_reason`）。不做节流/双槽（旧 TD §8 设想已被实测口径取代）。
+- **写入队列（T038）**：所有生产保存经 `SaveManager.request_save()` 单队列、主线程帧驱动、无线程；
+  同一时刻只允许一次写（`active_writes ≤ 1`）。普通请求可合并/丢弃；关键事务（死亡、`pending` 清空、发现、
+  解锁、退出）**逐条写、不合并、不丢弃、不被后续普通请求插队**。`MainEntry.save_now()` 立即排空，保持 T037 时序。
+- **节流**：普通保存窗口 `throttle_seconds=1.0`（首次前缘立即写，窗口内请求合并为一次，`revision` 只 +1）；
+  关键事务与退出绕过等待，但仍逐条串行。
+- **原子写**：`*.tmp` 写完 flush/关闭 → 复制主档到 `.bak.tmp` 后轮换 `.bak`（复制失败不阻断本次写，旧 `.bak`
+  原样保留，warning「存档已保存（备份更新失败）」）→ 主档改名为 `.old` → `.tmp` 换入主档 → 删除 `.old`。
+  最终换名失败**回滚 `.old` 为主档**并清理 tmp，返回 `write_failed`；任何失败路径主档不被截断/删除。
+  重复保存幂等（除 `revision/saved_reason`）。
+- **失败注入（仅测试）**：`fault_injection ∈ {tmp_open, disk_write, bak_copy, rename}`；生产恒空。
+  写失败 Toast「存档写入失败」，备份失败 warning Toast「存档已保存（备份更新失败）」，队列失败后不复位锁、后续请求继续。
 - **版本与恢复**：`save_version` 缺失/非整数 → `corrupt`；≠1 → `version_mismatch`（不隔离不覆盖）。
   解析失败或结构非法 → 隔离主档后尝试 `.bak`：可用 `recovered_backup`，否则 `corrupt`。
+  **主档缺失但 `.bak` 有效** → `recovered_backup`，文案「主存档缺失，已从备份恢复」（T038 改名窗口兜底）。
   缺失集合补默认+`repairs`；负数/超容量夹紧；非有限回默认；坏条目跳过；`current_life`+`pending` 互斥（清 `pending`）。
 - **存盘时机**：死亡结算（写 `pending`）→ 结算页展示（清 `pending`）；新发现；新解锁；退出。
   仅在正式运行（`current_scene == self`）启用；读档补弹结算页也属"展示完毕即清空"。
 - **读档重建顺序**：世界时间 → 区域种群 → 资源点（稳定 ID 匹配/补建）→ 档案/事件/发现/解锁/计数器 → 当前生命
   （存活恢复身体；`pending` 非空补弹结算页，展示后清空）。`LifeCycle` 只接受 `SETTLING/SELECTING → ALIVE`，
   不经 `mark_spawned`、不新分配 `LifeId`、不发 `life_started`。
+
+## 角色接地感（ART15 落地口径）
+
+只动**庭院关**的 SSAO 半径与太阳光阴影法线偏移；主光方向/能量/色温、体积雾、DOF、色调映射均未改。
+参数真源：`Game/Reborn/scenes/maps/l_courtyard.tscn`（生成器 `tests/tool_make_courtyard.gd` 同步同值）。
+
+| 参数 | 旧值 | 新值 | 作用（角色尺度 0.18～0.48 m） | 回退位置 |
+|---|---:|---:|---|---|
+| `Environment.ssao_radius` | 1.2 m | **0.45 m** | 1.2 m 的 AO 半径把脚底抹成灰圈；0.45 m 让接地暗部贴住脚掌/腹部 | tscn 第 1277 行；生成器 `env.ssao_radius` |
+| `DirectionalLight3D.shadow_normal_bias`（SunLight） | 2.0（默认） | **0.8** | 降低法线偏移，阴影根部贴住几何接触处，减少"影脚分离/悬浮"；0.8 未出现阴影痤疮 | tscn 第 2871 行（删该行即回默认）；生成器 `light.shadow_normal_bias` |
+
+`ssao_intensity/power/horizon/sharpness/detail`、`shadow_bias`、`shadow_blur`、阴影分档与最大距离均保持原值。
+实测帧时间：改前 ≈6.28 ms、改后 ≈6.20 ms（1280×720、vsync off、120 帧均值），差异在 ±3% 噪声内。
+**不得整体重新生成 `l_courtyard.tscn`**：生成器不写导航资源引用，重生成会丢 `l_courtyard_{mouse,cat}.tres` 并刷新全部 `unique_id`。

@@ -1,0 +1,124 @@
+# ART15 证据：角色接地感（环境 SSAO / 接触阴影）
+
+执行日期：2026-11-04（本机系统时钟）
+任务规格：`Docs/Tasks/ART15.md`。状态：**done（视觉门按 vision 判读到可验证 PASS；不是正式美术 approved）**
+工程：`E:/Reborn`，Godot 4.7.2，Windows / Forward+。取证一律
+`powershell -File E:\Reborn\Tools\CaptureRun.ps1 -Script tests/tool_capture_art15_grounding.gd -UserArgs "<pass>"`
+（隐藏桌面、`visible_hits=0`；**取证进程必须带渲染**，因此不用 `-Headless`——headless 的 dummy 渲染拿不到图）。
+回归套件走 `-Headless`。
+
+## 1. 变更范围
+
+| 文件 | 改动 |
+|---|---|
+| `Game/Reborn/scenes/maps/l_courtyard.tscn` | `ssao_radius` 1.2 → 0.45（第 1277 行）；`SunLight.shadow_normal_bias` 0.8（第 2871 行，新增行） |
+| `Game/Reborn/tests/tool_make_courtyard.gd` | 同步 `env.ssao_radius = 0.45`（第 821 行）与 `light.shadow_normal_bias = 0.8`（第 772 行） |
+| `Game/Reborn/tests/tool_capture_art15_grounding.gd` | 新增：4 机位 × 2 物种固定机位取证 + 帧时间采样 |
+| `Tools/make_art15_compare.ps1` | 新增：左右对比拼板（800×450/格） |
+
+未改：主光方向/能量/色温、体积雾、DOF、色调映射、几何/碰撞/导航、玩法与动画参数、菜单展板
+（`l_ravine_board.tscn` 的 SSAO 1.35 未动）；ART14 的 S2 毛绒法线保持关闭。
+
+## 2. 参数登记（old → new）
+
+| 参数 | 旧值 | 新值 | 依据 | 回退 |
+|---|---:|---:|---|---|
+| `Environment.ssao_radius`（庭院关） | 1.2 m | **0.45 m** | 1.2 m 的 AO 半径远大于角色（0.18～0.48 m 高），脚底暗部被抹成一圈灰晕；0.45 m 约等于猫的身高/鼠的 2.5 倍，能落到脚掌/腹部接地缝 | `l_courtyard.tscn` 第 1277 行改回 `1.2`，并同步生成器第 821 行 |
+| `DirectionalLight3D.shadow_normal_bias`（SunLight） | 2.0（默认未写） | **0.8** | 2.0 的法线偏移把阴影根部沿法线推开，脚下"彼得潘"悬浮；0.8 让阴影终止线贴住几何接触处，降低阴影痤疮风险 | 删除 `l_courtyard.tscn` 第 2871 行（回默认 2.0），并同步生成器第 772 行 |
+
+未动 `shadow_bias`（0.1）/`shadow_blur`（1.0）/`directional_shadow_mode`/`max_distance`：
+S2 步只改一类参数，且实测结果已达标，不再叠加。
+
+## 3. 四机位判读（vision，原样引用；左=改前，右=改后）
+
+判读三问固定为：①脚底/腹部与地面是否"咬住" ②有无黑块/脏边/光晕/噪点 ③轮廓是否清晰。
+分数为 vision 输出的左右各 1-10 分。对比板：`Art/Probes/art15_compare/`。
+
+### 3.1 S1 只改 SSAO 半径（1.2 → 0.45）
+
+| 物种/机位 | 改前 | 改后 | 结论 |
+|---|---:|---:|---|
+| 猫 stand | 3.0 | **8.5** | PASS：脚底出现贴身暗部，不再是灰圈；无黑块脏边 |
+| 猫 walk | 4.0 | **9.0** | PASS：半步姿态脚掌仍咬地 |
+| 猫 wall | 3.5 | **9.0** | PASS：身体与墙脚接触缝有暗部过渡 |
+| 猫 rock | 5.5 | **8.5** | PASS：脚掌与石面咬住；石面高光未发脏 |
+| 鼠 stand | 3.5 | **8.5** | PASS：体量更小但接地暗部可读 |
+| 鼠 walk | 5.0 | **8.5** | PASS：定格步态脚底咬地，无贴纸感 |
+| 鼠 wall | 3.5 | **9.0** | PASS：墙脚接触缝清晰 |
+| 鼠 rock | 5.0 | **9.0** | PASS：石面接地可读 |
+
+共性扣分（改后）：远看仍有轻微微光颗粒感（SSAO 采样噪声），未出现黑块或脏边；
+轮廓在草地/木墙前均保持清晰。
+
+### 3.2 S2 只改接触阴影（`shadow_normal_bias` 2.0 → 0.8，SSAO 保持 0.45）
+
+| 物种/机位 | 改前 | 改后 | 结论 |
+|---|---:|---:|---|
+| 猫 stand | 6.0 | **9.0** | PASS：影脚分离消失，阴影根部贴脚 |
+| 猫 walk | 6.0 | **9.0** | PASS：抬脚帧影子仍与支撑脚连住 |
+| 猫 wall | 5.0 | **8.5** | PASS：墙脚阴影更贴，无条纹痤疮 |
+| 猫 rock | 5.5 | **8.5** | PASS：石面阴影贴脚，石棱未发黑 |
+| 鼠 stand | 4.0 | **8.5** | PASS：小体量脚下终于有贴身暗部 |
+| 鼠 walk | 4.0 | **8.5** | PASS：无悬浮 |
+| 鼠 wall | 5.0 | **8.0** | PASS（保留项）：出现轻微边缘噪声，未见痤疮或黑块 |
+| 鼠 rock | 4.0 | **9.0** | PASS：接地阴影与石面融合 |
+
+**步骤结论**：S1 与 S2 都在同一机位、同一姿态下单独生效；S1 解决"脚底灰圈/没咬住"，
+S2 解决"影子被推开/影脚分离"。没有靠堆参数掩盖项；两项各有独立前后对比板。
+
+## 4. 性能代价（实测）
+
+方法：同一取证进程内 `VSYNC_DISABLED`、`Engine.max_fps=0`，1280×720 渲染 120 帧取平均；
+相机停在最后一个机位（rock）。样本取自 `Art/Probes/.capture_logs/tool_capture_art15_grounding_*.log`：
+
+| 配置 | 样本 1 | 样本 2 | 均值 |
+|---|---:|---:|---:|
+| 改前（SSAO 1.2 / bias 2.0） | 6.379 ms | 6.186 ms | **6.28 ms（≈159 fps）** |
+| 改后（SSAO 0.45 / bias 0.8） | 6.191（S1） | 6.250（S2）/ 6.159（最终复测） | **≈6.20 ms（≈161 fps）** |
+
+差异 ≈ **−0.08 ms（−1.3%）**，落在运行噪声（±0.2 ms / ±3%）内；SSAO 采样数与阴影贴图分辨率
+均未改，符合"半径只改视觉、不改采样成本"的预期。**未发现不可接受的性能代价**。
+回退档位：性能若异常，先删 `shadow_normal_bias = 0.8`（成本≈0），再把 `ssao_radius` 回 1.2；
+两行即完全复原，无需改代码/重建场景。
+
+## 5. 回归（全部 PASS，gameplay 断言零改动）
+
+| 套件 | 结果 |
+|---|---|
+| `run_art09_frame_contract` | 48/48 |
+| `run_t011_greybox` | 229/229 |
+| `run_t012_navigation` | 79/79 |
+| `run_art09_species_layout` | 59/59 |
+| `run_art08_character_contract` | 15/15 |
+| `run_art02_cat` | 72/72 |
+| `run_art03_mouse` | 45/45 |
+| `run_art08_board_contract` | 9/9 |
+| `run_art08_environment_contract` | 9/9 |
+| `run_art09_menu_contract` | 42/42 |
+| `run_art09_portrait_contract` | 24/24 |
+
+合计 **631 条断言 0 失败**。
+
+## 6. 取证工具踩坑与修复（本轮实测）
+
+1. **胶囊居中于原点**：`AnimalBody` 的脚底在原点下方 `capsule_height/2`，第一版把
+   `STATIONS.pos` 直接当原点 → 猫陷地 0.24 m、鼠陷地 0.09 m，"接地"判读全部失真。
+   改为 `body.position.y = 地面高 + h/2`，全部档位重拍。
+2. **Walk 片段持续播放使模型漂出取景**：`AnimationPlayer` 在静置帧继续推进，鼠的 Walk 片段
+   跑出画面；改为 `play + advance(0.28) + pause()` 定格，站位恢复。
+3. **贴墙机位把角色放进墙体内**：首版用棚西墙外侧坐标，猫落在墙体内部、画面无猫；
+   改为北侧围栏内侧面 `z = 30.0 − 胶囊半径`，x=0。
+4. **不得整体重生成 `l_courtyard.tscn`**：生成器不写导航资源引用，重生成会丢
+   `l_courtyard_{mouse,cat}.tres` 并刷新所有 `unique_id`（实测 diff 全场景）。因此本轮
+   只直接改 tscn 两行 + 同步生成器源码，不重新生成场景。
+
+## 7. 边界与未解决项
+
+- 未改玩法/碰撞/导航/几何；未新增模型或第三方资产；未打开 ART14 的毛发/材质天花板项。
+- 菜单展板 `l_ravine_board.tscn`（SSAO 1.35）未动；若菜单角色也需接地感，属独立机位/场景调整，
+  需负责人确认后再做。
+- Godot 4 无独立 "contact shadow" 特性；本轮用 `shadow_normal_bias` + 角色尺度 SSAO 近似。
+  若要"仅角色专用"的接触暗部（不影响环境 AO），需要屏幕空间接触阴影/角色贴花 AO 的自定义
+  shader 或渲染管线改动，属新实现授权。
+- 鼠贴墙机位改后 8.0（余轻微边缘噪声）；未继续下调 normal_bias（<0.8 有阴影痤疮风险），
+  记录为保留项。

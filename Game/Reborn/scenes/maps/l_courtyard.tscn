@@ -1274,7 +1274,7 @@ sky = SubResource("Sky_38eey")
 ambient_light_source = 3
 tonemap_mode = 3
 ssao_enabled = true
-ssao_radius = 1.2
+ssao_radius = 0.45
 ssao_intensity = 2.6
 ssao_power = 2.0
 fog_enabled = true
@@ -2868,6 +2868,7 @@ transform = Transform3D(0.23270859, 0, 0.41981745, 0, 0.48, 0, -0.41981745, 0, 0
 transform = Transform3D(0.8660254, 0.38302222, -0.32139382, 0, 0.64278764, 0.76604444, 0.5, -0.66341394, 0.5566704, 0, 0, 0)
 light_energy = 1.2
 shadow_enabled = true
+shadow_normal_bias = 0.8
 
 [node name="SkyFill" type="DirectionalLight3D" parent="." unique_id=1681303868]
 transform = Transform3D(-1, 0, 0, 0, 0.8395701, 0.5432512, 0, 0.5432512, -0.8395701, 0, 0, 0)

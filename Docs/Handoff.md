@@ -1,10 +1,10 @@
-﻿# 开发交接：2026-11-04（T037 存档持久化与读档重建落地 —— **P5 进行中，下一步 T038**）
+﻿# 开发交接：2026-11-04（T038 存档写入队列与关键事务落地 —— **P5 进行中，下一步 T039**）
 
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
 
-**T001 ～ T027 全部完成；T028（自测走查）与 T029（追击冲刺能力 + 默认关）均为 awaiting-review；T030～T037（P4 前半）已 done**（P0 = T001～T007；P1 = T008～T013；P2 = T014～T022；P3 = T023～T029）；台阶、导航、调试入口、生存时间入口、消耗/伤害、交互接口与食物/饮水、正式 HUD、鼠 NPC 状态机、**感知（视觉 / 听觉 / 逃跑躲藏）**、**猫扑击与捕获结算**、**猫循环回归与打包**、**猫 NPC 巡游与发现**、**猫的追击 / 搜索 / 放弃**、**NPC 攻击与玩家受伤**、**老鼠藏身与掩体规则**、**按玩家物种布置测试生态**、**第一轮概念试玩的自测走查**与**猫 AI 追击冲刺（默认关）**已落地；技术层文档为 Godot 版。
+**T001 ～ T027 全部完成；T028（自测走查）与 T029（追击冲刺能力 + 默认关）均为 awaiting-review；T030～T038（P4 前半 + P5 前两任务）已 done**（P0 = T001～T007；P1 = T008～T013；P2 = T014～T022；P3 = T023～T029）；台阶、导航、调试入口、生存时间入口、消耗/伤害、交互接口与食物/饮水、正式 HUD、鼠 NPC 状态机、**感知（视觉 / 听觉 / 逃跑躲藏）**、**猫扑击与捕获结算**、**猫循环回归与打包**、**猫 NPC 巡游与发现**、**猫的追击 / 搜索 / 放弃**、**NPC 攻击与玩家受伤**、**老鼠藏身与掩体规则**、**按玩家物种布置测试生态**、**第一轮概念试玩的自测走查**与**猫 AI 追击冲刺（默认关）**已落地；技术层文档为 Godot 版。
 
 | 任务 | 状态 | 关键证据 |
 |---|---|---|
@@ -44,6 +44,7 @@
 | T035 | **done（2026-11-03，系统时钟）** | `Docs/Evidence/T035.md`、`Docs/Tasks/T035.md`、`scripts/data/species_config.gd`（`Population` 组）、`resources/species/{cat,mouse}.tres`（鼠 4/2/240、猫 1/1/0）、`autoload/world_director.gd`（区域种群账本节，**纯加法**）、`scripts/world/ecology_spawner.gd`（登记接线）、`scripts/core/main_entry.gd`（`_init_region_population`）、`tests/run_t035_region_population.gd`（55 条）、`Tools/t035_headless_batch.ps1` | **区域 NPC 数量账本（种群数量与恢复）**（开发计划 :169 / W01）：每 `level_regions` 区域 × 物种一条 TD §3 `RegionRecord`（纯数据可进 `WorldSnapshot.regions`；**`total_count` 含未实例化个体，实例化/销毁不改它，只有捕获扣**——自然死亡不扣账是 TD 口径、"复活"怪癖已记录待拍板）；参数经 `SpeciesConfig.Population` 数据驱动（鼠 4/2/240、猫 1/1/0，真源 Parameters:77 **零调参**；初始总计鼠 8 / 猫 4、玩家不计入）；区域矩形从 `Region_*` 标记 ± `Volume/Shape` 半尺寸**只读推导**；**恢复只吃 `world_time`**——`region_population_advance_to()` 镜像 `ResourcePoint.advance_to`（多周期一次结算、夹紧容量、满容量清零排期），`_process` 驱动门闩天然冻结（门闩反证真实等 600 ms 不恢复 vs ALIVE 正对照）；**捕获只扣一次**——`report_capture` 幂等门内扣 `total−1`（下限 0）并移出活动登记（结构性防重复扣；未登记个体区域账不动 → 既有捕猎套件夹具零影响）；**快照/重建**：数量与 next 从快照恢复、容量/间隔是配置**不从快照**，未知跳过、负/超容量/非有限修复并报 `{restored,skipped,repaired}`；`reset_for_new_game` 清账、`MainEntry._ready` init 一次、**重生不重置**（与 T034 时间语义同构）；零新信号。**55/55 ×3 + 变异 4 处红**（去容量夹紧 / 扣账不移出登记 / `region_id_at` 恒首区 / init 误用容量）；首跑红 `pass=2|fail=7`（守卫式）；重点回归 **16 套全绿**（t014/t017/t019/t020/t021/t022/t023/t024/t025/t026/t027/t030/t031/t032/t033/t034，逐项影响说明见证据 §3）；全量 headless **45 套 3,805 条 0 失败**（3,632 SUMMARY 与 T034 逐字同 + t031 72 + t034 46 + t035 55，= 基线 3,750+55）；本轮 `.tres`+脚本**进包** → **重导出两预设 EXIT=0**、包内 t035 55/55 + t034 抽查 46/46、包 **Reborn.pck 66,903,372 B / RebornSelfTest.pck 67,900,508 B**；**视觉无取证帧**（纯账本、HUD/菜单/关卡零改动，非缺能力）。遗留：死亡不扣账怪癖待拍板、过渡态 active>total（T040 收口）、按账本实例化身体属 T040、真实读档属 T037 |
 | T036 | **done（2026-11-04，系统时钟）** | `Docs/Evidence/T036.md`、`Docs/Tasks/T036.md`、`autoload/game_state.gd`（`transform` 初值 + `sync_current_life()`）、`scripts/core/main_entry.gd`（`_on_survival_changed` 同步存活状态与位置）、`scripts/core/life_cycle.gd`（**审计缺陷修复**：非 ALIVE 期 `transition_reject` 不再打已归档 `life_id`）、`tests/run_t036_contract.gd`（72 条）、`Tools/t036_headless_batch.ps1`、`Docs/TechnicalDesign.md` §3.1 | **数据契约与跨世回归**（开发计划 :170）：逐字段差异清单（TD §3/§4 vs 实现）——**一致 56 项**（`SurvivalState` 5/`RegionRecord` 6/`ResourceRecord` 10/`SpeciesConfig` 25/`LifeRecord` 4/`CurrentLife` 3/`LifeEvent` 2/信号 `action_noise` 1）、**语义偏移 19 项**（`food_gained` 累计不可逆、`captures/escapes`、`discoveries`、`event_first/last` 区间、`survival→snapshot`、`start_world_time`、`life_state` 在 `LifeCycle`、`seq/kind/data.*`、5 条信号）、**多出 48 项**（`LifeRecord` 7 + `SpeciesConfig` 扩展组 41，来源任务逐项登记）、**缺失 3 字段 + 1 容器**（`last_safe_spot_id`→T042、`source_id`→D5 不补、`WorldSnapshot`→T037）。**唯一契约补丁**：`CurrentLife.survival/transform` 存活期不可得 → `sync_current_life()` 复用 0.2 s 节流（键名沿用 `snapshot`）。**跨世回归** A～G 共 72 条（契约形状/稳定 ID/存活期同步/捕获/死亡/多世/新游戏）；**首跑红 `pass=26\|fail=17`** → **72/72 ×3（源码/批/包内）+ 变异 3 处全被拦**（`last_record` 去 `duplicate`→E8、`end_life` 不写 `life_end`→E7a/E7c、`sync_current_life` 不写 `transform`→C4）；重点回归 **12 套全绿**；全量 headless **46 套 3,632 条 0 失败 + RESULT 四套 72/46/55/72 = 3,877 条**（基线 3,805+72）；3 脚本进包 → **重导出两预设 EXIT=0**、包 **66,903,564 / 67,920,632 B**；**视觉无取证帧**（纯审计/档案字段，HUD/菜单/关卡零改动）。遗留：`WorldSnapshot`/版本/读档→T037、`last_safe_spot_id`→T042、死亡不扣账怪癖待负责人、active>total→T040、T029/T034 零触碰 |
 | T037 | **done（2026-11-04，系统时钟）** | `Docs/Evidence/T037.md`、`Docs/Tasks/T037.md`、`autoload/save_manager.gd`（新）、`autoload/game_state.gd`（`snapshot_long_term/restore_long_term`）、`scripts/core/life_cycle.gd`（`restore_alive`）、`scripts/core/main_entry.gd`（读档顺序 + 四类自动存盘）、`scripts/data/survival_state.gd`（`from_dictionary`）、`scripts/world/resource_point.gd`（`apply_record`）、`scripts/world/ecology_spawner.gd`（实例有效性修复）、`tests/run_t037_save_load.gd`（69 条）、`tests/tool_capture_t037_load.gd`、`Tools/t037_headless_batch.ps1`、`Docs/Parameters.md` §存档、`Docs/TechnicalDesign.md` §3/§8 | **存档持久化与读档重建**（开发计划 :171）：单槽 `user://savegame_v1.json` + `.bak` + `.corrupt-<ts>`，`save_version=1`；**原子写**（`.tmp` 写完关闭 → 主档复制 `.bak` → `rename_absolute`）；**版本不匹配不隔离不覆盖**（`version_mismatch`）、结构坏 → 隔离 + 备份回退（`recovered_backup`）、缺集合补默认、负数/超容量夹紧、非有限跳条目（`repairs` 逐项）；`pending_settlement_life_id` 语义 = **死亡已归档、结算页未展示**（死亡时写 LifeId → 呈现后清空；读档非空则 `SETTLING→SELECTING` 补弹结算页再清空落盘）；**不改状态机语义**，只新增 `LifeCycle.restore_alive()`（`SETTLING/SELECTING→ALIVE`，不分配新 LifeId、不增 spawn）；读档 D8 顺序（世界时间 → 区域账本 → 资源点 → 长期层 → 当前生命 → HUD）；自动存盘只在正式运行（死亡 2 次 / 发现 / 解锁 / 退出 / 补弹完成）；`last_safe_spot_id` 预留不建（T042）。**首跑红 9 条 → 69/69 ×3 + 变异 4 处红（M1 版本/M2 life_counter/M3 `.bak`/M4 pending 清空）**；重点回归 T030～T036 全绿；全量 headless 47 套 3,946 条（脚本 TOTAL 3,874 少计 t031 的 72，人工并账，见证据 §6）；3 个生产脚本 + 测试/取证进包 → **重导出两预设 EXIT=0**、包 **Reborn.pck 66,939,036 B / RebornSelfTest.pck 67,992,212 B**；包内 T037 69/69 + T034/T036 抽查；**视觉 2 帧 vision 判读**（读档补弹结算页 / 左下「主存档损坏，已从备份恢复」，两次 `visible_hits=0`）。挂账零触碰：死亡不扣账怪癖、T034 昼夜 0.5、T029 两决策、active>total（T040） |
+| T038 | **done（2026-11-04，系统时钟）** | `Docs/Evidence/T038.md`、`Docs/Tasks/T038.md`、`autoload/save_manager.gd`（队列 + 原子写加固）、`scripts/core/main_entry.gd`（`save_now` 经队列 + warning Toast）、`tests/run_t038_save_queue.gd`（68 条）、`tests/tool_capture_t038_failure.gd`、`Tools/t038_headless_batch.ps1`、`Docs/Parameters.md` §存档、`Docs/TechnicalDesign.md` §8 | **存档写入队列与关键事务**（开发计划 :173）：所有生产保存经 `request_save()` 单队列（主线程帧驱动、无线程，`threaded=false`），同一时刻只写一次；**普通保存节流 1 s + 合并**，**关键事务（死亡归档、`pending` 清空、发现、解锁、退出）逐条同步写、不合并/丢弃/被插队**；`save_now()` 保持立即语义（T037 时序零改动）；原子写加固为 `.tmp` → `.bak.tmp/.prev` 轮换（复制失败不阻断写、旧 `.bak` 保留 + warning）→ 主档 `.old` → tmp 换入 → 删 old，**换名失败回滚**；**主档缺失 + `.bak` 有效 → `recovered_backup`**；失败注入 `tmp_open/disk_write/bak_copy/rename` 仅测试；队列失败后复位、后续请求继续；`queue_stats()` 可观测。**68/68 ×3；变异 5 处先红后复原**；回归 T030～T037 全绿；全量批 BATCH_STATUS；包体 PACK_STATUS；视觉 2 帧（写失败 / 备份失败 Toast，`visible_hits=0`）。格式/版本/`pending` 语义零改动。挂账零触碰（死亡不扣账、T034 昼夜 0.5、T029 两决策、active>total=T040、`last_safe_spot_id`=T042） |
 | ART01 | **done（2026-10-21，系统时钟）** | `Docs/Evidence/ART01.md`、`Docs/Tasks/ART01.md`、`Tools/Blender/art01_bush_001.py`、`Game/Reborn/assets/environment/sm_bush_001.glb`、`tests/run_art01_bush.gd`、`tests/tool_capture_art01.gd` | **AI 建模工作流打通 + 首个静态资产接入**：草丛掩体 `ENV_BUSH_001`（2040 tris、2 材质、双面、**零碰撞**）替换半透明绿盒子，并补上**溪边掩体原本完全没有视觉**的缺陷；`tool_make_courtyard.gd` 生成器接入（**不手改 .tscn**）；**83/83 + 全量 29 套 3081 条全绿**；3 轮返工（泥土墩过高→躲进草丛相机在土里、草叶像"板条"、密度/取景缺陷）；**不是正式美术 approved**，也**没有**越过 P6 阶段门 |
 | ART03-② | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Tasks/ART03_BOULDER.md`、`Docs/Evidence/ART03_BOULDER.md`、`Tools/Blender/art05_boulder_001.py`、`Art/Exports/Environment/SM_Boulder_001.glb`、`Game/Reborn/assets/environment/sm_boulder_001.glb`、`tests/tool_capture_art05.gd` | **溪边巨石换成真实岩石**：Poly Haven `boulder_01`（CC0）实测 66,122 tris / **1.27 m 米制（推翻旧结论"12.7 m 需缩放"）** → 焊接后单轮减面 **7,500 tris** → `_mk_boulder()` 接入 `CreekBoulder`（视觉 .glb、碰撞 Godot 侧 `BoxShape3D` = 视觉 AABB）；生成器 7/7 + **全量 29 套 3,127 条全绿**；实机 4 机位自查通过（无浮空/陷地）；修掉两个真缺陷（glTF 接缝拆点致减面卡死、T012 溪缝断言依赖导航 tie-break） |
 | ART03-③ | **done（2026-10-21，系统时钟；未 approved）** | `Docs/Tasks/ART03_FENCE.md`、`Docs/Evidence/ART03_FENCE.md`、`Tools/Blender/art06_fence_from_ref.py`、`Art/Exports/Environment/SM_Fence_Module_001.glb`、`Game/Reborn/assets/environment/sm_fence_module_001.glb`、`tests/tool_capture_art06.gd` | **围栏 + 庇护棚墙换成石墙模块**：`wall_stefan_wr`（CC-BY）取最高件 1,244 tris → ÷100 后等比到 **3.68 长 × 3.00 高 × 0.30 厚**，材质重建为 Principled（否则无贴图），`_mk_clad_wall()` 平铺 **90 件**、碰撞盒不变、`Backing` 衬板遮通孔；生成器 41 条墙断言 OK + **全量 29 套 3,127 条全绿**；修掉 4 个真缺陷（Y-up 烘错轴、旧式材质导出丢贴图、通孔看穿、北墙全黑→加 `SkyFill`）；代价 **120,668 tris 未测帧率** |
@@ -82,7 +83,7 @@
 | ART07 | **awaiting-review（2026-10-28；不是正式美术 approved）** | `Docs/Tasks/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`、`Docs/Evidence/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`、`Game/Reborn/tests/tool_make_courtyard.gd`、`Game/Reborn/shaders/grass_wind.gdshader`、`Game/Reborn/scenes/maps/l_courtyard.tscn`、`tests/run_t011_greybox.gd`、`Art/Probes/art07_{before,after}/` | 只复用现有资产的庭院表现层试作：16 株背景草簇、6 溪心石、3 庭院石、5 泥舌半岛、31 无碰撞阴影；草根明暗/实例差异、SSAO/ACES；指数雾关闭，远景 depth fog 参数保留但关闭；`CreekRock05` 移离溪缝机位视线。几何/碰撞/导航不变量未改。生成器装饰断言 229/229；回归 T011 229、T012 79、T020 164、T026 96、T027 96，全绿共 664 条；nav `.tres` 无 diff。视觉：overview 已无均匀雾幕、地标清楚但背景层次弱；溪缝清晰；courtyard/grass 仍有草石贴纸感/接地感不足。最后一轮窗口取证超时，当前截图对最后 shader 状态的对应关系未能复核；A5/A7 未通过，不提交为完成。P6/T053 未完成；**下一任务仍回到 T031** |
 | ART08 | **awaiting-review（2026-10-28；不是正式美术 approved）** | `Docs/Tasks/ART08_BOARD_BASELINE.md`、`Docs/Tasks/ART08_MENU.md`、`Docs/Tasks/ART08_CHARACTER_PIPELINE.md`、`Docs/Tasks/ART08_ENVIRONMENT_BOARD.md`、`Docs/Tasks/ART08_INTEGRATION.md`；`Docs/Evidence/ART08_*.md`；整合图 `Art/Probes/art08_integration/` | 按批准的视觉纵切片完成菜单结构、真实截图、角色资产授权门和环境不变量保护。ART08 契约 9/9、角色 15/15、环境 9/9；菜单/角色/环境/玩法相关回归全绿。**展板整体视觉 FAIL**：当前仍为庭院围墙与直线溪水，猫鼠仍用 `sm_cat_002` / `sm_mouse_002`，未新增猫扑击/鼠逃跑动作，右栏仍是实时 3D 卡片；非 headless 截图已留，但外部 vision 判读 NOT-RUN。提交 `d493cc6` / `c0ae0e9` / `6090559` / `07c1bc5`，未 push。**后续需要负责人逐项授权猫鼠新模型/动作及环境资产来源/许可**，再继续真正的美术替换；ART07 原有未提交改动仍保留，A5/A7 未通过。|
 
-**未完成**：游戏玩法实现（T038 起：存档队列与关键事务）、正式角色与骨骼资产（P6）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T038～T063 全部 pending（T037 已 done）。**
+**未完成**：游戏玩法实现（T039 起：备份与失败回退试验）、正式角色与骨骼资产（P6）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T039～T063 全部 pending（T037/T038 已 done）。**
 
 
 **T030 的边界声明**：① 只做生命周期与记录，~~没做结算页（T032）~~ **T032 已落结算页（见下）**、存档仍属 T037；② ~~`MainEntry.test_mode = true` 临时开发态~~ **已于 T031 收口为默认 `false`（正式解锁门接入）**；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。
@@ -90,7 +91,8 @@
 **T032 的边界声明**：① 结算页是 BoardTokens 风格**功能版**，无动效/肖像（正式美术 P6 再定）；② `game_state.gd`/`life_cycle.gd` **零改动**（档案字段实测够用、`_enter_select()` 时序不变），结算页是纯呈现层（`Docs/TechnicalDesign.md` §7.2）；③ headless 下鼠标 GUI 命中不触发（能力门）→ **点击消隐只在非 headless `run_art05_input` 里验证**（K4a/K4b），headless 套件只走键盘/断言路径；④ 死亡结算应触发保存（策划 §9）→ 仍属 T037。
 **T035 的边界声明**：① 账本是**权威数量**，但**按账本实例化身体仍属 T040**——布置器当前仍按 T027 计数铺身体（非账本驱动），捕获/重世后个别区可能出现过渡态 active>total，B7 断言只锁正式初始状态；② 真实读档重建（落盘/起活）属 T037+，本轮只验证 `snapshot()/restore()` 的数据面；③ **自然死亡不扣区域账**（TD §3「实例化/销毁表现不改变它」口径）→ 按 T040 账本重建时自然死亡个体会"复活"，**怪癖已记录待负责人拍板**，未擅自改玩法；④ 无种群 UI（规格明确不做，数字呈现待有需求再议）。
 **T036 的边界声明**：① 只做**审计 + 契约锁测 + 一处契约补丁 + 一处审计缺陷修复**（`CurrentLife.survival/transform` 存活期可得；非 ALIVE 期 `transition_reject` 不再污染已归档生命的事件区间），持久化/版本/损坏恢复**属 T037**；② `WorldSnapshot` 整容器与 `save_version/revision/pending_settlement_life_id` **未建**（T037），`last_safe_spot_id` **未建**（T042），`LifeEvent.source_id` 按 D5 **不补**；③ `food_count→food_gained` 为累计增益、次数不可还原（保留实现语义）；④ `SpeciesConfig` 的 41 个扩展字段只登记来源、不改 TD；⑤ `NIGHT_START_RATIO=0.5`/`day_length=1200`、死亡不扣账怪癖、T029 两决策**零触碰**（审计确认与数据契约无冲突）。
-**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 完成（T030～T036）、P5 进行中（T037 done）** → **下一步 T038 存档队列与关键事务**。
+**T038 的边界声明**：① 只改写入链路（`SaveManager` 队列 + `MainEntry.save_now` 接线），**存档格式/`save_version`/`revision`/`pending` 语义零改动**；② 关键事务用「请求即同步排空」实现（`save_now` 保持立即语义），普通保存才走帧驱动节流——若未来引入真正的异步/线程写，需重新审计 `active_writes` 与 T037 时序断言；③ 失败注入只在测试设置 `fault_injection`，生产恒空；④ `.bak` 复制失败不再删除旧备份（修 T037 的备份链风险）；⑤ 进程强杀/断电真机注入**仍属 T039**，本轮只覆盖逻辑级失败点；⑥ 挂账零触碰。
+**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 完成（T030～T036）、P5 进行中（T037/T038 done）** → **下一步 T039 备份与失败回退试验**。
 
 > ## ⚠ 本次最重要的教训
 >
@@ -183,9 +185,11 @@ $proj = 'E:\Reborn\Game\Reborn'
 & $g --headless --path $proj --script 'res://tests/run_t035_region_population.gd' --quit-after 300000
 & $g --headless --path $proj --script 'res://tests/run_t036_contract.gd' --quit-after 300000
 
-# P5 存档线（T037 存档持久化与读档重建）
+# P5 存档线（T037 存档持久化与读档重建 / T038 写入队列与关键事务）
 & $g --headless --path $proj --script 'res://tests/run_t037_save_load.gd' --quit-after 300000
+& $g --headless --path $proj --script 'res://tests/run_t038_save_queue.gd' --quit-after 300000
 # 全量顺序批（T037）：powershell -File E:\Reborn\Tools\t037_headless_batch.ps1
+# 全量顺序批（T038）：powershell -File E:\Reborn\Tools\t038_headless_batch.ps1
 
 # 走查工具（T028，切换玩家物种跑两条真实路线；不是断言套件）
 & $g --headless --path $proj --script 'res://tests/tool_t028_walkthrough.gd' --quit-after 300000
@@ -838,3 +842,41 @@ portrait_contract 24、species_layout 59；取证一律 `Tools/CaptureRun.ps1 -H
 **剩余授权项**：① 游戏环境 SSAO 半径/contact shadow 调整（角色尺度接地感）；② 毛发卡片/
 壳层方案或毛发 tiling 贴图（需新资产授权）；③ 拆分眼/鼻材质（需模型材质槽支持）。
 **下一步**：等待负责人对 ART14 观感复核；主线 T037 继续。
+
+## ART15（2026-11-04）：角色接地感（环境 SSAO / 接触阴影）
+
+**状态 done（视觉门按 vision 判读到可验证 PASS；不是正式美术 approved）。**
+证据 `Docs/Evidence/ART15_CHARACTER_GROUNDING.md`，规格 `Docs/Tasks/ART15.md`。
+
+只动庭院关两行参数：`Environment.ssao_radius` **1.2 → 0.45 m**（角色尺度）、
+`SunLight.shadow_normal_bias` **2.0 → 0.8**（阴影根部贴住接触处）。主光方向/能量/色温、
+体积雾、DOF、色调映射、几何/碰撞/导航、玩法与动画参数全部未动；未新增模型/第三方资产。
+
+**四机位 × 两物种（vision，左=改前 → 右=改后）**
+
+| 机位 | 猫 S1（SSAO）/ S2（阴影） | 鼠 S1 / S2 |
+|---|---|---|
+| stand | 3.0 → **8.5** / 6.0 → **9.0** | 3.5 → **8.5** / 4.0 → **8.5** |
+| walk | 4.0 → **9.0** / 6.0 → **9.0** | 5.0 → **8.5** / 4.0 → **8.5** |
+| wall | 3.5 → **9.0** / 5.0 → **8.5** | 3.5 → **9.0** / 5.0 → **8.0**（余轻微边缘噪声） |
+| rock | 5.5 → **8.5** / 5.5 → **8.5** | 5.0 → **9.0** / 4.0 → **9.0** |
+
+结论：**接地感已治好**——脚底/腹部出现贴身暗部，不再"灰圈/贴纸浮起"，无黑块/脏边，
+轮廓清晰。S1 与 S2 各有独立同机位前后对比板（`Art/Probes/art15_compare/`）。
+
+**性能**（1280×720、vsync off、120 帧均值）：改前 ≈6.28 ms（159 fps）、
+改后 ≈6.20 ms（161 fps），差异在 ±3% 运行噪声内，无可感知代价。
+回退：删 `shadow_normal_bias = 0.8` 行，`ssao_radius` 改回 1.2（tscn 第 2871/1277 行），
+同步生成器第 772/821 行；不需要重建场景。
+
+**回归（11 套 631 条断言 0 失败）**：帧契约 48、T011 229、T012 79、species_layout 59、
+art08_character 15、art02 72、art03 45、art08_board 9、art08_environment 9、
+art09_menu 42、art09_portrait 24；gameplay 断言零改动。
+取证截图走 `CaptureRun.ps1`（隐藏桌面、`visible_hits=0`、**带渲染，不用 `-Headless`**）；
+回归套件走 `-Headless`。
+
+**仍未解决 / 待授权**：① 菜单展板 `l_ravine_board.tscn`（SSAO 1.35）未动，若菜单角色也要接地感
+需单独授权；② Godot 4 无原生 contact shadow，若要做"仅角色"的接触暗部需自定义屏幕空间接触
+阴影/角色贴花 AO（渲染管线改动，需授权）；③ 鼠贴墙余轻微边缘噪声，未继续下调 normal_bias
+（<0.8 有阴影痤疮风险）。
+**下一步**：等待负责人对 ART15 接地观感与性能数值复核；主线 T038 继续。

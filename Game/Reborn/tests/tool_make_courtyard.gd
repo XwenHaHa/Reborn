@@ -767,6 +767,9 @@ func _add_light_and_env(parent: Node3D) -> void:
 	light.rotation_degrees = Vector3(-50.0, -30.0, 0.0)
 	light.light_energy = 1.2
 	light.shadow_enabled = true
+	# ART15：默认 2.0 的法线偏移会把阴影根部推开 ~2 个 texel，小体量角色脚下出现"彼得潘"
+	# 悬浮（影子不粘脚）。0.8 让阴影终止线重新贴住几何接触处；主光方向/能量一字未改。
+	light.shadow_normal_bias = 0.8
 	parent.add_child(light)
 	light.owner = parent
 	# ART03-③ 实测缺陷：北墙内表面朝 −Z，与主光方向同向 → 整面**近乎全黑**，3 m 石墙读不出材质。
@@ -812,8 +815,10 @@ func _add_light_and_env(parent: Node3D) -> void:
 	# 真实接触遮蔽：SSAO。vision 两轮判"草丛/石头底部没有 AO、像浮在贴纸上的插片"，
 	# 贴地暗片只能补"轮廓外的一圈"，棚屋/墙角/石头与地面的**凹角**要靠屏幕空间 AO 才读得出。
 	# 半径按"石头/草丛脚印 ~0.5 m"给（视距 20～50 m 仍能落在几个像素上），强度抬到 2.6。
+	# ART15：角色（猫/鼠 0.18～0.48 m 高）的接地感需要**角色尺度**半径；1.2 m 会把脚底暗部
+	# 抹成一大圈灰晕而非贴地细缝。1.2 → 0.45（只动半径，强度/幂次/锐度/细节一字未动）。
 	env.ssao_enabled = true
-	env.ssao_radius = 1.2
+	env.ssao_radius = 0.45
 	env.ssao_intensity = 2.6
 	env.ssao_power = 2.0
 	# 色调映射：Godot 默认 `TONE_MAPPER_LINEAR` 在这种"大面积中等亮度地面 + 一盏太阳"的场里
