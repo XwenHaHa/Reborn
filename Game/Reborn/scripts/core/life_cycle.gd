@@ -225,7 +225,11 @@ func _reject(from_state: int, to_state: int, reason: StringName) -> bool:
 	rejections.append(entry)
 	var gs := _game_state()
 	if gs != null:
-		gs.call("record_event", life_id, &"transition_reject", {
+		# T036 审计修复：只有 **ALIVE** 期的事件才归属当前生命。死亡/结算/选择期的拒绝事件
+		# 若继续打已归档的 `life_id`，会让"已结束生命的事件区间"在死后继续增长
+		# （`events_for(life_id)` 末尾就不再是 `life_end`）。改为匿名词条（`life_id = ""`）。
+		var tag := life_id if state == State.ALIVE else ""
+		gs.call("record_event", tag, &"transition_reject", {
 			"from": state_name_of(from_state),
 			"to": state_name_of(to_state),
 			"reason": String(reason),

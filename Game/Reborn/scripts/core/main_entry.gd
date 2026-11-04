@@ -612,6 +612,10 @@ func _on_survival_changed(state: SurvivalState) -> void:
 			lifecycle.notify_event(&"water", {"amount": dw})
 	_last_hunger = hunger
 	_last_thirst = thirst
+	# T036：把存活状态与当前位置同步进进行中档案（存档读回的「当前生命状态与位置」）。
+	# 复用本回调的既有 0.2 s 节流，不新增每帧写入。
+	if player != null and is_instance_valid(player):
+		gs.call("sync_current_life", state.to_dictionary(), player.global_transform)
 
 
 func _on_capture_reported(captor_id: String, target_id: String, position: Vector3,

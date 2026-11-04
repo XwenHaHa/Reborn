@@ -137,6 +137,7 @@ func begin_life(species_id: StringName, spawn_position: Vector3 = Vector3.ZERO,
 		"event_first": _event_seq + 1,
 		"event_last": _event_seq,
 		"snapshot": {},
+		"transform": Transform3D(Basis(), spawn_position),
 	}
 	record_event(life_id, EVENT_LIFE_START, {"species": String(species_id)}, now)
 	var out: Dictionary = current_life.duplicate(true)
@@ -165,6 +166,20 @@ func end_life(reason: StringName, detail: Dictionary = {}) -> Dictionary:
 	var out: Dictionary = rec.duplicate(true)
 	life_ended.emit(out.duplicate(true))
 	return out
+
+
+## 同步进行中生命的**存活状态与位置**（T036；`TechnicalDesign.md` §3 `CurrentLife.survival` / `CurrentLife.transform`）。
+##
+## 为什么需要：`snapshot` 原本只在死亡时由 `LifeCycle.survival_snapshot()` 写入，位置只留出生点；
+## 存档若发生在存活期，就读不到"当前生命状态与位置"（T037 的读档前提）。
+## 只写**进行中**档案；没有生命时返回 `false` 且不产生任何写入（不覆盖已归档记录）。
+## 键名沿用既有 `snapshot`（等价于契约的 `survival`），不复制第二份权威数据（TD §1）。
+func sync_current_life(survival: Dictionary, transform: Transform3D) -> bool:
+	if current_life.is_empty():
+		return false
+	current_life["snapshot"] = survival.duplicate(true)
+	current_life["transform"] = transform
+	return true
 
 
 ## 累加进行中档案的计数字段（捕猎/逃脱/食物/水）。没有进行中的生命时忽略。

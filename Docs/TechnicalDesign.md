@@ -156,6 +156,21 @@ class_name SpeciesConfig extends Resource
 恢复可选指标前夹紧到 0～100 并**记录修复**。严重结构错误走坏档回退，**不静默开新游戏**。
 设置数据另存，不混入死亡进度。
 
+### 3.1 契约实现对照（T036 审计，2026-11-04）
+
+逐字段差异清单与四类判定（一致 / 缺失 / 多出 / 语义偏移）见 `Docs/Evidence/T036.md` §3；
+可执行锁测 `Game/Reborn/tests/run_t036_contract.gd`（72 条）。要点：
+
+| 对象 | 状态 |
+|---|---|
+| `SurvivalState` / `RegionRecord` / `ResourceRecord` | **完全一致**（5 / 6 / 10 字段，A 段锁死） |
+| `SpeciesConfig` | TD §3 的 **25 项全在场**；另有 41 项扩展组（来源任务见证据 §3.4），不违反契约 |
+| `CurrentLife` | `transform` 已补齐（`GameState.sync_current_life()` 存活期同步）；`survival` 以既有 `snapshot` 键承载（不复制第二份）；`spawn_world_time→start_world_time`；`life_state` 真源 `LifeCycle.state`（不入档）；`last_safe_spot_id` **缺**（T042）；`current_events/current_discovered_ids` 有等价替代 |
+| `LifeRecord` | 4 项一致；`food_count→food_gained`（累计增益，**不可逆**）、`capture_count→captures`、`escape_count→escapes`、`discovered_ids→discoveries`、`events→event_first/event_last` 为语义偏移 |
+| `LifeEvent` | `life_id/world_time` 一致；`event_id→seq`、`type→kind`、`reason/amount→data.*` 为语义偏移；`source_id` 按 D5 **不补**（同一事实不存两份） |
+| `WorldSnapshot` | **整容器缺**（`save_version/revision/pending_settlement_life_id` 无落点）→ **T037** 组装 |
+| 信号 | `action_noise` 一致；其余 5 条为名称/参数/类型偏移（详见证据 §3.2），`captured` 无 `capture_id/region_id`、`died` 无 `life_id` |
+
 ## 4. 输入与交互接口
 
 **InputMap**（定义在 `project.godot`，动作名固定）：
