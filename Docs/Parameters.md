@@ -327,9 +327,13 @@
 
 | 参数 | 旧值 | 新值 | 作用（角色尺度 0.18～0.48 m） | 回退位置 |
 |---|---:|---:|---|---|
-| `Environment.ssao_radius` | 1.2 m | **0.45 m** | 1.2 m 的 AO 半径把脚底抹成灰圈；0.45 m 让接地暗部贴住脚掌/腹部 | tscn 第 1277 行；生成器 `env.ssao_radius` |
+| `Environment.ssao_radius` | 1.2 m | **0.75 m** | 1.2 m 的 AO 半径把脚底抹成灰圈；0.45 m 虽最贴脚，但远景墙脚/围栏底部的宽 AO 被削窄（反向校验 §7），折中 **0.75 m**：角色接地仍 PASS、大结构遮蔽更接近 ART13 基线 | tscn 第 1277 行；生成器第 823 行 |
 | `DirectionalLight3D.shadow_normal_bias`（SunLight） | 2.0（默认） | **0.8** | 降低法线偏移，阴影根部贴住几何接触处，减少"影脚分离/悬浮"；0.8 未出现阴影痤疮 | tscn 第 2871 行（删该行即回默认）；生成器 `light.shadow_normal_bias` |
 
 `ssao_intensity/power/horizon/sharpness/detail`、`shadow_bias`、`shadow_blur`、阴影分档与最大距离均保持原值。
-实测帧时间：改前 ≈6.28 ms、改后 ≈6.20 ms（1280×720、vsync off、120 帧均值），差异在 ±3% 噪声内。
+实测帧时间：改前 ≈6.28 ms、改后 ≈6.20 ms（1280×720、vsync off、120 帧均值），差异在 ±3% 噪声内；
+半径 0.45/0.75 的采样成本相同，二者帧时间一致（6.19 / 6.200 ms）。
+**全局影响**：`ssao_radius` 作用于整个环境。反向校验（总览 + 远景两机位对 `Art/Probes/art13_after/`）
+显示 0.45 下大结构墙脚 AO 局部收窄（vision 4/10、客观像素差 >8/255 占 3.3%），故取 0.75；
+判读细节与像素统计见 `Docs/Evidence/ART15_CHARACTER_GROUNDING.md` §7。
 **不得整体重新生成 `l_courtyard.tscn`**：生成器不写导航资源引用，重生成会丢 `l_courtyard_{mouse,cat}.tres` 并刷新全部 `unique_id`。

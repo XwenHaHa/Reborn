@@ -817,8 +817,10 @@ func _add_light_and_env(parent: Node3D) -> void:
 	# 半径按"石头/草丛脚印 ~0.5 m"给（视距 20～50 m 仍能落在几个像素上），强度抬到 2.6。
 	# ART15：角色（猫/鼠 0.18～0.48 m 高）的接地感需要**角色尺度**半径；1.2 m 会把脚底暗部
 	# 抹成一大圈灰晕而非贴地细缝。1.2 → 0.45（只动半径，强度/幂次/锐度/细节一字未动）。
+	# ART15 反向校验（2026-11-04）：0.45 让远景机位的大结构墙脚 AO 被削薄（vision 4/10），
+	# 折中到 0.75：仍小于 1.2（角色尺度可读），同时给棚屋/围栏/石墙留出大结构遮蔽过渡。
 	env.ssao_enabled = true
-	env.ssao_radius = 0.45
+	env.ssao_radius = 0.75
 	env.ssao_intensity = 2.6
 	env.ssao_power = 2.0
 	# 色调映射：Godot 默认 `TONE_MAPPER_LINEAR` 在这种"大面积中等亮度地面 + 一盏太阳"的场里

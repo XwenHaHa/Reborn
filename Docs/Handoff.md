@@ -848,8 +848,8 @@ portrait_contract 24、species_layout 59；取证一律 `Tools/CaptureRun.ps1 -H
 **状态 done（视觉门按 vision 判读到可验证 PASS；不是正式美术 approved）。**
 证据 `Docs/Evidence/ART15_CHARACTER_GROUNDING.md`，规格 `Docs/Tasks/ART15.md`。
 
-只动庭院关两行参数：`Environment.ssao_radius` **1.2 → 0.45 m**（角色尺度）、
-`SunLight.shadow_normal_bias` **2.0 → 0.8**（阴影根部贴住接触处）。主光方向/能量/色温、
+只动庭院关两行参数：`Environment.ssao_radius` **1.2 → 0.75 m**（先试 0.45，经全局反向校验后
+折中，见下）、`SunLight.shadow_normal_bias` **2.0 → 0.8**（阴影根部贴住接触处）。主光方向/能量/色温、
 体积雾、DOF、色调映射、几何/碰撞/导航、玩法与动画参数全部未动；未新增模型/第三方资产。
 
 **四机位 × 两物种（vision，左=改前 → 右=改后）**
@@ -867,7 +867,16 @@ portrait_contract 24、species_layout 59；取证一律 `Tools/CaptureRun.ps1 -H
 **性能**（1280×720、vsync off、120 帧均值）：改前 ≈6.28 ms（159 fps）、
 改后 ≈6.20 ms（161 fps），差异在 ±3% 运行噪声内，无可感知代价。
 回退：删 `shadow_normal_bias = 0.8` 行，`ssao_radius` 改回 1.2（tscn 第 2871/1277 行），
-同步生成器第 772/821 行；不需要重建场景。
+同步生成器第 772/823 行；不需要重建场景。
+
+**全局反向校验（2026-11-04）**：`ssao_radius` 是环境全局参数。用产生 `art13_after/` 的同一工具
+（`tool_capture_render.gd -- t011`）拍 `t011_map_overview`（总览）与 `t011_courtyard`（远景），
+`visible_hits=0`。0.45 时 vision 总览 8/10（极轻微削薄）、远景 4/10（墙脚发亮），两次读数不稳定；
+客观像素复核显示整体亮度差 ≤0.26/255、差值中位数 0、差 >8/255 的像素仅 1.31%（总览）/
+3.34%（远景），变化集中在窄 AO 边缘带而非整片发飘。为不默认接受退化，实测折中 **0.75**：
+远景亮度差降到 0.17、>8/255 降到 2.93%，总览 vision 7/10；角色 stand 复判猫 8/8/9、
+鼠 8.5/8.5/8.5 仍 PASS；帧时间 6.200 ms（与 0.45 相同，半径不改采样数）。对比板与样张在
+`Art/Probes/art15_after/`、`Art/Probes/art15_r075/`；细节见证据 §7。
 
 **回归（11 套 631 条断言 0 失败）**：帧契约 48、T011 229、T012 79、species_layout 59、
 art08_character 15、art02 72、art03 45、art08_board 9、art08_environment 9、
@@ -878,5 +887,6 @@ art09_menu 42、art09_portrait 24；gameplay 断言零改动。
 **仍未解决 / 待授权**：① 菜单展板 `l_ravine_board.tscn`（SSAO 1.35）未动，若菜单角色也要接地感
 需单独授权；② Godot 4 无原生 contact shadow，若要做"仅角色"的接触暗部需自定义屏幕空间接触
 阴影/角色贴花 AO（渲染管线改动，需授权）；③ 鼠贴墙余轻微边缘噪声，未继续下调 normal_bias
-（<0.8 有阴影痤疮风险）。
+（<0.8 有阴影痤疮风险）；④ 0.45 仍是角色最锐利档（stand 8.5/9），若负责人复核认为远景大结构
+AO 还偏弱，可在 0.45～0.75 间再定；当前默认 0.75（接地 PASS 且全局差更接近 ART13）。
 **下一步**：等待负责人对 ART15 接地观感与性能数值复核；主线 T038 继续。
