@@ -37,6 +37,9 @@ const SHOTS := [
 
 func _initialize() -> void:
 	root.size = RES
+	# ART16：性能对比要拿"渲染一帧真实耗时"，只在取证进程内关 vsync
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	Engine.max_fps = 0
 	if not OS.get_cmdline_user_args().has("ravine"):
 		print("CAP|ravine|ERROR|need_arg|pass '-- ravine'")
 		quit(1)
@@ -56,6 +59,7 @@ func _run() -> void:
 	root.add_child(level)
 	for i in SETTLE:
 		await process_frame
+	_report_environment(level)
 
 	var anchor := level.get_node_or_null("BoardSubjectAnchor") as Marker3D
 	var subject_at := anchor.global_position if anchor != null else Vector3(0.0, 0.10, 2.4)
@@ -83,6 +87,9 @@ func _run() -> void:
 			shot["pos"] as Vector3, shot["look"] as Vector3, float(shot["fov"]), false)
 		c.current = true
 		await _save(String(shot["tag"]))
+
+	# 场景仍在树内时采样，否则测到的是空场景
+	await _perf_sample()
 
 	if body != null:
 		body.queue_free()
@@ -114,6 +121,34 @@ func _spawn_cat(parent: Node3D, at: Vector3) -> AnimalBody:
 		await process_frame
 	print("CAP|ravine|subject=%s|pos=%s" % [String(cfg.species_id), body.global_position])
 	return body
+
+
+func _report_environment(level: Node) -> void:
+	var we := level.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	var sun := level.get_node_or_null("BoardSun") as DirectionalLight3D
+	if sun == null:
+		sun = level.get_node_or_null("SunLight") as DirectionalLight3D
+	if we != null and we.environment != null:
+		var e := we.environment
+		print("ART16|env|ssao=%s|radius=%.3f|intensity=%.2f|power=%.2f|detail=%.2f|light_affect=%.2f" % [
+			str(e.ssao_enabled), e.ssao_radius, e.ssao_intensity, e.ssao_power,
+			e.ssao_detail, e.ssao_light_affect])
+	if sun != null:
+		print("ART16|sun|shadow=%s|bias=%.3f|normal_bias=%.3f|blur=%.2f|max_dist=%.1f" % [
+			str(sun.shadow_enabled), sun.shadow_bias, sun.shadow_normal_bias, sun.shadow_blur,
+			sun.directional_shadow_max_distance])
+
+
+## 120 帧均值；展板是静态画面，关闭 vsync 后测的是"渲染一帧的真实上限"
+func _perf_sample() -> void:
+	for i in 20:
+		await process_frame
+	var t0 := Time.get_ticks_usec()
+	for i in 120:
+		await process_frame
+	var t1 := Time.get_ticks_usec()
+	var ms := float(t1 - t0) / 1000.0 / 120.0
+	print("ART16|perf|frames=120|avg_frame_ms=%.3f|fps=%.1f" % [ms, 1000.0 / ms if ms > 0.0 else 0.0])
 
 
 func _make_camera(parent: Node3D, nm: String, from: Vector3, to: Vector3,

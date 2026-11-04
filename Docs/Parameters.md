@@ -345,3 +345,23 @@
 显示 0.45 下大结构墙脚 AO 局部收窄（vision 4/10、客观像素差 >8/255 占 3.3%），故取 0.75；
 判读细节与像素统计见 `Docs/Evidence/ART15_CHARACTER_GROUNDING.md` §7。
 **不得整体重新生成 `l_courtyard.tscn`**：生成器不写导航资源引用，重生成会丢 `l_courtyard_{mouse,cat}.tres` 并刷新全部 `unique_id`。
+
+## 菜单展板接地（ART16 落地口径）
+
+只动**展板切片关**的 SSAO 半径与 `BoardSun` 阴影法线偏移；主光方向/能量/色温、天光补光、
+雾、曝光、辉光、DOF、几何/碰撞/导航均未改。真源：`Game/Reborn/scenes/maps/l_ravine_board.tscn`
+（生成器 `tests/tool_make_ravine_board.gd` 同步同值），**不整体重生成场景**。
+
+| 参数 | 旧值 | 新值 | 作用（展板猫占屏 25.5%、脚下 0.31 m） | 回退位置 |
+|---|---:|---:|---|---|
+| `Environment.ssao_radius` | 1.35 m | **0.75 m** | 1.35 m 在特写下把脚底糊成灰圈；0.75 m 与庭院关同值（场景/结构同尺度，机位更近），vision 三问 5/4/5 → 8/8/8，远景 9.5/10、根障 9/10 | tscn 第 509 行；生成器第 572 行 |
+| `DirectionalLight3D.shadow_normal_bias`（BoardSun） | 2.0（默认） | **0.8** | 阴影根部贴回脚掌，消除"影子离脚"；最终档接地 8.5/10，四机位无痤疮/黑块 | tscn 第 1251 行（删该行即回默认）；生成器第 540 行 |
+
+`ssao_intensity 2.8`、`ssao_power 2.0`、`ssao_detail 0.5`、`shadow_bias 0.03`、
+`directional_shadow_max_distance 45` 均保持原值；`tonemap_exposure 0.92`、`glow_hdr_threshold 1.30` 未动。
+实测帧时间（120 帧均值）：改前 **5.782 ms（173 fps）** → S1 5.616 → 最终 **5.673 ms（176 fps）**，
+差 −1.9%（噪声内），60 fps 预算占用约 34%，无可感知代价。
+**portrait 图不受影响**：`tool_render_board_portraits.gd` 自建环境（`ssao_radius = 0.3`、独立 HDRI 与灯光），
+不读展板关的 `WorldEnvironment`。
+判读机位、像素统计与未解决项（拍照机位把猫抬高 2 cm，ART10 冻结构图）见
+`Docs/Evidence/ART16_MENU_BOARD_GROUNDING.md`。

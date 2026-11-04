@@ -506,7 +506,7 @@ ambient_light_source = 3
 tonemap_mode = 3
 tonemap_exposure = 0.92
 ssao_enabled = true
-ssao_radius = 1.35
+ssao_radius = 0.75
 ssao_intensity = 2.8
 ssao_power = 2.0
 glow_enabled = true
@@ -1248,6 +1248,7 @@ light_color = Color(1, 0.83, 0.6, 1)
 light_energy = 1.6
 shadow_enabled = true
 shadow_bias = 0.03
+shadow_normal_bias = 0.8
 directional_shadow_max_distance = 45.0
 
 [node name="BoardSkyFill" type="DirectionalLight3D" parent="." unique_id=38048248]

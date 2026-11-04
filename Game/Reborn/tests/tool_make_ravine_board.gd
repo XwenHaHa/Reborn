@@ -535,6 +535,9 @@ func _add_light_and_env(parent: Node3D) -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 45.0
 	sun.shadow_bias = 0.03
+	# ART16：默认 2.0 的法线偏移把阴影根部推开，0.31 m 的猫脚下出现"影子离脚"。
+	# 0.8 让阴影终止线贴回接触处；方向/能量/色温/最大距离一字未动。
+	sun.shadow_normal_bias = 0.8
 	parent.add_child(sun)
 	sun.owner = parent
 
@@ -566,7 +569,10 @@ func _add_light_and_env(parent: Node3D) -> void:
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ssao_enabled = true
-	env.ssao_radius = 1.35
+	# ART16（2026-11-04）：展板关的猫体量约 0.31 m（屏幕占比 25%），1.35 m 的 AO 半径把脚底
+	# 抹成一圈灰晕、影子与脚脱开。参考 ART15 庭院关结论（场景尺度相近、机位更近），取 0.75 m：
+	# 半径只影响 AO 采样范围，强度/幂次/细节/light_affect 一字未动。
+	env.ssao_radius = 0.75
 	env.ssao_intensity = 2.8
 	env.ssao_power = 2.0
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES

@@ -894,3 +894,49 @@ art09_menu 42、art09_portrait 24；gameplay 断言零改动。
 （<0.8 有阴影痤疮风险）；④ 0.45 仍是角色最锐利档（stand 8.5/9），若负责人复核认为远景大结构
 AO 还偏弱，可在 0.45～0.75 间再定；当前默认 0.75（接地 PASS 且全局差更接近 ART13）。
 **下一步**：等待负责人对 ART15 接地观感与性能数值复核；主线 T038 继续。
+
+## ART16（2026-11-04）：菜单展板角色接地（`l_ravine_board.tscn` SSAO / 接触阴影）
+
+**状态 done（视觉门按 vision 判读到可验证 PASS；不是正式美术 approved）。**
+证据 `Docs/Evidence/ART16_MENU_BOARD_GROUNDING.md`（负责人已授权动展板关 SSAO/阴影参数，
+ART10 曾冻结该画面，故按"只改两类参数、不重生成场景"处理）。
+
+只动展板切片关两处：`Environment.ssao_radius` **1.35 → 0.75 m**、`BoardSun.shadow_normal_bias`
+**2.0 → 0.8**（新增行）。`ssao_intensity 2.8` / `power 2.0` / `detail 0.5` / `shadow_bias 0.03` /
+`directional_shadow_max_distance 45`、主光方向·能量·色温·天光·雾·曝光·辉光·DOF、几何/碰撞/导航全部未动。
+
+**尺度判断（不照抄庭院关参数）**：展板地面 46×50 m、结构件（根障 0.48 / 矮墙 0.80·1.60 / 棚柱 1.62）
+与庭院关同一套资产，视作同尺度同族；差异在机位——TP 距角色 1.53 m（庭院 1.63 m）、
+猫占屏高 **25.5%**，即特写更近。故以 0.75/0.8 为**起点候选**再按展板机位实测，而非直接采纳。
+
+**一次一类参数（vision 三问：咬住 / 黑块脏边 / 轮廓清晰）**
+
+| 步骤 | 菜单机位（`ravine_tp`） | 远景 overview | 根障 | 溪岸 |
+|---|---|---|---|---|
+| S1 只改 SSAO 半径 1.35→0.75 | 5/4/5 → **8/8/8** | **9.5/10**（无削薄/亮边/发飘） | 9/10（根障底部轻微变薄，无痤疮） | — |
+| S2 再加 shadow_normal_bias 2.0→0.8 | **8.5/10**（影脚分离消失） | 9.5/10 | 9/10 | 9/10 |
+
+四机位 **0 个新增阴影痤疮 / 黑块**。客观像素复核（System.Drawing 逐像素亮度）整体 |Δ| ≤0.70/255，
+差异集中在 AO 边缘带与阴影终止线（根部 `mean_abs` 4.53/4.92 但 >8/255 仅 17%/22%，属边缘带而非整片发白）。
+对比板 `Art/Probes/art16_compare/`（S1、S2、S2vs1 各 4 块），样张 `Art/Probes/art16_{before,s1,s2}/`。
+
+**菜单整体画面**：overview/远景一档专为防止 ART15 那个"远景被削薄"教训而拍，判读 9.5/10 未退化；
+根障底部与溪岸的 AO 略窄（记录项），未到"发飘/亮边"。
+
+**性能**（1280×720、vsync off、120 帧均值）：改前 **5.782 ms（173 fps）** → S1 5.616 → 最终
+**5.673 ms（176 fps）**，−1.9% 落在运行噪声内；60 fps 预算约 34%，无可感知代价，无回退档需求。
+回退：`ssao_radius` 改回 1.35（tscn 第 509 行 / 生成器第 572 行），删 `shadow_normal_bias = 0.8`
+（tscn 第 1251 行 / 生成器第 540 行）；**不整体重生成场景**。
+
+**portrait 不受影响**：`tool_render_board_portraits.gd` 自建环境（`ssao_radius = 0.3` + 独立 HDRI/三点灯），
+不读展板关 `WorldEnvironment`；`art09_portrait` 24/24 PASS，未重渲染已入库 portrait PNG。
+
+**回归（11 套 631 条断言 0 失败）**：帧契约 48、T011 229、T012 79、species_layout 59、
+art08_character 15、art02 72、art03 45、art08_board 9、art08_environment 9、art09_menu 42、
+art09_portrait 24；gameplay 断言零改动。截图走 `CaptureRun.ps1`（隐藏桌面、`visible_hits=0`、带渲染）。
+
+**仍未解决 / 待授权**：① 取证工具为构图把猫抬高 2 cm（`capsule_half_height + 0.02`，ART10 冻结构图遗留，
+物理上离地 2 cm），未改拍法——若要求"脚底严格贴地"需授权改机位注入；② 菜单实际 3D 背景是
+**庭院关**（`main_entry.gd` 的 `LEVEL_SCENE_PATH`），其接地由 ART15 负责，本任务只覆盖展板切片；
+③ 根障底部 AO 略窄属记录项，0.75 已在全局复核折中档，未再下调。
+**下一步**：等待负责人对展板特写接地观感复核；主线 T040 继续（另一会话）。
