@@ -356,13 +356,17 @@ func save_now(reason: StringName = &"manual") -> Dictionary:
 		if gs != null:
 			gs.call("sync_current_life", player.survival.state.to_dictionary(),
 				player.global_transform)
-	var res: Dictionary = sm.call("save_game", reason)
+	var res: Dictionary = sm.call("request_save", reason, true, true)
+	if String(res.get("status", "")) == "queued":
+		res = sm.call("flush_queue_now")
 	print("ENTRY|save|%s|ok=%s|revision=%d|status=%s" % [
 		String(reason), str(res.get("ok", false)), int(res.get("revision", 0)),
 		String(res.get("status", ""))
 	])
 	if not bool(res.get("ok", false)) and hud != null:
 		hud.show_toast("存档写入失败")
+	elif not String(res.get("warning", "")).is_empty() and hud != null:
+		hud.show_toast(String(res.get("warning", "")))
 	return res
 
 

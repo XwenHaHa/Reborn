@@ -363,13 +363,26 @@ API `time_of_day() / day_index()（0 起）/ is_daytime() / phase_name()` **全�
 `user://savegame_v1.json`（主档）+ `user://savegame_v1.json.bak`（上一版有效快照）。JSON 纯数据便于排查；
 `Transform3D/Vector3` 以 `{"$t":[...]}` / `{"$v":[...]}` 标记编码，其余只用 String/int/float/bool/Array/Dictionary。
 
-- **写入**：先写 `savegame_v1.json.tmp`（`flush` 后关闭）→ 把现有主档复制为 `.bak` → `rename_absolute(tmp, 主档)`
-  （Windows 覆盖改名失败时删除主档后重试一次，已有 `.bak` 可回退）。写完 `revision += 1`。
+**T038 写入队列（已实测；补充 T037 的同步写语义）**：
+- 所有生产保存经 `SaveManager.request_save()` 进单队列；主线程 `_process` 帧驱动，**不使用线程**
+  （快照 < 数百 KB，全部真源在主线程，线程只会带来深拷贝与锁的成本）。
+- 普通请求：`throttle_seconds=1.0`，窗口内多次请求合并为一次（`revision` 只 +1）；可被关键事务吸收丢弃。
+- 关键事务（死亡、`pending` 清空、发现、解锁、退出）：逐条同步写，不合并、不丢弃、不被后续普通请求插队；
+  退出 `_exit_tree` 通过 `flush_queue_now()` 绕过节流但仍串行。`MainEntry.save_now()` 保持立即语义。
+- 串行守卫：`_writing/active_writes`，任何失败路径均复位；`queue_stats()` 暴露长度、计数、`last_failure_reason`、
+  `last_warning`、写日志，`threaded=false`。
+
+- **写入**：先写 `savegame_v1.json.tmp`（`flush` 后关闭）→ 复制主档到 `.bak.tmp` 并轮换 `.bak`
+  （复制失败不阻断本次写，旧 `.bak` 保留并 warning）→ 主档改名 `.old` → `.tmp` 换入主档 → 删除 `.old`。
+  最终换名失败回滚 `.old` 为主档并清理 tmp，返回 `write_failed`（主档不被截断）。写完 `revision += 1`。
   重复保存幂等：除 `revision/saved_reason` 外内容一致（断言 F1/F4）。
+- **失败注入（仅测试）**：`fault_injection ∈ {tmp_open, disk_write, bak_copy, rename}`；写失败 Toast「存档写入失败」，
+  备份失败 warning「存档已保存（备份更新失败）」，失败后队列复位、后续请求继续。
 - **版本**：`save_version=1`；缺失/非整数/非有限 → `corrupt`；等值不匹配 → `version_mismatch`（**不隔离、不覆盖**）。
 - **损坏恢复**：解析失败或结构非法 → 主档改名 `.corrupt-<unix时间戳>`（不删除）→ 用 `.bak` 再校验；
   可用则 `recovered_backup`，否则 `corrupt`（不静默开新游戏）。字段缺失补默认并记 `repairs`；
   负数/超容量夹紧、非有限值回默认、坏条目跳过；`current_life` 与 `pending` 同时非空 → 清 `pending`。
+  **主档缺失但 `.bak` 有效** → `recovered_backup`（「主存档缺失，已从备份恢复」），兜底换名窗口崩溃。
 - **玩家可见**：修复载入 Toast「存档已修复 N 处后载入」；备份恢复「主存档损坏，已从备份恢复」；
   损坏无备份「存档损坏，已隔离；未载入」；版本不兼容「存档版本不兼容（vN），未载入」。
 - **自动存盘时机**：死亡结算（`pending` 写入，第 1 次）→ 结算页展示后清 `pending`（第 2 次）；

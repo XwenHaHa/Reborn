@@ -1,18 +1,19 @@
 extends Node
-## 存档持久化（T037）：快照组装、纯数据编码、校验修复、原子写与坏档恢复。
+## 存档持久化（T037 格式 + T038 写入队列）：快照组装、纯数据编码、校验修复、原子写与坏档恢复。
 ##
-## 依据：`Docs/TechnicalDesign.md` §3（`WorldSnapshot` 契约与校验规则）、§7；
-## `Docs/Tasks/T037.md`（D1～D10）；`Docs/Evidence/T036.md` §3（T036 逐字段审计结论）。
+## 依据：`Docs/TechnicalDesign.md` §3（`WorldSnapshot` 契约与校验规则）、§8；
+## `Docs/Tasks/T037.md`（D1～D10）、`Docs/Tasks/T038.md`（D1～D10）。
 ##
 ## 边界（D1）：
 ## - 本节点**只碰数据与文件**：不建角色、不碰关卡；读档后的场景重建在 `MainEntry.apply_saved_snapshot()`。
 ## - 存档落在 `user://`（单槽），不含个人目录、令牌或设备信息（D2）。
 ## - 根目录/测试可 `set_save_path()` 指向临时路径；真实档不会被测试触碰（D10）。
 ##
-## 文件布局（D2）：
+## 文件布局（D2/T038 D6）：
 ## - 主档 `user://savegame_v1.json`（JSON 文本）
-## - 上一版 `user://savegame_v1.bak`（每次成功覆盖前复制）
+## - 上一版 `user://savegame_v1.bak`（每次成功覆盖前复制；复制失败不阻断本次写）
 ## - 隔离坏档 `user://savegame_v1.corrupt-<unix>`（只改名，不删除）
+## - 写入临时 `*.tmp` / 替换中间 `*.old` / 备份中间 `*.bak.tmp`（失败路径全部清理）
 
 const SAVE_VERSION := 1
 const DEFAULT_PATH := "user://savegame_v1.json"
@@ -41,6 +42,46 @@ var last_message: String = ""
 var last_repairs: Array = []
 var last_reason: String = ""
 
+## T038 D4：普通保存节流窗口（秒）。关键事务/退出不受此限。
+var throttle_seconds: float = 1.0
+## T038 D7：仅测试设置；生产恒空。`tmp_open` / `disk_write` / `bak_copy` / `rename`。
+var fault_injection: String = ""
+## 最近一次备份失败（主档已写成功）的玩家文案；成功且无警告时清空。
+var last_warning: String = ""
+var last_failure_reason: String = ""
+var last_failure_message: String = ""
+var last_write_reason: String = ""
+
+# T038 D2/D3：单写入队列（主线程帧驱动，无线程）。
+var _pending_normal: bool = false
+var _pending_reason: StringName = &""
+var _critical_queue: Array[StringName] = []
+var _writing: bool = false
+var _active_writes: int = 0
+var _max_active_writes: int = 0
+var _last_normal_write_ms: int = -1000000
+var _write_log: Array[String] = []
+var _stats: Dictionary = {}
+
+
+func _ready() -> void:
+	set_process(false)
+
+
+## 队列统计（T038 D9）；`threaded=false` 明示本实现为主线程串行。
+func _reset_queue_state() -> void:
+	_pending_normal = false
+	_pending_reason = &""
+	_critical_queue.clear()
+	_writing = false
+	_active_writes = 0
+	_max_active_writes = 0
+	_last_normal_write_ms = -1000000
+	_write_log.clear()
+	_stats = {"queued": 0, "coalesced": 0, "dropped_normal": 0, "written": 0,
+		"failed": 0, "warnings": 0, "critical_written": 0}
+	set_process(false)
+
 
 func _headless() -> bool:
 	return DisplayServer.get_name() == "headless"
@@ -58,6 +99,12 @@ func set_save_path(path: String) -> void:
 	last_status = "none"
 	last_message = ""
 	last_repairs = []
+	last_warning = ""
+	last_failure_reason = ""
+	last_failure_message = ""
+	last_write_reason = ""
+	fault_injection = ""
+	_reset_queue_state()
 
 
 func backup_path() -> String:
@@ -120,62 +167,237 @@ func _collect_resources() -> Array:
 
 
 # ---------------------------------------------------------------------------
-# 写（D6：tmp → 备份 → 原子替换）
+# 写队列（T038 D2～D5）与原子写（T038 D6）
 # ---------------------------------------------------------------------------
 
-## 立即存档。返回 `{ok, status, path, revision, repairs}`。
-## 失败时旧主档与 `.bak` 保持不变，临时文件被清理。
+## 立即存档（底层同步 API，测试/工具用）。仍走单写守卫，返回 `{ok, status, ...}`。
 func save_game(reason: StringName = &"manual") -> Dictionary:
-	var result := {"ok": false, "status": "disabled", "path": save_path,
-		"revision": revision, "repairs": []}
-	last_repairs = []
-	last_reason = String(reason)
+	return _perform_write(reason, true)
+
+
+## 入队。`critical=true`：死亡/结算清空/发现/解锁/退出 —— 立即同步排空、不合并不丢弃；
+## 普通请求：帧驱动、节流窗口内合并。返回 `{queued, coalesced, status, revision, ...}`。
+func request_save(reason: StringName = &"manual", critical: bool = false,
+		bypass_throttle: bool = true) -> Dictionary:
 	if not is_active():
 		last_status = "disabled"
 		last_message = "存档写入已禁用（无头或工具环境）"
-		result["message"] = last_message
-		return result
+		return {"ok": false, "queued": false, "status": "disabled", "revision": revision,
+			"message": last_message}
+	if critical:
+		# 关键事务吸收尚未落盘的普通请求（普通请求可丢弃，关键不可）。
+		if _pending_normal:
+			_pending_normal = false
+			_stats["dropped_normal"] = int(_stats.get("dropped_normal", 0)) + 1
+		_stats["queued"] = int(_stats.get("queued", 0)) + 1
+		if _writing:
+			_critical_queue.append(reason)
+			return {"ok": false, "queued": true, "status": "queued", "revision": revision}
+		_critical_queue.append(reason)
+		return _drain_critical()
+	var coalesced := _pending_normal
+	if coalesced:
+		_stats["coalesced"] = int(_stats.get("coalesced", 0)) + 1
+	else:
+		_stats["queued"] = int(_stats.get("queued", 0)) + 1
+	_pending_normal = true
+	_pending_reason = reason
+	set_process(true)
+	if bypass_throttle:
+		return flush_queue_now()
+	return {"ok": false, "queued": true, "coalesced": coalesced,
+		"status": last_status, "revision": revision}
+
+
+## 立即排空队列（退出用）：先写 pending 普通，再按 FIFO 写关键；仍逐条串行。
+func flush_queue_now() -> Dictionary:
+	if not is_active():
+		return {"ok": false, "status": "disabled", "revision": revision}
+	var last: Dictionary = {"ok": false, "status": "none", "revision": revision}
+	if _pending_normal and not _writing:
+		var pending_reason := _pending_reason
+		_pending_normal = false
+		last = _perform_write(pending_reason, false)
+	if not _writing and not _critical_queue.is_empty():
+		last = _drain_critical()
+	return last
+
+
+func _drain_critical() -> Dictionary:
+	var last: Dictionary = {"ok": false, "status": "none", "revision": revision}
+	while not _critical_queue.is_empty():
+		if _writing:
+			break
+		var reason: StringName = _critical_queue.pop_front()
+		last = _perform_write(reason, true)
+	return last
+
+
+## 帧驱动：只在有普通请求且节流窗口到期时写一次（T038 D4/D5）。
+func _process(_delta: float) -> void:
+	if not _pending_normal:
+		set_process(false)
+		return
+	if _writing:
+		return
+	var now := Time.get_ticks_msec()
+	if now - _last_normal_write_ms < int(throttle_seconds * 1000.0):
+		return
+	var pending_reason := _pending_reason
+	_pending_normal = false
+	_perform_write(pending_reason, false)
+	if not _pending_normal:
+		set_process(false)
+
+
+## 单写守卫包装：任何路径都复位 `_writing/active_writes`，失败不锁死队列（D5/D9）。
+func _perform_write(reason: StringName, critical: bool) -> Dictionary:
+	if _writing:
+		if critical:
+			_critical_queue.push_front(reason)
+		else:
+			_pending_normal = true
+			_pending_reason = reason
+		return {"ok": false, "status": "busy", "queued": true, "revision": revision}
+	_writing = true
+	_active_writes += 1
+	_max_active_writes = maxi(_max_active_writes, _active_writes)
+	_write_log.append("start|%s" % String(reason))
+	var result := _write_snapshot(reason)
+	_active_writes -= 1
+	_writing = false
+	_write_log.append("end|%s|%s" % [String(reason), String(result.get("status", ""))])
+	last_reason = String(reason)
+	last_write_reason = String(reason)
+	if bool(result.get("ok", false)):
+		_stats["written"] = int(_stats.get("written", 0)) + 1
+		if critical:
+			_stats["critical_written"] = int(_stats.get("critical_written", 0)) + 1
+		last_status = "ok"
+		var warn := String(result.get("warning", ""))
+		last_warning = warn
+		last_message = warn
+		if warn != "":
+			_stats["warnings"] = int(_stats.get("warnings", 0)) + 1
+	else:
+		_stats["failed"] = int(_stats.get("failed", 0)) + 1
+		last_status = String(result.get("status", "write_failed"))
+		last_message = String(result.get("message", ""))
+		last_failure_reason = String(reason)
+		last_failure_message = last_message
+	if not critical:
+		_last_normal_write_ms = Time.get_ticks_msec()
+	return result
+
+
+## 真正的磁盘写入：tmp → 刷新 .bak → 主档换名（失败回滚）→ 成功才 `revision+1`。
+func _write_snapshot(reason: StringName) -> Dictionary:
+	last_repairs = []
 	var snap := build_snapshot(reason)
 	var text := JSON.stringify(snap)
 	var dir_path := save_path.get_base_dir()
 	if dir_path != "" and not DirAccess.dir_exists_absolute(dir_path):
 		DirAccess.make_dir_recursive_absolute(dir_path)
 	var tmp := tmp_path()
+	if fault_injection == "tmp_open":
+		return _write_fail("存档写入失败：无法创建临时文件（注入）")
+	_remove_if_exists(tmp)
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
-		last_status = "write_failed"
-		last_message = "存档写入失败：无法创建临时文件（%s）" % FileAccess.get_open_error()
-		result["status"] = last_status
-		result["message"] = last_message
-		return result
+		return _write_fail("存档写入失败：无法创建临时文件（%s）" % FileAccess.get_open_error())
 	f.store_string(text)
 	f.flush()
 	f.close()
+	if fault_injection == "disk_write":
+		_remove_if_exists(tmp)
+		return _write_fail("存档写入失败：磁盘写入失败（注入）")
+
+	var warning := ""
 	if FileAccess.file_exists(save_path):
-		_remove_if_exists(backup_path())
-		var copy_err := DirAccess.copy_absolute(save_path, backup_path())
-		if copy_err != OK:
-			# 备份失败不阻断写入（主档仍会被 tmp 替换），但记录一次修复日志。
-			last_repairs.append("backup_failed:%d" % copy_err)
-	var rename_err := DirAccess.rename_absolute(tmp, save_path)
-	if rename_err != OK:
-		# Windows 某些文件系统不支持覆盖改名：主档有备份，删除后重试一次（D6）。
-		_remove_if_exists(save_path)
+		warning = _refresh_backup()
+
+	# 主档替换：先改名到 .old，成功换入 tmp 后才删除；失败回滚（T038 D6）。
+	var old_path := save_path + ".old"
+	_remove_if_exists(old_path)
+	var had_main := FileAccess.file_exists(save_path)
+	if had_main:
+		var move_err := DirAccess.rename_absolute(save_path, old_path)
+		if move_err != OK:
+			_remove_if_exists(tmp)
+			return _write_fail("存档写入失败：无法替换主档（%d）" % move_err)
+	var rename_err := ERR_FILE_CANT_WRITE
+	if fault_injection != "rename":
 		rename_err = DirAccess.rename_absolute(tmp, save_path)
 	if rename_err != OK:
+		if had_main:
+			DirAccess.rename_absolute(old_path, save_path)
 		_remove_if_exists(tmp)
-		last_status = "write_failed"
-		last_message = "存档写入失败：无法替换主档（%d）" % rename_err
-		result["status"] = last_status
-		result["message"] = last_message
-		return result
+		return _write_fail("存档写入失败：无法替换主档（%d）" % rename_err)
+	if had_main:
+		_remove_if_exists(old_path)
 	revision += 1
-	last_status = "ok"
-	last_message = ""
-	last_reason = String(reason)
-	last_repairs = []
 	return {"ok": true, "status": "ok", "path": save_path, "revision": revision,
-		"repairs": [], "reason": String(reason)}
+		"reason": String(reason), "warning": warning, "repairs": [], "message": warning}
+
+
+## 刷新 `.bak`：复制主档到 `.bak.tmp`，再轮换旧 `.bak`。失败不阻断本次写（D6/D8）。
+func _refresh_backup() -> String:
+	var bak := backup_path()
+	var btmp := bak + ".tmp"
+	var bprev := bak + ".prev"
+	_remove_if_exists(btmp)
+	var copy_err := DirAccess.copy_absolute(save_path, btmp)
+	if fault_injection == "bak_copy":
+		copy_err = ERR_FILE_CANT_WRITE
+	if copy_err != OK:
+		_remove_if_exists(btmp)
+		last_repairs.append("backup_failed:%d" % copy_err)
+		return "存档已保存（备份更新失败）"
+	var moved_prev := false
+	if FileAccess.file_exists(bak):
+		if DirAccess.rename_absolute(bak, bprev) != OK:
+			_remove_if_exists(btmp)
+			return "存档已保存（备份更新失败）"
+		moved_prev = true
+	if DirAccess.rename_absolute(btmp, bak) != OK:
+		if moved_prev:
+			DirAccess.rename_absolute(bprev, bak)
+		_remove_if_exists(btmp)
+		return "存档已保存（备份更新失败）"
+	if moved_prev:
+		_remove_if_exists(bprev)
+	return ""
+
+
+func _write_fail(message: String) -> Dictionary:
+	return {"ok": false, "status": "write_failed", "path": save_path,
+		"revision": revision, "repairs": [], "message": message}
+
+
+## 队列可观测（T038 D9）；`threaded=false` 明示主线程串行实现。
+func queue_length() -> int:
+	return (1 if _pending_normal else 0) + _critical_queue.size()
+
+
+func pending_reasons() -> Array:
+	var out: Array = []
+	if _pending_normal:
+		out.append(String(_pending_reason))
+	for reason in _critical_queue:
+		out.append(String(reason))
+	return out
+
+
+func queue_stats() -> Dictionary:
+	var st: Dictionary = _stats.duplicate(true)
+	st["active_writes"] = _active_writes
+	st["max_active_writes"] = _max_active_writes
+	st["last_failure_reason"] = last_failure_reason
+	st["last_write_reason"] = last_write_reason
+	st["last_warning"] = last_warning
+	st["threaded"] = false
+	st["write_log"] = _write_log.duplicate()
+	return st
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +414,10 @@ func load_game() -> Dictionary:
 		return {"status": "disabled", "snapshot": {}, "repairs": [],
 			"message": "存档读取已禁用（无头或工具环境）"}
 	if not FileAccess.file_exists(save_path):
+		# T038 D6：主档缺失（替换窗口崩溃/被外部删除）但 `.bak` 有效 → 回退备份。
+		var res := _recover_missing_main()
+		if res.get("status") == "recovered_backup":
+			return res
 		last_status = "none"
 		return {"status": "none", "snapshot": {}, "repairs": [], "message": ""}
 	var parsed: Variant = _read_json(save_path)
@@ -225,6 +451,27 @@ func _read_json(path: String) -> Variant:
 	if text.is_empty():
 		return null
 	return JSON.parse_string(text)
+
+
+## 主档缺失但 `.bak` 存在：只在备份完整时回退，否则保持 none（T038 D6）。
+func _recover_missing_main() -> Dictionary:
+	if not FileAccess.file_exists(backup_path()):
+		return {"status": "none", "snapshot": {}, "repairs": [], "message": ""}
+	var parsed: Variant = _read_json(backup_path())
+	if parsed == null:
+		return {"status": "none", "snapshot": {}, "repairs": [], "message": ""}
+	var checked := validate(parsed)
+	if checked.get("status") != "ok":
+		return {"status": "none", "snapshot": {}, "repairs": [], "message": ""}
+	var snap: Dictionary = checked.get("snapshot", {})
+	revision = int(snap.get("revision", revision))
+	last_status = "recovered_backup"
+	last_repairs = checked.get("repairs", [])
+	last_message = "主存档缺失，已从备份恢复"
+	if not last_repairs.is_empty():
+		last_message += "（并修复 %d 处）" % last_repairs.size()
+	return {"status": "recovered_backup", "snapshot": snap,
+		"repairs": last_repairs, "message": last_message}
 
 
 ## 主档坏：改名隔离（不删除），尝试从 `.bak` 恢复。
