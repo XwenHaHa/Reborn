@@ -165,7 +165,7 @@ func _section_b_instantiate_by_ledger() -> void:
 # ---------------------------------------------------------------------------
 
 func _section_c_reconcile() -> void:
-	print("---- C active>total 收敛 ----")
+	print("---- C active>total 收敛（T040b：12 m 内不退场） ----")
 	var wd := _wd()
 	var probe: AnimalBody = await _spawn_probe_body(_mouse, _entry.player.global_position \
 		+ Vector3(2.0, 0.0, 0.0))
@@ -178,19 +178,38 @@ func _section_c_reconcile() -> void:
 		wd.has_method("reconcile_region_population"))
 	var rep: Dictionary = wd.call("reconcile_region_population", _entry.player.global_position) \
 		if wd.has_method("reconcile_region_population") else {}
-	_assert("C3_removed_excess", "≥1", str(rep.get("removed", 0)), int(rep.get("removed", 0)) >= 1)
-	_assert("C4_total_unchanged", "0", str(wd.call("region_total", &"Courtyard", MOUSE_ID)),
-		int(wd.call("region_total", &"Courtyard", MOUSE_ID)) == 0)
-	_assert("C5_active_zero", "0", str(wd.call("region_active_count", &"Courtyard", MOUSE_ID)),
-		int(wd.call("region_active_count", &"Courtyard", MOUSE_ID)) == 0)
-	_assert("C6_visible_risk_reported", "true", str(rep.get("visible_risk", [])),
-		(rep.get("visible_risk", []) as Array).size() >= 1)
-	await _advance_frames(2)
-	_assert("C7_body_retired", "invalid", str(is_instance_valid(probe)), not is_instance_valid(probe))
+	_assert("C3_near_retained", "removed=0,pending≥1",
+		"removed=%s pending=%s" % [rep.get("removed", -1), rep.get("pending_excess", -1)],
+		int(rep.get("removed", -1)) == 0 and int(rep.get("pending_excess", -1)) >= 1)
+	_assert("C4_near_body_valid", "true", str(is_instance_valid(probe)), is_instance_valid(probe))
+	_assert("C5_near_active_one", "1", str(wd.call("region_active_count", &"Courtyard", MOUSE_ID)),
+		int(wd.call("region_active_count", &"Courtyard", MOUSE_ID)) == 1)
+	var pending: Array = rep.get("pending_entries", []) as Array
+	_assert("C6_pending_reason", "within_visible_distance",
+		str(pending[0].get("reason", "")) if pending.size() > 0 else "<empty>",
+		pending.size() > 0 and String(pending[0].get("reason", "")) == "within_visible_distance")
 	var rep2: Dictionary = wd.call("reconcile_region_population", _entry.player.global_position) \
 		if wd.has_method("reconcile_region_population") else {}
-	_assert("C8_idempotent", "0", str(rep2.get("removed", -1)), int(rep2.get("removed", -1)) == 0)
-	_assert_consistency("C9_consistency")
+	_assert("C7_near_idempotent", "removed=0,pending≥1",
+		"removed=%s pending=%s" % [rep2.get("removed", -1), rep2.get("pending_excess", -1)],
+		int(rep2.get("removed", -1)) == 0 and int(rep2.get("pending_excess", -1)) >= 1)
+	probe.global_position = _entry.player.global_position + Vector3(0.0, 0.0, 13.0)
+	await _advance_frames(2)
+	var rep_far: Dictionary = wd.call("reconcile_region_population",
+		_entry.player.global_position) if wd.has_method("reconcile_region_population") else {}
+	_assert("C8_far_removed", "≥1", str(rep_far.get("removed", 0)),
+		int(rep_far.get("removed", 0)) >= 1)
+	_assert("C9_total_unchanged", "0", str(wd.call("region_total", &"Courtyard", MOUSE_ID)),
+		int(wd.call("region_total", &"Courtyard", MOUSE_ID)) == 0)
+	_assert("C10_active_zero", "0", str(wd.call("region_active_count", &"Courtyard", MOUSE_ID)),
+		int(wd.call("region_active_count", &"Courtyard", MOUSE_ID)) == 0)
+	_assert("C11_no_visible_removal", "visible_risk=0,pending=0",
+		"visible_risk=%s pending=%s" % [rep_far.get("visible_risk", []), rep_far.get("pending_excess", -1)],
+		(rep_far.get("visible_risk", []) as Array).size() == 0 \
+			and int(rep_far.get("pending_excess", -1)) == 0)
+	await _advance_frames(2)
+	_assert("C12_body_retired", "invalid", str(is_instance_valid(probe)), not is_instance_valid(probe))
+	_assert_consistency("C13_consistency")
 
 
 # ---------------------------------------------------------------------------

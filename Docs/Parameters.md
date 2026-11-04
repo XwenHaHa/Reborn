@@ -278,11 +278,21 @@
   （断言 D8）。猫 `interval=0` → **原型不自动增长**（快进任意时长不恢复，断言 D7）。
 - **捕获扣账（T035 D5）**：`report_capture` 幂等门内（首次真实结算）把受害者所属区域的 `total_count −1`（下限 0）并移出
   活动登记；重复上报不重复扣。**未登记个体**（测试夹具/临时身体）只走全局捕获账本，区域账不动——既有套件的夹具捕获零影响。
-- **死亡不扣账（TD §3 明文口径）**：`total_count` 含已实例化与未实例化个体，**实例化/销毁表现不改变它**；只有捕获扣。
-  自然死亡个体的"下次重建复活"怪癖已记录给负责人（`Docs/Tasks/T035.md` §9），不擅自加规则。
+- **自然死亡扣账（T040b，改 T035 D6；负责人 2026-11-04 口头定）**：
+  **旧口径** = "自然死亡不扣账，只有捕获扣"（TD §3 原意 + T035 D6 + 本文旧版明文；后果是自然死亡个体在下次读档/重生时复活）。
+  **新口径** = 非捕获的真实个体死亡（AI/伤害致死、超时清退、系统回收为死亡）按 `source_id` **幂等**扣所属区域
+  `total_count −1`（下限 0），并与捕获扣账互斥、不重复计数；**表现退场**（`reconcile_region_population` 的超额退场、
+  `EcologySpawner.clear()` 的读档清场、重生重建）**不扣**。死亡**不改变已有 `next_recover_at`**；记录原本满容量
+  （`next_recover_at=0`）时，死亡造成的空额由既有 `region_population_advance_to()` 按 `recover_interval` 起算。
+  读档/重生只按新 `total_count` 重建，不再复活自然死亡个体（`Docs/Evidence/T040b.md`）。
+- **12 m 内不退场（T040b，改 T040 D1；负责人 2026-11-04 口头定）**：
+  `reconcile_region_population()` 只移除距玩家 **>12 m** 的超额个体；≤12 m 的个体一律保留，仍 `active > total` 时
+  在 `last_reconcile` 记 `pending_excess / pending_entries`（`reason="within_visible_distance"`），不硬收。
+  重试时机：捕获、自然死亡、读档/重生后立即调用；玩家走远后由 `MainEntry` 每 60 物理帧检查 pending 重试。
+  **old = 无**（T040 旧规则按“距玩家最远”移除，允许移除 2 m 内个体）→ **new = 12 m**。
 - **活动登记 = 表现层**：`region_active_count` = 登记且实例有效且未死未捕获；正式初始状态不变式 **active ≤ total**
   （断言 B7）。布置器（T027）落点按 `level_regions` 矩形反查区域后登记；**布置计数仍按 T027 契约**（猫玩家 2 鼠 / 鼠玩家 1 猫），
-  按账本实例化身体属 T040——捕获/重世后的过渡态可能出现 active>total，T040 收口。
+  按账本实例化身体属 T040——捕获/重生后的过渡态可能出现 active>total，T040b 按 12 m 保留口径收口。
 - **快照与重建（T035 D7）**：`region_population_snapshot()`（TD §3 `WorldSnapshot.regions` 元素形状）+
   `restore_region_population()`：数量/下次恢复时刻从快照恢复，**容量与恢复间隔是配置数据、不从快照恢复**；未知区域/物种跳过、
   负数钳 0、超容量钳容量、非有限整条回初始（TD §8 读档校验口径）。真实读档属 T037+。

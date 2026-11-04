@@ -891,9 +891,13 @@ func _on_survival_changed(state: SurvivalState) -> void:
 
 
 ## 死亡同样中断（交互不能跨死亡继续）
-func _on_survival_died(_reason: StringName) -> void:
+func _on_survival_died(reason: StringName) -> void:
 	if interaction != null and interaction.is_interacting():
 		interaction.release_interact(&"died")
+	# T040b：真实死亡才扣区域账本；玩家/未登记个体/已捕获个体由 WorldDirector 自行忽略。
+	var wd := get_node_or_null("/root/WorldDirector")
+	if wd != null and wd.has_method("report_natural_death"):
+		wd.call("report_natural_death", self, reason)
 
 
 

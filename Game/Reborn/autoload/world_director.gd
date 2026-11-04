@@ -56,6 +56,8 @@ func reset_for_new_game() -> void:
 	_region_rects = {}
 	_region_initials = {}
 	region_population_initialized = false
+	natural_death_recorded = {}
+	last_natural_death = {}
 
 
 ## 当前世界时间（秒）——**统一时间入口**。
@@ -82,6 +84,10 @@ func emit_noise(source_id: String, position: Vector3, loudness: float) -> void:
 
 ## 成功捕获广播（T021；`Docs/TechnicalDesign.md` §7 捕获流程）。每次**真实结算**只发一次。
 signal capture_reported(captor_id: String, target_id: String, position: Vector3, world_time: float)
+
+## T040b：自然死亡成功扣账广播（同一 source_id 只发一次；未登记个体不发）。
+signal region_natural_death(body_id: String, region_id: String, species_id: String,
+		reason: StringName, world_time: float)
 
 ## 本次运行成功结算的捕获次数（诊断/断言用；被拒绝的重复上报不计入）
 var capture_count: int = 0
@@ -118,6 +124,43 @@ func report_capture(captor_id: String, target_id: String, position: Vector3,
 ## 该目标是否已被结算过捕获（T021）
 func is_captured(target_id: String) -> bool:
 	return captured_target_ids.has(target_id)
+
+
+## T040b：自然死亡扣账。只对**仍登记且未捕获**的个体扣一次；同一 `source_id` 幂等。
+## 非死亡退场（收敛退场/读档清场/重生重建）不得调用本函数。
+## 死亡**不修改** `next_recover_at`（已有恢复计时保持不变）。
+func report_natural_death(body: Node, reason: StringName = &"natural") -> Dictionary:
+	var source_id := ""
+	if body != null and is_instance_valid(body) and body.has_method("source_id"):
+		source_id = String(body.call("source_id"))
+	var no := {
+		"registered": false, "source_id": source_id, "reason": String(reason),
+		"total_before": 0, "total_after": 0, "active_before": 0, "active_after": 0,
+		"next_recover_at": 0.0, "duplicate": false,
+	}
+	if source_id.is_empty():
+		no["reason"] = "empty_source"
+		last_natural_death = no
+		return no
+	if natural_death_recorded.has(source_id):
+		no["duplicate"] = true
+		no["reason"] = "duplicate"
+		last_natural_death = no
+		return no
+	if body is AnimalBody and bool((body as AnimalBody).get("captured")):
+		no["reason"] = "captured"
+		last_natural_death = no
+		return no
+	var rep := _deduct_region_for_death(source_id)
+	rep["source_id"] = source_id
+	rep["reason"] = String(reason)
+	rep["duplicate"] = false
+	last_natural_death = rep
+	if bool(rep.get("registered", false)):
+		natural_death_recorded[source_id] = true
+		region_natural_death.emit(source_id, String(rep.get("region_id", "")),
+			String(rep.get("species_id", "")), reason, get_world_time())
+	return rep
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +226,10 @@ var region_population_initialized: bool = false
 var last_reconcile: Dictionary = {}
 ## T040：最近一次捕获的账本事务观测（total/active 前后值、是否登记过、是否重复）。
 var last_capture_ledger: Dictionary = {}
+## T040b：已按自然死亡扣过账的 `source_id`（同一死亡事件只扣一次）。
+var natural_death_recorded: Dictionary = {}
+## T040b：最近一次自然死亡的账本观测。
+var last_natural_death: Dictionary = {}
 
 
 func _region_key(region_id: StringName, species_id: StringName) -> String:
@@ -333,20 +380,24 @@ func ledger_consistency() -> Array[Dictionary]:
 	return out
 
 
-## T040 收敛：对每个 `active > total` 的键，移除**距玩家最远**的活动个体直到 `active == total`。
-## **账本 `total_count` 不动**；被移除的身体 `queue_free` 并按登记顺序注销。
-## 返回 `{removed, entries, visible_risk, reason}`；重复调用幂等。
+## T040b 收敛：对每个 `active > total` 的键，只移除**距玩家 > `visible_distance`** 的
+## 最远个体；≤12 m 的个体一律保留，仍超量则写 `pending_excess`，等玩家走远或后续事件重试。
+## **账本 `total_count` 不动**（收敛退场不是自然死亡）；被移除的身体 `queue_free` 并注销登记。
+## 返回 `{removed, entries, visible_risk, pending_excess, pending_entries, reason}`。
 func reconcile_region_population(player_position: Vector3 = Vector3.ZERO,
 		visible_distance: float = 12.0) -> Dictionary:
 	var removed: Array[Dictionary] = []
 	var visible: Array[Dictionary] = []
+	var pending_entries: Array[Dictionary] = []
+	var pending_excess := 0
 	for key in region_records:
 		var rec: Dictionary = region_records[key]
 		var rid := StringName(String(rec.get("region_id", "")))
 		var sid := StringName(String(rec.get("species_id", "")))
 		var arr: Array = region_active_bodies.get(key, [])
-		while _active_registry_count(arr) > int(rec.get("total_count", 0)):
-			var victim := _farthest_active_entry(arr, player_position)
+		var total := int(rec.get("total_count", 0))
+		while _active_registry_count(arr) > total:
+			var victim := _farthest_active_entry_beyond(arr, player_position, visible_distance)
 			if victim.is_empty():
 				break
 			var body := instance_from_id(int(victim["instance_id"]))
@@ -364,11 +415,23 @@ func reconcile_region_population(player_position: Vector3 = Vector3.ZERO,
 				if body is Node:
 					(body as Node).name = "%s_ledger_retired" % (body as Node).name
 				body.queue_free()
+		var remain := _active_registry_count(arr) - total
+		if remain > 0:
+			pending_excess += remain
+			pending_entries.append({
+				"region_id": String(rid), "species_id": String(sid),
+				"count": remain,
+				"nearest_distance": _nearest_active_distance(arr, player_position),
+				"reason": "within_visible_distance",
+			})
 	var report := {
 		"removed": removed.size(),
 		"entries": removed,
 		"visible_risk": visible,
-		"reason": "active_gt_total",
+		"pending_excess": pending_excess,
+		"pending_entries": pending_entries,
+		"reason": "pending_within_visible_distance" if pending_excess > 0 \
+			else ("active_gt_total" if removed.size() > 0 else "none"),
 	}
 	last_reconcile = report
 	return report
@@ -404,6 +467,38 @@ func _farthest_active_entry(arr: Array, player_position: Vector3) -> Dictionary:
 			best_d = d
 			best = e
 	return best
+
+
+## T040b：只在 `distance > visible_distance` 的活动个体里取最远者；都太近 → 返回空。
+func _farthest_active_entry_beyond(arr: Array, player_position: Vector3,
+		visible_distance: float) -> Dictionary:
+	var best: Dictionary = {}
+	var best_d := -INF
+	for e in arr:
+		var b := instance_from_id(int(e.get("instance_id", 0)))
+		var ab := b as AnimalBody
+		if ab == null or bool(ab.get("captured")):
+			continue
+		if ab.survival != null and ab.survival.is_dead():
+			continue
+		var d := ab.global_position.distance_to(player_position)
+		if d > visible_distance and d > best_d:
+			best_d = d
+			best = e
+	return best
+
+
+func _nearest_active_distance(arr: Array, player_position: Vector3) -> float:
+	var best := INF
+	for e in arr:
+		var b := instance_from_id(int(e.get("instance_id", 0)))
+		var ab := b as AnimalBody
+		if ab == null or bool(ab.get("captured")):
+			continue
+		if ab.survival != null and ab.survival.is_dead():
+			continue
+		best = minf(best, ab.global_position.distance_to(player_position))
+	return best if is_finite(best) else -1.0
 
 
 
@@ -509,6 +604,42 @@ func _deduct_region_for_capture(target_id: String) -> Dictionary:
 				}
 	return {"registered": false, "region_id": "", "species_id": "",
 		"total_before": 0, "total_after": 0, "active_before": 0, "active_after": 0}
+
+
+## T040b 自然死亡扣账：与捕获扣账同事务（扣 total + 移除登记）。
+## 与 `_deduct_region_for_capture` 的差异：不改 `next_recover_at`；未登记不扣。
+func _deduct_region_for_death(target_id: String) -> Dictionary:
+	for key in region_active_bodies:
+		var arr: Array = region_active_bodies[key]
+		for i in range(arr.size()):
+			if String(arr[i]["source_id"]) == target_id:
+				var rec: Dictionary = region_records.get(key, {})
+				var total_before := int(rec.get("total_count", 0))
+				# 死亡信号到达时身体已标记 dead，`region_active_count` 会跳过它；
+				# 事务观测的“之前”应把这个正在死亡的登记个体算回去。
+				var active_before := region_active_count(
+					StringName(String(rec.get("region_id", ""))),
+					StringName(String(rec.get("species_id", "")))) + 1
+				if not rec.is_empty():
+					rec["total_count"] = maxi(0, total_before - 1)
+				arr.remove_at(i)
+				var total_after := int(rec.get("total_count", 0))
+				var active_after := region_active_count(
+					StringName(String(rec.get("region_id", ""))),
+					StringName(String(rec.get("species_id", ""))))
+				return {
+					"registered": true,
+					"region_id": String(rec.get("region_id", "")),
+					"species_id": String(rec.get("species_id", "")),
+					"total_before": total_before,
+					"total_after": total_after,
+					"active_before": active_before,
+					"active_after": active_after,
+					"next_recover_at": float(rec.get("next_recover_at", 0.0)),
+				}
+	return {"registered": false, "region_id": "", "species_id": "",
+		"total_before": 0, "total_after": 0, "active_before": 0, "active_after": 0,
+		"next_recover_at": 0.0}
 
 
 ## 快照（进 TD §3 `WorldSnapshot.regions`）。纯数据、无 Node 引用。

@@ -148,7 +148,10 @@ class_name SpeciesConfig extends Resource
 - `ResourceRecord`：`id`(String)、`region_id`、`kind`、`food_type`、`units`、`capacity`、`next_refill_at`、`refill_interval`、`transform`、`expire_at`（0 表示不失效）
   - 水点无限饮水、不储存可扣 `units`，仍有稳定 ID
 - `RegionRecord`：`region_id`、`species_id`、`total_count`、`capacity`、`next_recover_at`、`recover_interval`
-  - **`total_count` 包含已实例化与未实例化个体**；实例化/销毁表现不改变它
+  - **`total_count` 包含已实例化与未实例化个体**；实例化/销毁**表现**不改变它
+  - **T040b 修订（负责人 2026-11-04 口头定）**：真实个体自然死亡（伤害致死、AI 死亡、超时清退、系统回收为死亡）
+    按 `source_id` 幂等扣 `total_count`（下限 0），与捕获扣账互斥；`reconcile` 超额退场、读档清场、重生重建等**表现退场不扣**。
+    旧口径“自然死亡不扣账、读档后复活”作废（见 `Docs/Parameters.md` 与 `Docs/Evidence/T040b.md`）
 - `CurrentLife`：`life_id`、`species_id`、`life_state`、`transform`、`survival`、`spawn_world_time`、`last_safe_spot_id`、`current_events`、`current_discovered_ids`
 - `WorldSnapshot`：`save_version`(=1)、`revision`(int)、`world_time`、`resources`、`regions`、`discovered_ids`、`unlocked_species`、`life_records`、`current_life`、`pending_settlement_life_id`
   - **T037 实现扩展**（只增不改，便于诊断/ID 单调）：`events`、`life_counter`、`event_seq`、`saved_reason`（只写不读）

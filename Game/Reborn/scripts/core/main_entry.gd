@@ -42,6 +42,8 @@ const SELECT_ACTIONS: Array[StringName] = [ACTION_SELECT_1, ACTION_SELECT_2]
 @export var test_mode: bool = false
 ## 结算/选物种界面文字刷新间隔（帧）。
 @export var status_refresh_frames: int = 10
+## T040b：`last_reconcile.pending_excess > 0` 时的低频重试间隔（物理帧 ≈ 1 s @60 Hz）。
+const RECONCILE_RETRY_FRAMES := 60
 ## 生态：每个物种的 NPC 数（按 `can_attack` 分派：捕食者少、猎物多）。
 @export var prey_npc_count: int = 2
 @export var predator_npc_count: int = 1
@@ -84,6 +86,7 @@ var _last_thirst := NAN
 var _npcs_wired: Array[AnimalBody] = []
 var _last_record: Dictionary = {}
 var _wd_capture_hooked := false
+var _wd_death_hooked := false
 ## 启动读档结果（T037）：快照在校验通过后暂存，等关卡/HUD 建好再按 D8 顺序应用。
 var _loaded_snapshot: Dictionary = {}
 var _load_status: String = "none"
@@ -155,6 +158,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	if status_refresh_frames > 0 and _frame % status_refresh_frames == 0:
 		_refresh_status()
+	# T040b：玩家走远后的低频收敛重试（只有存在 pending_excess 时才调用）。
+	if _frame % RECONCILE_RETRY_FRAMES == 0:
+		_retry_pending_reconcile()
 
 
 # ---------------------------------------------------------------------------
@@ -902,6 +908,11 @@ func _spawn_player(species_id: StringName) -> void:
 		if wd != null and wd.has_signal("capture_reported"):
 			wd.connect("capture_reported", _on_capture_reported)
 			_wd_capture_hooked = true
+	if not _wd_death_hooked:
+		var wdd := _wd()
+		if wdd != null and wdd.has_signal("region_natural_death"):
+			wdd.connect("region_natural_death", _on_region_natural_death)
+			_wd_death_hooked = true
 
 	if ecology != null and is_instance_valid(ecology):
 		ecology.candidates = _configs
@@ -974,6 +985,37 @@ func _on_capture_reported(captor_id: String, target_id: String, position: Vector
 	var wd := _wd()
 	if wd != null and wd.has_method("reconcile_region_population"):
 		wd.call("reconcile_region_population", player.global_position)
+
+
+## T040b：自然死亡扣账后立即尝试收敛（若之前有近处保留的超额，这里可能仍保留）。
+func _on_region_natural_death(_body_id: String, _region_id: String, _species_id: String,
+		_reason: StringName, _world_time: float) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	var wd := _wd()
+	if wd != null and wd.has_method("reconcile_region_population"):
+		wd.call("reconcile_region_population", player.global_position)
+
+
+## T040b：玩家走远后由低频重试收敛；没有 pending 时完全不碰账本。
+func _retry_pending_reconcile() -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	var wd := _wd()
+	if wd == null or not wd.has_method("reconcile_region_population"):
+		return
+	var raw = wd.get("last_reconcile")
+	if not (raw is Dictionary):
+		return
+	var last: Dictionary = raw
+	if int(last.get("pending_excess", 0)) <= 0:
+		return
+	var rep_raw = wd.call("reconcile_region_population", player.global_position)
+	var rep: Dictionary = rep_raw if rep_raw is Dictionary else {}
+	if int(rep.get("removed", 0)) > 0:
+		print("ENTRY|reconcile_retry|removed=%d|pending=%d|player=%s" % [
+			int(rep.get("removed", 0)), int(rep.get("pending_excess", 0)),
+			player.global_position])
 
 
 ## NPC 追击结束：猎物还活着且就是玩家 → 记一次逃脱（策划 §9.5 的"逃脱"）。
