@@ -355,13 +355,15 @@
 | 参数 | 旧值 | 新值 | 作用（展板猫占屏 25.5%、脚下 0.31 m） | 回退位置 |
 |---|---:|---:|---|---|
 | `Environment.ssao_radius` | 1.35 m | **0.75 m** | 1.35 m 在特写下把脚底糊成灰圈；0.75 m 与庭院关同值（场景/结构同尺度，机位更近），vision 三问 5/4/5 → 8/8/8，远景 9.5/10、根障 9/10 | tscn 第 509 行；生成器第 572 行 |
-| `DirectionalLight3D.shadow_normal_bias`（BoardSun） | 2.0（默认） | **0.8** | 阴影根部贴回脚掌，消除"影子离脚"；最终档接地 8.5/10，四机位无痤疮/黑块 | tscn 第 1251 行（删该行即回默认）；生成器第 540 行 |
+| `DirectionalLight3D.shadow_normal_bias`（BoardSun） | 2.0（默认） | **0.6** | 阴影根部贴回脚掌，消除"影子离脚"；取证抬升纠偏后重测，0.8→0.7→0.6 接地逐档变实（0.6 对比 9/8.5/8.5，根障机位 0 新增痤疮/黑块） | tscn 第 1251 行（删该行即回默认）；生成器第 540 行 |
 
 `ssao_intensity 2.8`、`ssao_power 2.0`、`ssao_detail 0.5`、`shadow_bias 0.03`、
 `directional_shadow_max_distance 45` 均保持原值；`tonemap_exposure 0.92`、`glow_hdr_threshold 1.30` 未动。
-实测帧时间（120 帧均值）：改前 **5.782 ms（173 fps）** → S1 5.616 → 最终 **5.673 ms（176 fps）**，
-差 −1.9%（噪声内），60 fps 预算占用约 34%，无可感知代价。
+实测帧时间（120 帧均值）：改前 **5.782 ms（173 fps）** → S1 5.616 → S2 5.673 → 纠偏后最终 **5.704 ms（175 fps）**，
+差在 ±2% 运行噪声内，60 fps 预算占用约 34%，无可感知代价。
 **portrait 图不受影响**：`tool_render_board_portraits.gd` 自建环境（`ssao_radius = 0.3`、独立 HDRI 与灯光），
 不读展板关的 `WorldEnvironment`。
-判读机位、像素统计与未解决项（拍照机位把猫抬高 2 cm，ART10 冻结构图）见
-`Docs/Evidence/ART16_MENU_BOARD_GROUNDING.md`。
+**取证抬升纠偏（2026-11-04）**：旧取证工具把猫脚底摆在 0.12 m（真实地面 0.10 m）之上 2 cm，
+已改为精确接触（`GROUNDING|gap_mm=0.0`）。该偏移**只存在于取证工具**，未进本表；
+登记与回退位置见 `Docs/Evidence/ART16_MENU_BOARD_GROUNDING.md` §10 与 `tests/tool_capture_art09_board.gd` 第 111–116 / 124 行注释。
+判读机位、像素统计与其他未解决项见 `Docs/Evidence/ART16_MENU_BOARD_GROUNDING.md`。

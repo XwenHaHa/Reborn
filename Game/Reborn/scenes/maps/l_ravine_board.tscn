@@ -1248,7 +1248,7 @@ light_color = Color(1, 0.83, 0.6, 1)
 light_energy = 1.6
 shadow_enabled = true
 shadow_bias = 0.03
-shadow_normal_bias = 0.8
+shadow_normal_bias = 0.6
 directional_shadow_max_distance = 45.0
 
 [node name="BoardSkyFill" type="DirectionalLight3D" parent="." unique_id=38048248]

@@ -108,7 +108,12 @@ func _spawn_cat(parent: Node3D, at: Vector3) -> AnimalBody:
 	body.species_config = cfg
 	body.player_controlled = false
 	body.make_camera_current = false
-	body.position = at + Vector3(0.0, cfg.capsule_half_height + 0.02, 0.0)
+	# ART16 纠偏（2026-11-04）：旧版是 `capsule_half_height + 0.02`，把猫脚底摆在 0.12 m、
+	# 地面顶（生成器 GroundTop = 0.10）之上 2 cm——**只存在于本取证工具**，场景里没有角色节点。
+	# 现改为精确接触：脚底 = 胶囊中心 − 半高 = 锚点 y（0.10）= 地面顶。回退：把下面两处
+	# `+ 0.02` 加回（改为 `cfg.capsule_half_height + 0.02`）即可，行号见证据 §10。
+	var spawn_y := at.y + cfg.capsule_half_height
+	body.position = Vector3(at.x, spawn_y, at.z)
 	# 面朝 −Z（Godot 前方）：动物模型本身面朝 −Z，rotation 0 就是朝溪谷
 	body.rotation_degrees = Vector3.ZERO
 	parent.add_child(body)
@@ -116,9 +121,14 @@ func _spawn_cat(parent: Node3D, at: Vector3) -> AnimalBody:
 	await process_frame
 	body.set_physics_process(false)
 	body.velocity = Vector3.ZERO
-	body.position = at + Vector3(0.0, cfg.capsule_half_height + 0.02, 0.0)
+	body.position = Vector3(at.x, spawn_y, at.z)
 	for i in SETTLE:
 		await process_frame
+	# 客观接地量：脚底 = 中心 − 半高；地面顶是生成器常量 0.10（展板关零碰撞，无法射线取面）
+	var foot_y := body.global_position.y - cfg.capsule_half_height
+	print("GROUNDING|anchor_y=%.3f|body_y=%.3f|foot_y=%.3f|ground_top=0.100|gap_mm=%.1f" % [
+		at.y, body.global_position.y, foot_y, (foot_y - 0.10) * 1000.0,
+	])
 	print("CAP|ravine|subject=%s|pos=%s" % [String(cfg.species_id), body.global_position])
 	return body
 
