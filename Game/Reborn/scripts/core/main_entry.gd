@@ -15,6 +15,7 @@ const BODY_SCENE_PATH := "res://scenes/characters/animal_body.tscn"
 const HUD_SCENE_PATH := "res://scenes/ui/hud.tscn"
 const RESOURCE_SCENE_PATH := "res://scenes/world/resource_point.tscn"
 const SPECIES_DIR := "res://resources/species"
+const PlacementSafetyLib = preload("res://scripts/world/placement_safety.gd")
 
 ## 菜单展示区（ART04）：溪东岸的干燥地。相机与展示模型都**相对这个点**摆位，
 ## 关卡几何若变，只改这里并重新取景验证（`Docs/Evidence/ART04.md` §取景）。
@@ -184,6 +185,25 @@ func select_species(species_id: StringName) -> bool:
 ## T039 D9：双坏隔离后本会话是否被阻断。
 func is_load_blocked() -> bool:
 	return _load_blocked
+
+
+## T040：最近一次玩家落点解析结果（`{ok, position, reason, fallback, region_id, desired}`）。
+var last_position_resolution: Dictionary = {}
+
+
+## T040：读档/重生落点解析（合法原样返回；非法按最近导航点 → 区域中心 → 出生标记 → 原点回退）。
+func resolve_safe_player_position(cfg: SpeciesConfig, desired: Vector3) -> Dictionary:
+	if cfg == null:
+		return {"ok": false, "position": desired, "reason": "no_config", "fallback": false}
+	var resolved := PlacementSafetyLib.resolve_player_position(self, cfg, desired) as Dictionary
+	last_position_resolution = resolved
+	if not bool(resolved.get("fallback", false)):
+		return resolved
+	print("ENTRY|position_fallback|species=%s|from=%s|to=%s|reason=%s|region=%s" % [
+		String(cfg.species_id), str(desired), str(resolved.get("position", desired)),
+		String(resolved.get("reason", "")), String(resolved.get("region_id", "")),
+	])
+	return resolved
 
 
 func lifecycle_state_name() -> String:
@@ -436,6 +456,12 @@ func apply_saved_snapshot(snapshot: Dictionary, restore_life: bool = true) -> bo
 			int(report.get("restored", 0)), str(report.get("skipped", [])),
 			str(report.get("repaired", []))
 		])
+		# T040：账本恢复后立刻收敛旧会话遗留的 `active > total`（读档后重建生态前也要成立）。
+		if wd.has_method("reconcile_region_population"):
+			var anchor := Vector3.ZERO
+			if player != null and is_instance_valid(player):
+				anchor = player.global_position
+			wd.call("reconcile_region_population", anchor)
 	_apply_resources(snapshot.get("resources", []))
 	var gs := _game_state()
 	if gs != null:
@@ -523,10 +549,17 @@ func _spawn_restored_player(cfg: SpeciesConfig, life: Dictionary) -> void:
 	level.add_child(body)
 	var xform: Variant = life.get("transform")
 	if xform is Transform3D:
-		body.global_transform = xform
+		var xf: Transform3D = xform
+		var resolved := resolve_safe_player_position(cfg, xf.origin)
+		var xf_pos: Vector3 = resolved.get("position", xf.origin)
+		xf.origin = xf_pos
+		body.global_transform = xf
 	else:
 		var pos: Variant = life.get("start_position")
-		body.global_position = pos if pos is Vector3 else _spawn_position(cfg)
+		var desired: Vector3 = pos if pos is Vector3 else _spawn_position(cfg)
+		var resolved2 := resolve_safe_player_position(cfg, desired)
+		var desired_pos: Vector3 = resolved2.get("position", desired)
+		body.global_position = desired_pos
 	_apply_settings_to(body)
 	body.velocity = Vector3.ZERO
 	if body.climb != null:
@@ -555,6 +588,9 @@ func _spawn_restored_player(cfg: SpeciesConfig, life: Dictionary) -> void:
 		ecology.candidates = _configs
 		ecology.setup(body, body.global_position)
 		_wire_npc_events()
+		var wd := _wd()
+		if wd != null and wd.has_method("reconcile_region_population"):
+			wd.call("reconcile_region_population", body.global_position)
 	_refresh_status()
 	print("ENTRY|restored|%s|life=%s|pos=%s" % [
 		String(cfg.species_id), String(life.get("life_id", "")), str(body.global_position)
@@ -839,6 +875,9 @@ func _spawn_player(species_id: StringName) -> void:
 	_dismiss_menu()
 	level.add_child(body)
 	var spawn := _spawn_position(cfg)
+	var resolved := resolve_safe_player_position(cfg, spawn)
+	var resolved_pos: Vector3 = resolved.get("position", spawn)
+	spawn = resolved_pos
 	body.global_position = spawn
 	_apply_settings_to(body)
 	body.velocity = Vector3.ZERO
@@ -868,6 +907,9 @@ func _spawn_player(species_id: StringName) -> void:
 		ecology.candidates = _configs
 		ecology.setup(body, spawn)
 		_wire_npc_events()
+		var wd := _wd()
+		if wd != null and wd.has_method("reconcile_region_population"):
+			wd.call("reconcile_region_population", spawn)
 	_refresh_status()
 	print("ENTRY|spawn|%s|life=%s|pos=%s|npc=%d" % [
 		String(species_id), lifecycle.life_id, str(spawn), npc_count()
@@ -927,6 +969,11 @@ func _on_capture_reported(captor_id: String, target_id: String, position: Vector
 	lifecycle.notify_event(&"capture", {
 		"target": target_id, "position": position, "world_time": world_time,
 	})
+	# T040：捕获扣账已在 `report_capture` 同一次调用内完成；这里再收敛一次，
+	# 保证其他历史超额（如读档前遗留）也不会让 `active > total` 跨帧存在。
+	var wd := _wd()
+	if wd != null and wd.has_method("reconcile_region_population"):
+		wd.call("reconcile_region_population", player.global_position)
 
 
 ## NPC 追击结束：猎物还活着且就是玩家 → 记一次逃脱（策划 §9.5 的"逃脱"）。

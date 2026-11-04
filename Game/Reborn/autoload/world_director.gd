@@ -98,12 +98,19 @@ var captured_target_ids: Dictionary = {}
 ## 返回 false = 早就结算过（或 target_id 为空），**不改任何计数、不发信号**（TechnicalDesign §7"检查未记账"）。
 func report_capture(captor_id: String, target_id: String, position: Vector3,
 		world_time: float = -1.0) -> bool:
-	if target_id.is_empty() or captured_target_ids.has(target_id):
+	if target_id.is_empty():
+		last_capture_ledger = {"registered": false, "duplicate": false, "reason": "empty_target"}
+		return false
+	if captured_target_ids.has(target_id):
+		last_capture_ledger = {"registered": false, "duplicate": true, "target": target_id}
 		return false
 	var t: float = world_time if world_time >= 0.0 else get_world_time()
 	captured_target_ids[target_id] = true
 	capture_count += 1
-	_deduct_region_for_capture(target_id)   # T035：区域账扣一次（幂等门内，重复上报不会再扣）
+	# T040：账本扣减与活动登记移除在**同一次调用**内完成；返回报告用于断言/观测。
+	last_capture_ledger = _deduct_region_for_capture(target_id)
+	last_capture_ledger["target"] = target_id
+	last_capture_ledger["duplicate"] = false
 	capture_reported.emit(captor_id, target_id, position, t)
 	return true
 
@@ -172,6 +179,10 @@ var _region_rects: Dictionary = {}
 var _region_initials: Dictionary = {}
 ## 账本是否已按当前关卡区域初始化（`MainEntry._ready` 建关卡后 init 一次；重生不重置）
 var region_population_initialized: bool = false
+## T040：最近一次 `active > total` 收敛报告（移除数 / 可见风险 / 账本未动）。
+var last_reconcile: Dictionary = {}
+## T040：最近一次捕获的账本事务观测（total/active 前后值、是否登记过、是否重复）。
+var last_capture_ledger: Dictionary = {}
 
 
 func _region_key(region_id: StringName, species_id: StringName) -> String:
@@ -297,6 +308,105 @@ func region_id_at(position: Vector3) -> StringName:
 	return &""
 
 
+## 区域水平中心（供 T040 回退：`y=0`，由调用方再吸附到导航面）。
+func region_center(region_id: StringName) -> Vector3:
+	var rect: Dictionary = _region_rects.get(region_id, {})
+	if rect.is_empty():
+		return Vector3.ZERO
+	return Vector3((float(rect["min_x"]) + float(rect["max_x"])) * 0.5, 0.0,
+		(float(rect["min_z"]) + float(rect["max_z"])) * 0.5)
+
+
+## T040 不变式：逐 `(region,species)` 检查 `active <= total`（只读观察）。
+func ledger_consistency() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for key in region_records:
+		var rec: Dictionary = region_records[key]
+		var rid := StringName(String(rec.get("region_id", "")))
+		var sid := StringName(String(rec.get("species_id", "")))
+		var total := int(rec.get("total_count", 0))
+		var active := region_active_count(rid, sid)
+		out.append({
+			"region_id": String(rid), "species_id": String(sid),
+			"total": total, "active": active, "ok": active <= total,
+		})
+	return out
+
+
+## T040 收敛：对每个 `active > total` 的键，移除**距玩家最远**的活动个体直到 `active == total`。
+## **账本 `total_count` 不动**；被移除的身体 `queue_free` 并按登记顺序注销。
+## 返回 `{removed, entries, visible_risk, reason}`；重复调用幂等。
+func reconcile_region_population(player_position: Vector3 = Vector3.ZERO,
+		visible_distance: float = 12.0) -> Dictionary:
+	var removed: Array[Dictionary] = []
+	var visible: Array[Dictionary] = []
+	for key in region_records:
+		var rec: Dictionary = region_records[key]
+		var rid := StringName(String(rec.get("region_id", "")))
+		var sid := StringName(String(rec.get("species_id", "")))
+		var arr: Array = region_active_bodies.get(key, [])
+		while _active_registry_count(arr) > int(rec.get("total_count", 0)):
+			var victim := _farthest_active_entry(arr, player_position)
+			if victim.is_empty():
+				break
+			var body := instance_from_id(int(victim["instance_id"]))
+			var d := INF
+			if body is Node3D:
+				d = (body as Node3D).global_position.distance_to(player_position)
+			removed.append({
+				"region_id": String(rid), "species_id": String(sid),
+				"source_id": String(victim["source_id"]), "distance": d,
+			})
+			if d <= visible_distance:
+				visible.append(removed[removed.size() - 1])
+			arr.erase(victim)
+			if body != null and is_instance_valid(body):
+				if body is Node:
+					(body as Node).name = "%s_ledger_retired" % (body as Node).name
+				body.queue_free()
+	var report := {
+		"removed": removed.size(),
+		"entries": removed,
+		"visible_risk": visible,
+		"reason": "active_gt_total",
+	}
+	last_reconcile = report
+	return report
+
+
+func _active_registry_count(arr: Array) -> int:
+	var n := 0
+	for e in arr:
+		var b := instance_from_id(int(e.get("instance_id", 0)))
+		var ab := b as AnimalBody
+		if ab == null:
+			continue
+		if bool(ab.get("captured")):
+			continue
+		if ab.survival != null and ab.survival.is_dead():
+			continue
+		n += 1
+	return n
+
+
+func _farthest_active_entry(arr: Array, player_position: Vector3) -> Dictionary:
+	var best: Dictionary = {}
+	var best_d := -INF
+	for e in arr:
+		var b := instance_from_id(int(e.get("instance_id", 0)))
+		var ab := b as AnimalBody
+		if ab == null or bool(ab.get("captured")):
+			continue
+		if ab.survival != null and ab.survival.is_dead():
+			continue
+		var d := ab.global_position.distance_to(player_position)
+		if d > best_d:
+			best_d = d
+			best = e
+	return best
+
+
+
 ## 登记活动个体（表现层；`total_count` 才是权威）。账本未初始化 / 未知区域-物种 /
 ## 同 source_id 重复登记 → 返回 false，调用方安静跳过。
 func register_region_body(region_id: StringName, species_id: StringName, body: Node) -> bool:
@@ -371,16 +481,34 @@ func region_population_advance_to(world_time: float) -> void:
 ## 捕获扣账（T035 D5）：**只在 `report_capture` 幂等门内调用**（首次真实结算才扣；
 ## 重复上报不会重复扣）。只对活动登记中的个体扣其所属区域；未登记个体
 ##（测试夹具/临时身体）区域账不动。`total_count` 下限 0。
-func _deduct_region_for_capture(target_id: String) -> void:
+func _deduct_region_for_capture(target_id: String) -> Dictionary:
 	for key in region_active_bodies:
 		var arr: Array = region_active_bodies[key]
 		for i in range(arr.size()):
 			if String(arr[i]["source_id"]) == target_id:
-				var rec: Dictionary = region_records.get(key)
+				var rec: Dictionary = region_records.get(key, {})
+				var total_before := int(rec.get("total_count", 0))
+				var active_before := region_active_count(
+					StringName(String(rec.get("region_id", ""))),
+					StringName(String(rec.get("species_id", ""))))
 				if not rec.is_empty():
-					rec["total_count"] = maxi(0, int(rec["total_count"]) - 1)
+					rec["total_count"] = maxi(0, total_before - 1)
 				arr.remove_at(i)
-				return
+				var total_after := int(rec.get("total_count", 0))
+				var active_after := region_active_count(
+					StringName(String(rec.get("region_id", ""))),
+					StringName(String(rec.get("species_id", ""))))
+				return {
+					"registered": true,
+					"region_id": String(rec.get("region_id", "")),
+					"species_id": String(rec.get("species_id", "")),
+					"total_before": total_before,
+					"total_after": total_after,
+					"active_before": active_before,
+					"active_after": active_after,
+				}
+	return {"registered": false, "region_id": "", "species_id": "",
+		"total_before": 0, "total_after": 0, "active_before": 0, "active_after": 0}
 
 
 ## 快照（进 TD §3 `WorldSnapshot.regions`）。纯数据、无 Node 引用。

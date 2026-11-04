@@ -51,10 +51,14 @@ const MAX_SETUP_ATTEMPTS := 240
 ## 铺出来的 NPC 是否立刻打开 AI（`false` 时它们站着不动，供静止夹具用）。
 @export var setup_ai: bool = true
 
+const PlacementSafetyLib = preload("res://scripts/world/placement_safety.gd")
+
 var _player: AnimalBody = null
 var _origin := Vector3.ZERO
 var _player_species: StringName = &""
 var _npcs: Array[AnimalBody] = []
+## T040：本轮已计划/已落的 `"region|species"` 数量（只用于区域账本上限判断，不持久化）。
+var _planned: Dictionary = {}
 var _report: Dictionary = {}
 var _setup_done := false
 var _pending := false
@@ -112,7 +116,10 @@ func setup(player: AnimalBody, origin: Vector3) -> Dictionary:
 		"min_distance": INF,
 		"predator_min": predator_min_distance,
 		"non_predator_min": min_spawn_distance,
+		"region_ledger": _ledger_enabled(),
+		"safe_distance_ok": false,
 	}
+	_planned.clear()
 	if _player_species == &"":
 		_report["note"] = "no_player_species"
 		_setup_done = true
@@ -132,13 +139,21 @@ func setup(player: AnimalBody, origin: Vector3) -> Dictionary:
 			if _npcs.size() >= max_npcs:
 				_note_skip(cfg.species_id, "max_npcs")
 				break
+			if _ledger_enabled() and _region_remaining(cfg) <= 0:
+				# T040：账本 total 为权威；未实例化的 total 只是抽象数量，不生成、不占位。
+				_note_skip(cfg.species_id, "region_total_exhausted")
+				break
 			var pick := _pick_position(cfg)
 			if not bool(pick.get("ok", false)):
 				_note_skip(cfg.species_id, String(pick.get("reason", "unknown")))
 				continue
-			_spawn_one(cfg, pick["position"] as Vector3, String(pick.get("source", "")))
+			if _spawn_one(cfg, pick["position"] as Vector3, String(pick.get("source", ""))):
+				var rid := _ledger_region_at(pick["position"] as Vector3)
+				var pkey := _region_key(rid, cfg.species_id)
+				_planned[pkey] = int(_planned.get(pkey, 0)) + 1
 	_setup_done = true
 	_report["attempt"] = _attempts
+	_report["safe_distance_ok"] = _safe_distances_ok()
 	# 一只都没铺出来 + 拒绝理由以导航类为主 + 还没超次数 → 导航/关卡还没同步完，下一物理帧再试
 	if npc_count() == 0 and _attempts < MAX_SETUP_ATTEMPTS and _nav_rejections() > 0:
 		_pending = true
@@ -280,6 +295,25 @@ func _pick_position(cfg: SpeciesConfig) -> Dictionary:
 			continue
 		var place := snap
 		place.y = snap.y + cfg.capsule_half_height + 0.05    # 站在导航面**之上**，不要半沉进地面
+		if _ledger_enabled():
+			var rid := _ledger_region_at(place)
+			if String(rid) == "":
+				_bump(rejected, "outside_region")
+				continue
+			var want_region := String(cand.get("region", ""))
+			if not want_region.is_empty() and String(rid) != want_region:
+				# 区域候选被导航吸附挪出了目标区域 → 不能算作该区的实例。
+				_bump(rejected, "region_mismatch")
+				continue
+			var cap := int(wd_for_ledger().call("region_total", rid, cfg.species_id))
+			var used := int(wd_for_ledger().call("region_active_count", rid, cfg.species_id)) \
+				+ int(_planned.get(_region_key(rid, cfg.species_id), 0))
+			if used >= cap:
+				_bump(rejected, "region_total_cap")
+				continue
+		if not PlacementSafetyLib.is_clear(self, cfg, place):
+			_bump(rejected, "placement_blocked")
+			continue
 		return {"ok": true, "position": place, "source": source, "distance": d}
 	return {"ok": false, "reason": _dominant_reason(rejected)}
 
@@ -296,6 +330,32 @@ func _candidate_points(cfg: SpeciesConfig) -> Array[Dictionary]:
 	for r in [need + 2.0, need + 6.0]:
 		for p in _ring(_origin, float(r)):
 			out.append({"point": p, "source": "origin_ring"})
+	out.append_array(_region_candidates(cfg))
+	return out
+
+
+## T040：按账本给**还有余量的区域**补候选点（区域内合法采样）。
+##
+## 出生标记/环只覆盖标记附近，读档后账本总量可能落在地图其它区域；没有这组候选，
+## `total > 0` 的区域就永远无法被实例化。顺序排在标记之后，T027 行为不受影响。
+## 仅账本已初始化时启用；夹具关卡（无 `level_regions`）自动 no-op。
+func _region_candidates(cfg: SpeciesConfig) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if not _ledger_enabled():
+		return out
+	var wd := wd_for_ledger()
+	for rid in (wd.call("region_ids") as Array):
+		var r := StringName(String(rid))
+		var total := int(wd.call("region_total", r, cfg.species_id))
+		var active := int(wd.call("region_active_count", r, cfg.species_id))
+		var planned := int(_planned.get(_region_key(r, cfg.species_id), 0))
+		if total - active - planned <= 0:
+			continue
+		var center: Vector3 = wd.call("region_center", r)
+		out.append({"point": center, "source": "region_center", "region": String(r)})
+		for radius in [2.0, 4.0, 8.0, 12.0]:
+			for p in _ring(center, float(radius)):
+				out.append({"point": p, "source": "region_ring", "region": String(r)})
 	return out
 
 
@@ -372,14 +432,14 @@ func _all_nodes(node: Node) -> Array[Node]:
 # 生成与记账
 # ---------------------------------------------------------------------------
 
-func _spawn_one(cfg: SpeciesConfig, pos: Vector3, source: String) -> void:
+func _spawn_one(cfg: SpeciesConfig, pos: Vector3, source: String) -> bool:
 	if body_scene == null:
 		_note_skip(cfg.species_id, "no_body_scene")
-		return
+		return false
 	var body := body_scene.instantiate() as AnimalBody
 	if body == null:
 		_note_skip(cfg.species_id, "body_not_animal")
-		return
+		return false
 	body.name = "NPC_%s_%d" % [String(cfg.species_id), _npcs.size()]
 	body.species_config = cfg          # 入树前赋值：`_ready` 会 apply_config()
 	body.player_controlled = false
@@ -406,14 +466,66 @@ func _spawn_one(cfg: SpeciesConfig, pos: Vector3, source: String) -> void:
 	if wd != null:
 		wd.call("register_region_body",
 			StringName(String(wd.call("region_id_at", pos))), cfg.species_id, body)
+	return true
 
 
-func _is_active(b: AnimalBody) -> bool:
-	if b == null or not is_instance_valid(b) or not b.is_inside_tree():
+func _ledger_enabled() -> bool:
+	var wd := get_node_or_null("/root/WorldDirector")
+	return wd != null and bool(wd.get("region_population_initialized"))
+
+
+func wd_for_ledger() -> Node:
+	return get_node_or_null("/root/WorldDirector")
+
+
+func _ledger_region_at(pos: Vector3) -> StringName:
+	var wd := get_node_or_null("/root/WorldDirector")
+	if wd == null:
+		return &""
+	return StringName(String(wd.call("region_id_at", pos)))
+
+
+func _region_key(region_id: StringName, species_id: StringName) -> String:
+	return "%s|%s" % [String(region_id), String(species_id)]
+
+
+## 该物种在所有区域还能落几只（Σ max(0, total - active - planned)）；账本未初始化 → 不限。
+func _region_remaining(cfg: SpeciesConfig) -> int:
+	if not _ledger_enabled():
+		return max_npcs
+	var wd := wd_for_ledger()
+	var remaining := 0
+	for rid in (wd.call("region_ids") as Array):
+		var total := int(wd.call("region_total", StringName(String(rid)), cfg.species_id))
+		if total <= 0:
+			continue
+		var active := int(wd.call("region_active_count", StringName(String(rid)), cfg.species_id))
+		var planned := int(_planned.get(_region_key(StringName(String(rid)), cfg.species_id), 0))
+		remaining += maxi(0, total - active - planned)
+	return remaining
+
+
+func _safe_distances_ok() -> bool:
+	if _player == null or not is_instance_valid(_player):
 		return false
-	if b.survival != null and b.survival.is_dead():
+	for b in npc_bodies():
+		var need := min_distance_for(b.species_config)
+		if b.global_position.distance_to(_player.global_position) < need - 0.01:
+			return false
+	return true
+
+
+## 参数刻意**不标注类型**：`T040` 的收敛会 `queue_free` 超额个体，`_npcs` 里会短暂留下
+## 已释放引用；类型化参数在解引用前就会抛 "previously freed"。先 `is_instance_valid()`。
+func _is_active(b) -> bool:
+	if b == null or not is_instance_valid(b):
 		return false
-	if b.is_in_group(&"animal_bodies"):
+	var body := b as AnimalBody
+	if body == null or not body.is_inside_tree():
+		return false
+	if body.survival != null and body.survival.is_dead():
+		return false
+	if body.is_in_group(&"animal_bodies"):
 		return true
 	return false                                     # 被捕获后出组 → 不再计入
 
