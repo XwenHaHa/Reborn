@@ -385,6 +385,26 @@ API `time_of_day() / day_index()（0 起）/ is_daytime() / phase_name()` **全�
   **主档缺失但 `.bak` 有效** → `recovered_backup`（「主存档缺失，已从备份恢复」），兜底换名窗口崩溃。
 - **玩家可见**：修复载入 Toast「存档已修复 N 处后载入」；备份恢复「主存档损坏，已从备份恢复」；
   损坏无备份「存档损坏，已隔离；未载入」；版本不兼容「存档版本不兼容（vN），未载入」。
+
+**T039 备份与失败回退（已实测；补充 T038 的损坏边界）**：
+- **读档来源只有主档与 `.bak`**：`.tmp` / `.old` / `.bak.tmp` 都是写入中间态，**永不载入**；
+  下次写入前清理残留。只有陈旧 `.tmp`、没有主档/备份 → `none`（正常新局），不拿 tmp 冒充存档。
+- **双坏**：主档与 `.bak` 都不可用时，两份源都改名 `.corrupt-<unix>`（同名追加 `-1/-2…`，**不删除**），
+  返回 `status=corrupt` + 精确文案「存档损坏，已隔离；未载入」，读档过程**零写入**。
+  `MainEntry` 仍呈现菜单并显示提示，但 `is_load_blocked()` 为真：拒绝物种选择（不静默进新局）、
+  `save_now()` 返回 `blocked`、`_exit_tree` 跳过退出保存。恢复路径是**重启**（隔离后主路径为空 → `none` 新局）；
+  会话内「确认开始新游戏」留给 T041。
+- **缺主档分支**：主档缺失 + `.bak` 有效 → `recovered_backup`；主档缺失 + `.bak` 损坏 → 隔离 `.bak` 并返回
+  `corrupt`（不再静默 `none`）；主档缺失且无 `.bak` → `none`。
+- **观测**：`last_quarantine: Array[String]` 列出本次隔离目标；`MainEntry.is_load_blocked()`。
+- **真机强杀**：`Tools/CaptureRun.ps1` 追加 `-KillOnMarker/-KillGraceMs/-KillExitCode`，监视器读取测试打印的
+  `T039|phase|…|begin` 后从外部 `TerminateProcess`。四个时点：写 tmp 前、tmp 写后/关闭前、主档换入窗口、
+  `.bak` 复制后/轮换前。它只近似“进程被杀、句柄未 flush/fsync”；**不能**覆盖真正掉电、OS 写缓存丢失、
+  磁盘/控制器缓存、扇区级损坏或硬件级撕裂写。
+- **测试钩子（生产恒空）**：`write_delay_phase ∈ {before_tmp, tmp_mid, rename_gap, bak_rotate}` +
+  `write_delay_ms` 仅为取证扩窗，不是生产行为；不新增任何生产参数。
+- **兼容**：`save_version`、`pending_settlement_life_id`、队列/节流/关键事务语义、`LifeCycle` 状态机
+  与 `last_safe_spot_id`（T042）均未改动。
 - **自动存盘时机**：死亡结算（`pending` 写入，第 1 次）→ 结算页展示后清 `pending`（第 2 次）；
   新发现/新解锁各自落盘；退出时 `_exit_tree` 存一次。只有正式运行（`current_scene == self`）启用；
   测试/工具显式 `set_persistence_enabled(true)`。

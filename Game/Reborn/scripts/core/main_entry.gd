@@ -92,6 +92,8 @@ var _load_repairs: Array = []
 ## 「上一世」文字位；消费一次即清空，不重复打扰。
 var _load_notice := ""
 var _persist_enabled := false
+## T039 D3：双坏隔离后阻断本会话开新局（不静默进入新游戏、退出不写新档）。
+var _load_blocked := false
 
 
 func _ready() -> void:
@@ -100,6 +102,7 @@ func _ready() -> void:
 	# T037 D9：只有正式运行（本节点就是当前场景）才启用自动存取；测试/工具默认关闭。
 	_persist_enabled = persistence_enabled and get_tree() != null and get_tree().current_scene == self
 	_load_saved_game()
+	_load_blocked = _load_status == "corrupt"
 	_setup_long_term()
 	_build_level()
 	_init_region_population()   # T035：建关卡后、铺生态前，把区域种群账本 init 一次（重生不再 init）
@@ -126,8 +129,9 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	# T037 D9：退出时存一次（在恢复时间门闩之前，快照里保留当前冻结状态与时间）。
-	save_now(&"exit")
+	# T037 D9：退出时存一次；T039 D3：双坏阻断期间禁止自动写新档。
+	if not _load_blocked:
+		save_now(&"exit")
 	# 结算/选物种会冻结世界时间；本节点离场时恢复，避免影响其它场景与测试。
 	var wd := _wd()
 	if wd != null:
@@ -167,10 +171,19 @@ func selectable_slots() -> Array[StringName]:
 
 
 ## 选择一个物种出生。返回是否被接受（被拒时 `lifecycle.rejections` 有记录）。
+## T039 D3：双坏隔离后拒绝开始新游戏（需重启；会话内确认入口属 T041）。
 func select_species(species_id: StringName) -> bool:
+	if _load_blocked:
+		print("ENTRY|blocked|select_denied_corrupt|species=%s" % String(species_id))
+		return false
 	if lifecycle == null:
 		return false
 	return lifecycle.begin_spawn(species_id)
+
+
+## T039 D9：双坏隔离后本会话是否被阻断。
+func is_load_blocked() -> bool:
+	return _load_blocked
 
 
 func lifecycle_state_name() -> String:
@@ -346,6 +359,8 @@ func pending_settlement_life_id() -> String:
 func save_now(reason: StringName = &"manual") -> Dictionary:
 	if not _persist_enabled:
 		return {"ok": false, "status": "disabled", "message": "自动存档未启用"}
+	if _load_blocked:
+		return {"ok": false, "status": "blocked", "message": "存档损坏已隔离，未载入；本会话不写新档"}
 	var sm := _save_manager()
 	if sm == null:
 		return {"ok": false, "status": "disabled", "message": "缺少 SaveManager"}

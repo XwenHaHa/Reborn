@@ -41,11 +41,17 @@ var last_status: String = "none"
 var last_message: String = ""
 var last_repairs: Array = []
 var last_reason: String = ""
+## T039 D2/D9：本次读档实际隔离的文件（绝对/`user://` 原路径 → `.corrupt-*`）。
+var last_quarantine: Array[String] = []
 
 ## T038 D4：普通保存节流窗口（秒）。关键事务/退出不受此限。
 var throttle_seconds: float = 1.0
 ## T038 D7：仅测试设置；生产恒空。`tmp_open` / `disk_write` / `bak_copy` / `rename`。
 var fault_injection: String = ""
+## T039 D6：仅测试的可控延迟钩子（为真机强杀扩窗）；生产恒空/0。
+## `before_tmp` / `tmp_mid` / `rename_gap` / `bak_rotate`。
+var write_delay_phase: String = ""
+var write_delay_ms: int = 0
 ## 最近一次备份失败（主档已写成功）的玩家文案；成功且无警告时清空。
 var last_warning: String = ""
 var last_failure_reason: String = ""
@@ -104,6 +110,9 @@ func set_save_path(path: String) -> void:
 	last_failure_message = ""
 	last_write_reason = ""
 	fault_injection = ""
+	last_quarantine.clear()
+	write_delay_phase = ""
+	write_delay_ms = 0
 	_reset_queue_state()
 
 
@@ -292,6 +301,7 @@ func _perform_write(reason: StringName, critical: bool) -> Dictionary:
 
 ## 真正的磁盘写入：tmp → 刷新 .bak → 主档换名（失败回滚）→ 成功才 `revision+1`。
 func _write_snapshot(reason: StringName) -> Dictionary:
+	_test_pause("before_tmp")
 	last_repairs = []
 	var snap := build_snapshot(reason)
 	var text := JSON.stringify(snap)
@@ -307,6 +317,7 @@ func _write_snapshot(reason: StringName) -> Dictionary:
 		return _write_fail("存档写入失败：无法创建临时文件（%s）" % FileAccess.get_open_error())
 	f.store_string(text)
 	f.flush()
+	_test_pause("tmp_mid")
 	f.close()
 	if fault_injection == "disk_write":
 		_remove_if_exists(tmp)
@@ -325,6 +336,7 @@ func _write_snapshot(reason: StringName) -> Dictionary:
 		if move_err != OK:
 			_remove_if_exists(tmp)
 			return _write_fail("存档写入失败：无法替换主档（%d）" % move_err)
+		_test_pause("rename_gap")
 	var rename_err := ERR_FILE_CANT_WRITE
 	if fault_injection != "rename":
 		rename_err = DirAccess.rename_absolute(tmp, save_path)
@@ -353,6 +365,7 @@ func _refresh_backup() -> String:
 		_remove_if_exists(btmp)
 		last_repairs.append("backup_failed:%d" % copy_err)
 		return "存档已保存（备份更新失败）"
+	_test_pause("bak_rotate")
 	var moved_prev := false
 	if FileAccess.file_exists(bak):
 		if DirAccess.rename_absolute(bak, bprev) != OK:
@@ -372,6 +385,16 @@ func _refresh_backup() -> String:
 func _write_fail(message: String) -> Dictionary:
 	return {"ok": false, "status": "write_failed", "path": save_path,
 		"revision": revision, "repairs": [], "message": message}
+
+
+## T039 D6：仅测试用的可控延迟（生产 `write_delay_phase` 为空、`write_delay_ms=0`）。
+## 打印标记供 `Tools/CaptureRun.ps1` 的外部监视器在指定阶段强杀进程。
+func _test_pause(phase: String) -> void:
+	if write_delay_phase != phase or write_delay_ms <= 0:
+		return
+	print("T039|phase|%s|begin" % phase)
+	OS.delay_msec(write_delay_ms)
+	print("T039|phase|%s|end" % phase)
 
 
 ## 队列可观测（T038 D9）；`threaded=false` 明示主线程串行实现。
@@ -409,17 +432,14 @@ func queue_stats() -> Dictionary:
 func load_game() -> Dictionary:
 	last_repairs = []
 	last_message = ""
+	last_quarantine.clear()
 	if not is_active():
 		last_status = "disabled"
 		return {"status": "disabled", "snapshot": {}, "repairs": [],
 			"message": "存档读取已禁用（无头或工具环境）"}
 	if not FileAccess.file_exists(save_path):
-		# T038 D6：主档缺失（替换窗口崩溃/被外部删除）但 `.bak` 有效 → 回退备份。
-		var res := _recover_missing_main()
-		if res.get("status") == "recovered_backup":
-			return res
-		last_status = "none"
-		return {"status": "none", "snapshot": {}, "repairs": [], "message": ""}
+		# T038 D6 / T039 D4：主档缺失（替换窗口崩溃/被外部删除）时按 `.bak` 判定。
+		return _recover_missing_main()
 	var parsed: Variant = _read_json(save_path)
 	if parsed == null:
 		# D7：解析失败（截断/非 JSON）同样先隔离，再从 `.bak` 尝试恢复。
@@ -453,15 +473,25 @@ func _read_json(path: String) -> Variant:
 	return JSON.parse_string(text)
 
 
-## 主档缺失但 `.bak` 存在：只在备份完整时回退，否则保持 none（T038 D6）。
+## 主档缺失但 `.bak` 存在：完整则回退；损坏则隔离并报 corrupt（T039 D4，不再静默 none）。
 func _recover_missing_main() -> Dictionary:
-	if not FileAccess.file_exists(backup_path()):
+	var bak := backup_path()
+	if not FileAccess.file_exists(bak):
+		last_status = "none"
+		last_message = ""
 		return {"status": "none", "snapshot": {}, "repairs": [], "message": ""}
-	var parsed: Variant = _read_json(backup_path())
+	var parsed: Variant = _read_json(bak)
 	if parsed == null:
-		return {"status": "none", "snapshot": {}, "repairs": [], "message": ""}
+		_quarantine_file(bak)
+		return _corrupt_result()
 	var checked := validate(parsed)
 	if checked.get("status") != "ok":
+		if checked.get("status") == "corrupt":
+			_quarantine_file(bak)
+			return _corrupt_result()
+		# version_mismatch：不隔离、不载入（T037 D5 口径保持）。
+		last_status = "none"
+		last_message = ""
 		return {"status": "none", "snapshot": {}, "repairs": [], "message": ""}
 	var snap: Dictionary = checked.get("snapshot", {})
 	revision = int(snap.get("revision", revision))
@@ -474,7 +504,7 @@ func _recover_missing_main() -> Dictionary:
 		"repairs": last_repairs, "message": last_message}
 
 
-## 主档坏：改名隔离（不删除），尝试从 `.bak` 恢复。
+## 主档坏：改名隔离（不删除），尝试从 `.bak` 恢复；`.bak` 也坏则一并隔离（T039 D2/D3）。
 func _recover_from_backup(reason: String) -> Dictionary:
 	var repairs := [reason]
 	var parsed: Variant = _read_json(backup_path())
@@ -492,24 +522,45 @@ func _recover_from_backup(reason: String) -> Dictionary:
 				last_message += "（并修复 %d 处）" % (all_repairs.size() - 1)
 			return {"status": "recovered_backup", "snapshot": snap,
 				"repairs": all_repairs, "message": last_message}
+		if checked.get("status") == "corrupt":
+			_quarantine_file(backup_path())
+	elif FileAccess.file_exists(backup_path()):
+		_quarantine_file(backup_path())
+	last_repairs = repairs
+	return _corrupt_result()
+
+
+## 双坏 / 无备份可用的统一结果（T039 D3）。
+func _corrupt_result() -> Dictionary:
 	last_status = "corrupt"
 	last_message = "存档损坏，已隔离；未载入"
-	last_repairs = repairs
-	return {"status": "corrupt", "snapshot": {}, "repairs": repairs,
+	return {"status": "corrupt", "snapshot": {}, "repairs": last_repairs.duplicate(),
 		"message": last_message}
 
 
 func _quarantine_main() -> void:
-	if not FileAccess.file_exists(save_path):
-		return
+	_quarantine_file(save_path)
+
+
+## 把损坏源改名到 `<原路径>.corrupt-<unix>`（同名追加 `-1/-2…`）；失败保留原文件、不删除。
+## 返回隔离目标路径；未隔离返回空串。
+func _quarantine_file(path: String) -> String:
+	if not FileAccess.file_exists(path):
+		return ""
 	var stamp := int(Time.get_unix_time_from_system())
-	var target := "%s.corrupt-%d" % [save_path, stamp]
-	var err := DirAccess.rename_absolute(save_path, target)
+	var target := "%s.corrupt-%d" % [path, stamp]
+	var n := 1
+	while FileAccess.file_exists(target):
+		target = "%s.corrupt-%d-%d" % [path, stamp, n]
+		n += 1
+	var err := DirAccess.rename_absolute(path, target)
 	if err != OK:
 		# 改名失败（只读等）时保留原文件——不做删除（D7）。
 		last_repairs.append("quarantine_failed:%d" % err)
-	else:
-		last_repairs.append("quarantined:%s" % target.get_file())
+		return ""
+	last_repairs.append("quarantined:%s" % target.get_file())
+	last_quarantine.append(target)
+	return target
 
 
 # ---------------------------------------------------------------------------

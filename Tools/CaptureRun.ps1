@@ -56,10 +56,20 @@ param(
     [switch]$NoMonitor,
     # -VisibleDesktop：诊断用——不在隐藏桌面启动（退回"屏幕外+autoload+监视器"模式，
     # 该模式实测窗口会先可见 ~1.7 秒，见文件头说明）。平时不要用。
-    [switch]$VisibleDesktop
+    [switch]$VisibleDesktop,
+    # T039：真机强杀注入。`-KillOnMarker "T039|phase|tmp_mid|begin"` 时，监视器读到该字符串后
+    # 等 -KillGraceMs 再 TerminateProcess（退出码 -KillExitCode）。默认关闭，零副作用。
+    [string]$KillOnMarker = "",
+    [int]$KillGraceMs = 300,
+    [int]$KillExitCode = 137
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Headless -and $KillOnMarker -ne "") {
+    Write-Host "CAPTURE_RUN|ERROR|kill_on_marker_requires_gui_monitor"
+    exit 2
+}
 
 # --- 屏幕外坐标：从虚拟屏幕左上角再往左/上挪 2400 物理像素（多显示器也安全）---
 Add-Type -AssemblyName System.Windows.Forms
@@ -119,6 +129,10 @@ public static class RebornWinMon {
     [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
     [DllImport("kernel32.dll")] public static extern uint WaitForSingleObject(IntPtr h, uint ms);
     [DllImport("kernel32.dll")] public static extern bool GetExitCodeProcess(IntPtr h, out uint code);
+    // T039：读到测试脚本的 `T039|phase|...|begin` 标记后，从外部强制结束子进程（近似“进程被杀、
+    // 句柄未 flush/fsync”这一层；**不能**复现真正掉电/OS 写缓存丢失/扇区损坏）。
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool TerminateProcess(IntPtr h, uint exitCode);
     // --- 隐藏桌面：让子进程的所有窗口建在我们自建的桌面上，用户桌面按定义不可见 ---
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern IntPtr CreateDesktopW(string desktop, string device, IntPtr devmode,
@@ -221,6 +235,18 @@ public static class RebornWinMon {
         try { File.AppendAllText(logPath, line + Environment.NewLine, Encoding.UTF8); } catch {}
     }
 
+    // 子进程用 CreateFileW(..., share=FILE_SHARE_READ) 持有 stdout 日志；普通
+    // File.ReadAllText 会以“拒绝写者”打开而失败。这里显式共享读写，只读打开。
+    static string ReadShared(string path) {
+        try {
+            if (!File.Exists(path)) return null;
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete))
+            using (var sr = new StreamReader(fs, Encoding.UTF8))
+                return sr.ReadToEnd();
+        } catch { return null; }
+    }
+
     static bool Intersects(RECT r, int vsL, int vsT, int vsR, int vsB) {
         return (r.R > vsL && r.L < vsR && r.B > vsT && r.T < vsB);
     }
@@ -240,7 +266,8 @@ public static class RebornWinMon {
     // ② 按线程 EnumThreadWindows 逐个调 Godot 几十个线程反而更慢。
     // visible_hits = 首见时矩形与虚拟屏幕相交的次数（如实计数，预期恒为 1，见上）。
     public static string Monitor(int pid, int offX, int offY,
-        int vsL, int vsT, int vsR, int vsB, int timeoutMs, string logPath) {
+        int vsL, int vsT, int vsR, int vsB, int timeoutMs, string logPath,
+        string markerPath, string killMarker, int killGraceMs, uint killCode) {
         var seen = new HashSet<long>();
         var lastRect = new Dictionary<long, RECT>();
         var alive = new HashSet<long>(); // 上一轮枚举里还在的窗口
@@ -251,10 +278,31 @@ public static class RebornWinMon {
         int hiddenEv = 0, resights = 0, hiddenDeskWins = 0;
         long firstVisibleT = -1, offscreenConfirmT = -1, visibleBoundMs = -1;
         bool exited = (p == null);
+        bool killed = false;
+        long killAtMs = -1;
+        long lastMarkerCheck = 0;
         long prevPollEnd = 0;
         timeBeginPeriod(1);
         while (!exited && sw.ElapsedMilliseconds < timeoutMs) {
             polls++;
+            // T039：外部强杀窗口。测试脚本在保存阶段打印 begin 标记后阻塞；这里读到标记，
+            // 等 grace 让日志落盘，再 TerminateProcess。仅在显式传 -KillOnMarker 时启用。
+            if (!killed && killMarker != "" && sw.ElapsedMilliseconds - lastMarkerCheck >= 20) {
+                lastMarkerCheck = sw.ElapsedMilliseconds;
+                try {
+                    string txt = ReadShared(markerPath);
+                    if (txt != null && txt.Contains(killMarker)) {
+                        killed = true;
+                        killAtMs = sw.ElapsedMilliseconds;
+                        LogLine(logPath, string.Format(
+                            "WINMON|t={0}ms|kill_marker_seen|marker={1}", killAtMs, killMarker));
+                        if (killGraceMs > 0) Thread.Sleep(killGraceMs);
+                        TerminateProcess(_hProc, killCode);
+                        LogLine(logPath, string.Format(
+                            "WINMON|t={0}ms|terminated|code={1}", sw.ElapsedMilliseconds, killCode));
+                    }
+                } catch { }
+            }
             IntPtr[] found = new IntPtr[64];
             int n = 0;
             EnumWindows(delegate(IntPtr h, IntPtr lp) {
@@ -377,10 +425,11 @@ public static class RebornWinMon {
         string dur = (firstVisibleT >= 0 && offscreenConfirmT >= 0)
             ? (offscreenConfirmT - firstVisibleT).ToString() : "-1";
         string sum = string.Format(
-            "WINMON|summary|elapsed={0}ms|polls={1}|avg_poll_ms={2:F1}|windows_seen={3}|visible_hits={4}|moved_offscreen={5}|rebounds={6}|visible_bound_ms={7}|first_visible_to_offscreen_ms={8}|hidden_events={9}|resights={10}|hidden_desk_windows={11}|proc_exited={12}",
+            "WINMON|summary|elapsed={0}ms|polls={1}|avg_poll_ms={2:F1}|windows_seen={3}|visible_hits={4}|moved_offscreen={5}|rebounds={6}|visible_bound_ms={7}|first_visible_to_offscreen_ms={8}|hidden_events={9}|resights={10}|hidden_desk_windows={11}|proc_exited={12}|killed={13}|kill_at_ms={14}",
             sw.ElapsedMilliseconds, polls, polls > 0 ? (double)sw.ElapsedMilliseconds / polls : 0,
             windows, visibleHits, moved, rebounds,
-            visibleBoundMs.ToString(), dur, hiddenEv, resights, hiddenDeskWins, exited);
+            visibleBoundMs.ToString(), dur, hiddenEv, resights, hiddenDeskWins, exited,
+            killed ? 1 : 0, killAtMs);
         LogLine(logPath, sum);
         return sum;
     }
@@ -409,7 +458,7 @@ if ($UserArgs.Count -gt 0) {
 }
 
 Write-Host "CAPTURE_RUN|log=$logPath"
-Write-Host "CAPTURE_RUN|script=$Script|user_args=[$($UserArgs -join ' ')]|window_offscreen=$offPos"
+Write-Host "CAPTURE_RUN|script=$Script|user_args=[$($UserArgs -join ' ')]|window_offscreen=$offPos|kill_on_marker=$KillOnMarker"
 
 # --- 引擎侧硬保证的开关：autoload capture_window_guard.gd 只在这个环境变量为 1 时
 #     才把窗口挪屏幕外（正常游玩不设这个变量，零副作用）---
@@ -440,7 +489,8 @@ $cmdAsync = $cmdRun.BeginInvoke()
 $monitorSummary = "WINMON|skipped|headless_or_disabled"
 if (-not $Headless -and -not $NoMonitor) {
     $monitorSummary = [RebornWinMon]::Monitor($childPid, $offX, $offY,
-        $vs.X, $vs.Y, ($vs.X + $vs.Width), ($vs.Y + $vs.Height), ($TimeoutSec * 1000), $monPath)
+        $vs.X, $vs.Y, ($vs.X + $vs.Width), ($vs.Y + $vs.Height), ($TimeoutSec * 1000), $monPath,
+        $logPath, $KillOnMarker, $KillGraceMs, [uint32]$KillExitCode)
 } else {
     Write-Host "CAPTURE_RUN|$monitorSummary"
 }

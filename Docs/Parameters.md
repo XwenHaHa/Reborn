@@ -289,12 +289,13 @@
 - **新游戏/重生（T035 D8）**：`reset_for_new_game()` 把账本彻底归零（只有明确新游戏确认才可调）；`MainEntry._ready`
   建关卡后 init 一次；正式死亡→重生**不重置种群**（与 T034 时间语义同构，断言 F2）。
 
-### 存档（T037 格式 + T038 写入队列落地口径）
+### 存档（T037 格式 + T038 写入队列 + T039 损坏/强杀边界落地口径）
 
 - **路径**：主档 `user://savegame_v1.json`，上一版快照 `user://savegame_v1.json.bak`，坏档隔离
-  `user://savegame_v1.json.corrupt-<unix秒>`；写临时 `*.tmp`、替换中间 `*.old`、备份中间 `*.bak.tmp/.prev`。
+  `user://savegame_v1.json.corrupt-<unix秒>`（`.bak` 对应 `.bak.corrupt-<unix秒>`）；写临时 `*.tmp`、
+  替换中间 `*.old`、备份中间 `*.bak.tmp/.prev`。
   只写 `user://`，**不含个人绝对路径/用户名/令牌**（T037 断言 A7）。
-  测试专用路径 `user://t037_tests/`、`user://t038_tests/`（套件结束清理）。
+  测试专用路径 `user://t037_tests/`、`user://t038_tests/`、`user://t039_tests/`、`user://t039_kill/`（套件/取证结束清理）。
 - **格式**：UTF-8 JSON 纯数据。`save_version=1`、`revision` 单调递增、`world_time` 秒。
   契约 10 键（`resources/regions/discovered_ids/unlocked_species/life_records/current_life/pending_settlement_life_id` 等）
   + 实现扩展 `events/life_counter/event_seq` + 诊断 `saved_reason`（只写不读）。
@@ -313,7 +314,14 @@
 - **版本与恢复**：`save_version` 缺失/非整数 → `corrupt`；≠1 → `version_mismatch`（不隔离不覆盖）。
   解析失败或结构非法 → 隔离主档后尝试 `.bak`：可用 `recovered_backup`，否则 `corrupt`。
   **主档缺失但 `.bak` 有效** → `recovered_backup`，文案「主存档缺失，已从备份恢复」（T038 改名窗口兜底）。
+  **T039 双坏**：主档与 `.bak` 都不可用 → 两份都隔离（不删除）、消息精确「存档损坏，已隔离；未载入」、
+  读档零写入；`MainEntry` 阻断本会话开新局（`is_load_blocked()`、选物种被拒、退出不保存），重启后才按 `none` 开新局。
+  **主档缺失 + `.bak` 损坏** → 隔离 `.bak` 并返回 `corrupt`（不再静默 `none`）。
+  `.tmp/.old/.bak.tmp` **永不作为读档来源**；只有陈旧 `.tmp` 时返回 `none`，下次写入清理。
   缺失集合补默认+`repairs`；负数/超容量夹紧；非有限回默认；坏条目跳过；`current_life`+`pending` 互斥（清 `pending`）。
+- **强杀取证（仅测试）**：`write_delay_phase ∈ {before_tmp, tmp_mid, rename_gap, bak_rotate}` +
+  `write_delay_ms` 仅在工具里设置，生产恒空/0；`CaptureRun.ps1` 的 `-KillOnMarker` 默认关闭。
+  这是为扩窗加的可控延迟，**不是生产参数**；只覆盖“进程被杀、未 flush/fsync”，不覆盖掉电/缓存/扇区损坏。
 - **存盘时机**：死亡结算（写 `pending`）→ 结算页展示（清 `pending`）；新发现；新解锁；退出。
   仅在正式运行（`current_scene == self`）启用；读档补弹结算页也属"展示完毕即清空"。
 - **读档重建顺序**：世界时间 → 区域种群 → 资源点（稳定 ID 匹配/补建）→ 档案/事件/发现/解锁/计数器 → 当前生命
