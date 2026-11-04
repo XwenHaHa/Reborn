@@ -288,3 +288,23 @@
   负数钳 0、超容量钳容量、非有限整条回初始（TD §8 读档校验口径）。真实读档属 T037+。
 - **新游戏/重生（T035 D8）**：`reset_for_new_game()` 把账本彻底归零（只有明确新游戏确认才可调）；`MainEntry._ready`
   建关卡后 init 一次；正式死亡→重生**不重置种群**（与 T034 时间语义同构，断言 F2）。
+
+### 存档（T037 落地口径）
+
+- **路径**：主档 `user://savegame_v1.json`，上一版快照 `user://savegame_v1.json.bak`，坏档隔离
+  `user://savegame_v1.json.corrupt-<unix秒>`。只写 `user://`，**不含个人绝对路径/用户名/令牌**（测试断言 A7）。
+  测试专用路径 `user://t037_tests/`（套件结束清理）。
+- **格式**：UTF-8 JSON 纯数据。`save_version=1`、`revision` 单调递增、`world_time` 秒。
+  契约 10 键（`resources/regions/discovered_ids/unlocked_species/life_records/current_life/pending_settlement_life_id` 等）
+  + 实现扩展 `events/life_counter/event_seq` + 诊断 `saved_reason`（只写不读）。
+  `Transform3D→{"$t":[12 floats]}`、`Vector3→{"$v":[3 floats]}`；`last_safe_spot_id` **预留未建**（T042）。
+- **原子写**：`*.tmp` 写完关闭 → 复制现主档为 `.bak` → `rename_absolute(tmp, 主档)`；失败保留旧档并返回
+  `write_failed`（不产生半写主档）。重复保存幂等（除 `revision/saved_reason`）。不做节流/双槽（旧 TD §8 设想已被实测口径取代）。
+- **版本与恢复**：`save_version` 缺失/非整数 → `corrupt`；≠1 → `version_mismatch`（不隔离不覆盖）。
+  解析失败或结构非法 → 隔离主档后尝试 `.bak`：可用 `recovered_backup`，否则 `corrupt`。
+  缺失集合补默认+`repairs`；负数/超容量夹紧；非有限回默认；坏条目跳过；`current_life`+`pending` 互斥（清 `pending`）。
+- **存盘时机**：死亡结算（写 `pending`）→ 结算页展示（清 `pending`）；新发现；新解锁；退出。
+  仅在正式运行（`current_scene == self`）启用；读档补弹结算页也属"展示完毕即清空"。
+- **读档重建顺序**：世界时间 → 区域种群 → 资源点（稳定 ID 匹配/补建）→ 档案/事件/发现/解锁/计数器 → 当前生命
+  （存活恢复身体；`pending` 非空补弹结算页，展示后清空）。`LifeCycle` 只接受 `SETTLING/SELECTING → ALIVE`，
+  不经 `mark_spawned`、不新分配 `LifeId`、不发 `life_started`。

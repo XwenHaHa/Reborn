@@ -157,6 +157,33 @@ func to_record() -> Dictionary:
 	}
 
 
+## 读档（T037）：按已校验的 `ResourceRecord` 覆盖本实例（稳定 ID 由调用方匹配）。
+## **先设 `kind`**（setter 会重套类型默认值），再覆盖数值；位置在入树后应用。
+func apply_record(rec: Dictionary) -> bool:
+	if rec.is_empty():
+		return false
+	var new_id := String(rec.get("id", ""))
+	if new_id != "":
+		interaction_id = new_id
+	region_id = StringName(String(rec.get("region_id", String(region_id))))
+	var new_kind := StringName(String(rec.get("kind", String(kind))))
+	if new_kind != kind:
+		kind = new_kind
+	capacity = maxi(0, int(rec.get("capacity", capacity)))
+	units = clampi(int(rec.get("units", units)), 0, capacity)
+	refill_interval = maxf(0.0, float(rec.get("refill_interval", refill_interval)))
+	next_refill_at = maxf(0.0, float(rec.get("next_refill_at", next_refill_at)))
+	expire_at = maxf(0.0, float(rec.get("expire_at", expire_at)))
+	# `kind` 的默认值在 water 时把 `infinite` 置真；显式按最终类型对齐。
+	infinite = kind == KIND_WATER
+	food_type = int(rec.get("food_type", food_type))
+	var xform: Variant = rec.get("transform")
+	if xform is Transform3D and is_inside_tree():
+		global_transform = xform
+	_sync_visual()
+	return true
+
+
 # ---------------------------------------------------------------------------
 # 交互（覆盖基类）
 # ---------------------------------------------------------------------------

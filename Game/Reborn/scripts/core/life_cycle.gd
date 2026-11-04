@@ -161,6 +161,25 @@ func end_life(reason: StringName, detail: Dictionary = {}) -> Dictionary:
 	return rec
 
 
+## 读档专用（T037 D4）：把**已存在**的一世恢复成 `ALIVE`。
+##
+## 只接受 `SETTLING` / `SELECTING → ALIVE`，不经 `spawn_requested`、不新分配 `LifeId`、
+## 不增 `spawn_count`、不发 `life_started`（读档不是"新出生"）；档案已由 `GameState` 恢复。
+## 状态机其余语义（死亡只结算一次、冻结/恢复时间）保持不变。
+func restore_alive(new_body: AnimalBody, new_life_id: String, new_species_id: StringName) -> bool:
+	if state != State.SETTLING and state != State.SELECTING:
+		return _reject(state, State.ALIVE, REJECT_WRONG_STATE)
+	if new_life_id == "" or String(new_species_id) == "":
+		return _reject(state, State.ALIVE, REJECT_WRONG_STATE)
+	bind_body(new_body)
+	life_id = String(new_life_id)
+	species_id = StringName(new_species_id)
+	end_reason = &""
+	_restore_time()
+	_set_state(State.ALIVE)
+	return true
+
+
 ## 迟到绑定（入口在 `mark_spawned` 之外建立身体时使用）。
 func bind_body(new_body: AnimalBody) -> void:
 	body = new_body

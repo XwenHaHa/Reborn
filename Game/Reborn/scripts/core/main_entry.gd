@@ -13,6 +13,7 @@ extends Node3D
 const LEVEL_SCENE_PATH := "res://scenes/maps/l_courtyard.tscn"
 const BODY_SCENE_PATH := "res://scenes/characters/animal_body.tscn"
 const HUD_SCENE_PATH := "res://scenes/ui/hud.tscn"
+const RESOURCE_SCENE_PATH := "res://scenes/world/resource_point.tscn"
 const SPECIES_DIR := "res://resources/species"
 
 ## 菜单展示区（ART04）：溪东岸的干燥地。相机与展示模型都**相对这个点**摆位，
@@ -72,6 +73,9 @@ var sensitivity_scale := 1.0
 var fov_override := 0.0
 ## 设置文件路径（测试可指向临时文件，不污染真实 `user://settings.cfg`）
 @export var settings_path: String = GameSettings.DEFAULT_PATH
+## 自动存档总开关（D9）。只有正式运行（`current_scene == self`）才真正启用；
+## 测试/取证工具通过 `set_persistence_enabled()` 显式打开。
+@export var persistence_enabled: bool = true
 var _configs: Array[SpeciesConfig] = []
 var _frame := 0
 var _last_hunger := NAN
@@ -79,14 +83,29 @@ var _last_thirst := NAN
 var _npcs_wired: Array[AnimalBody] = []
 var _last_record: Dictionary = {}
 var _wd_capture_hooked := false
+## 启动读档结果（T037）：快照在校验通过后暂存，等关卡/HUD 建好再按 D8 顺序应用。
+var _loaded_snapshot: Dictionary = {}
+var _load_status: String = "none"
+var _load_message: String = ""
+var _load_repairs: Array = []
+## 读档结果提示：启动时 HUD 尚未显示（`_enter_select` 会隐藏它），所以同时写进菜单的
+## 「上一世」文字位；消费一次即清空，不重复打扰。
+var _load_notice := ""
+var _persist_enabled := false
 
 
 func _ready() -> void:
 	_configs = _discover_configs()
 	_load_settings()
+	# T037 D9：只有正式运行（本节点就是当前场景）才启用自动存取；测试/工具默认关闭。
+	_persist_enabled = persistence_enabled and get_tree() != null and get_tree().current_scene == self
+	_load_saved_game()
 	_setup_long_term()
 	_build_level()
 	_init_region_population()   # T035：建关卡后、铺生态前，把区域种群账本 init 一次（重生不再 init）
+	# T037 D8：世界时间 → 区域账本 → 资源 → 长期层（此时关卡已建、账本已 init）。
+	if not _loaded_snapshot.is_empty():
+		apply_saved_snapshot(_loaded_snapshot, false)
 	_build_ecology()
 	_build_hud()
 	# T033（ART09 遮挡遗留）：`LifeStatus` 必须在 `MainMenu` **之后**加入——
@@ -97,13 +116,18 @@ func _ready() -> void:
 	_build_settle_panel()
 	_build_lifecycle()
 	_wire_gamestate_signals()
-	_enter_select()
+	_toast_load_status()
+	# T037 D8 最后一步：当前生命（存活直接恢复 / 待结算补弹）；无法恢复就进选物种。
+	if not _restore_life_from_snapshot(_loaded_snapshot):
+		_enter_select()
 	print("ENTRY|ready|species=%d|test_mode=%s|unlocked=%s" % [
 		_configs.size(), str(test_mode), str(_unlocked_ids())
 	])
 
 
 func _exit_tree() -> void:
+	# T037 D9：退出时存一次（在恢复时间门闩之前，快照里保留当前冻结状态与时间）。
+	save_now(&"exit")
 	# 结算/选物种会冻结世界时间；本节点离场时恢复，避免影响其它场景与测试。
 	var wd := _wd()
 	if wd != null:
@@ -251,7 +275,8 @@ func _setup_long_term() -> void:
 		if cfg.unlock_discovery != &"":
 			rules[String(cfg.unlock_discovery)] = cfg.species_id
 	gs.call("set_discovery_unlock_rules", rules)
-	if (gs.get("unlocked_species") as Dictionary).is_empty():
+	# 读档成功时，解锁/发现由快照恢复；不能在这里补默认集（否则会覆盖存档进度）。
+	if _loaded_snapshot.is_empty() and (gs.get("unlocked_species") as Dictionary).is_empty():
 		if test_mode:
 			gs.call("set_default_unlock", _all_ids())
 		else:
@@ -301,6 +326,241 @@ func _init_region_population() -> void:
 	var w := _wd()
 	if w != null:
 		w.call("init_region_population", _configs)
+
+
+# ---------------------------------------------------------------------------
+# 存档与读档（T037）
+# ---------------------------------------------------------------------------
+
+## 测试/取证工具显式打开自动存档（正式运行由 `_ready` 自行判定）。
+func set_persistence_enabled(value: bool) -> void:
+	_persist_enabled = value
+
+
+func pending_settlement_life_id() -> String:
+	var sm := _save_manager()
+	return String(sm.get("pending_settlement_life_id")) if sm != null else ""
+
+
+## 立即存一次（D9 的四个时机都走这里）。未启用时返回 `disabled`，不做任何写入。
+func save_now(reason: StringName = &"manual") -> Dictionary:
+	if not _persist_enabled:
+		return {"ok": false, "status": "disabled", "message": "自动存档未启用"}
+	var sm := _save_manager()
+	if sm == null:
+		return {"ok": false, "status": "disabled", "message": "缺少 SaveManager"}
+	# 存活期把最新四指标与位置同步进进行中档案（死亡后不再写，避免污染已归档记录）。
+	if lifecycle != null and lifecycle.is_alive() and player != null and is_instance_valid(player) \
+			and player.survival != null and player.survival.state != null:
+		var gs := _game_state()
+		if gs != null:
+			gs.call("sync_current_life", player.survival.state.to_dictionary(),
+				player.global_transform)
+	var res: Dictionary = sm.call("save_game", reason)
+	print("ENTRY|save|%s|ok=%s|revision=%d|status=%s" % [
+		String(reason), str(res.get("ok", false)), int(res.get("revision", 0)),
+		String(res.get("status", ""))
+	])
+	if not bool(res.get("ok", false)) and hud != null:
+		hud.show_toast("存档写入失败")
+	return res
+
+
+## 启动读档（D9：只在正式运行/显式启用时执行）。校验通过的快照暂存，稍后按 D8 应用。
+func _load_saved_game() -> void:
+	if not _persist_enabled:
+		return
+	var sm := _save_manager()
+	if sm == null:
+		return
+	var res: Dictionary = sm.call("load_game")
+	_load_status = String(res.get("status", "none"))
+	_load_message = String(res.get("message", ""))
+	_load_repairs = res.get("repairs", [])
+	if _load_status == "ok" or _load_status == "recovered_backup":
+		_loaded_snapshot = res.get("snapshot", {})
+	print("ENTRY|load|status=%s|repairs=%d|message=%s" % [
+		_load_status, _load_repairs.size(), _load_message
+	])
+
+
+## 读档结果对玩家的可见反馈（复用 HUD Toast，不新建 UI）。
+func _toast_load_status() -> void:
+	var msg := ""
+	if _load_status == "corrupt":
+		msg = _load_message if _load_message != "" else "存档损坏，已隔离；未载入"
+	elif _load_status == "version_mismatch":
+		msg = _load_message if _load_message != "" else "存档版本不兼容，未载入"
+	elif _load_status == "recovered_backup":
+		msg = _load_message if _load_message != "" else "主存档损坏，已从备份恢复"
+	elif _load_status == "ok" and _load_repairs.size() > 0:
+		msg = _load_message
+	if msg == "":
+		return
+	_load_notice = msg
+	if hud != null and hud.visible:
+		hud.show_toast(msg)
+	print("ENTRY|load_notice|%s" % msg)
+
+
+## 按 D8 顺序应用快照：世界时间 → 区域账本 → 资源点 → 长期层 → 当前生命。
+## `restore_life=false` 时只恢复世界数据（`_ready` 早期调用，此时 HUD/状态机尚未建好）。
+func apply_saved_snapshot(snapshot: Dictionary, restore_life: bool = true) -> bool:
+	if snapshot.is_empty():
+		return false
+	var wd := _wd()
+	if wd != null and snapshot.has("world_time"):
+		wd.call("set_world_time", float(snapshot.get("world_time", 0.0)))
+	if wd != null and snapshot.has("regions"):
+		var report: Dictionary = wd.call("restore_region_population", snapshot.get("regions", []))
+		print("ENTRY|load|regions|restored=%d|skipped=%s|repaired=%s" % [
+			int(report.get("restored", 0)), str(report.get("skipped", [])),
+			str(report.get("repaired", []))
+		])
+	_apply_resources(snapshot.get("resources", []))
+	var gs := _game_state()
+	if gs != null:
+		gs.call("restore_long_term", snapshot)
+	if restore_life:
+		_restore_life_from_snapshot(snapshot)
+	return true
+
+
+## 资源点：按稳定 `interaction_id` 匹配既有节点，缺失的**补建**；数值/位置用 `apply_record()`。
+func _apply_resources(records: Variant) -> void:
+	if level == null or not (records is Array):
+		return
+	var by_id := {}
+	for node in get_tree().get_nodes_in_group(&"resource_points"):
+		if node is ResourcePoint:
+			by_id[String(node.get("interaction_id"))] = node
+	var packed: PackedScene = null
+	for raw in (records as Array):
+		if not (raw is Dictionary):
+			continue
+		var rec: Dictionary = raw
+		var id := String(rec.get("id", ""))
+		if id == "":
+			continue
+		var point := by_id.get(id) as ResourcePoint
+		if point == null:
+			if packed == null:
+				packed = load(RESOURCE_SCENE_PATH) as PackedScene
+			if packed == null:
+				continue
+			point = packed.instantiate() as ResourcePoint
+			if point == null:
+				continue
+			point.name = "Saved_%s" % id
+			level.add_child(point)
+		point.apply_record(rec)
+		by_id[id] = point
+
+
+## D8 最后一步：存活 → 直接恢复身体；待结算 → 补弹结算页；两者都没有 → false（进选物种）。
+func _restore_life_from_snapshot(snapshot: Dictionary) -> bool:
+	if snapshot.is_empty():
+		return false
+	var current: Dictionary = snapshot.get("current_life", {})
+	if not current.is_empty():
+		var cfg := _config_for(StringName(String(current.get("species_id", ""))))
+		if cfg == null:
+			if hud != null:
+				hud.show_toast("存档中的物种配置缺失，未恢复当前生命")
+			return false
+		_spawn_restored_player(cfg, current)
+		return true
+	var pending := String(snapshot.get("pending_settlement_life_id", ""))
+	if pending != "":
+		var rec := _record_by_id(pending)
+		if rec.is_empty():
+			return false
+		_last_record = rec
+		_enter_select()
+		_present_settle(rec)
+		# D4：结算页已展示 → 清空 pending 并落盘（语义"死亡已发生、结算页尚未展示"）。
+		_clear_pending_settlement()
+		save_now(&"settle_shown")
+		return true
+	return false
+
+
+## 读档恢复存活玩家：复用既有身体装配，但**不经** `mark_spawned`（不分配新 LifeId）。
+func _spawn_restored_player(cfg: SpeciesConfig, life: Dictionary) -> void:
+	dismiss_settle()
+	var packed := load(BODY_SCENE_PATH) as PackedScene
+	if packed == null:
+		push_error("MainEntry: 身体场景缺失 %s" % BODY_SCENE_PATH)
+		return
+	var body := packed.instantiate() as AnimalBody
+	if body == null:
+		push_error("MainEntry: 身体根节点不是 AnimalBody")
+		return
+	body.name = "Player"
+	body.species_config = cfg
+	body.player_controlled = true
+	body.make_camera_current = true
+	_dismiss_menu()
+	level.add_child(body)
+	var xform: Variant = life.get("transform")
+	if xform is Transform3D:
+		body.global_transform = xform
+	else:
+		var pos: Variant = life.get("start_position")
+		body.global_position = pos if pos is Vector3 else _spawn_position(cfg)
+	_apply_settings_to(body)
+	body.velocity = Vector3.ZERO
+	if body.climb != null:
+		body.climb.reset_base()
+	# 四指标恢复（夹紧由 `set_state()` 按当前物种配置做）。
+	var survival_data: Variant = life.get("snapshot")
+	if body.survival != null and survival_data is Dictionary and not (survival_data as Dictionary).is_empty():
+		body.survival.set_state(SurvivalState.from_dictionary(survival_data))
+	player = body
+	if not lifecycle.restore_alive(body, String(life.get("life_id", "")),
+			StringName(String(life.get("species_id", "")))):
+		push_error("MainEntry: 读档恢复存活失败")
+		return
+	if discovery != null:
+		discovery.player = body
+		discovery.refresh_points()
+	if hud != null:
+		hud.bind_player(body)
+	# 从当前数值起算增量，避免"读档后第一帧"把差值误记成进食/饮水收益。
+	if body.survival != null and body.survival.state != null:
+		_last_hunger = body.survival.state.hunger
+		_last_thirst = body.survival.state.thirst
+		body.survival.died.connect(_on_player_died)
+		body.survival.changed.connect(_on_survival_changed)
+	if ecology != null and is_instance_valid(ecology):
+		ecology.candidates = _configs
+		ecology.setup(body, body.global_position)
+		_wire_npc_events()
+	_refresh_status()
+	print("ENTRY|restored|%s|life=%s|pos=%s" % [
+		String(cfg.species_id), String(life.get("life_id", "")), str(body.global_position)
+	])
+
+
+func _record_by_id(life_id: String) -> Dictionary:
+	var gs := _game_state()
+	if gs == null or life_id == "":
+		return {}
+	for rec in (gs.get("life_records") as Array):
+		if String((rec as Dictionary).get("life_id", "")) == life_id:
+			return (rec as Dictionary).duplicate(true)
+	return {}
+
+
+func _clear_pending_settlement() -> void:
+	var sm := _save_manager()
+	if sm != null:
+		sm.set("pending_settlement_life_id", "")
+
+
+func _save_manager() -> Node:
+	var r := _tree_root()
+	return r.get_node_or_null("SaveManager") if r != null else null
 
 
 func _build_ecology() -> void:
@@ -404,12 +664,16 @@ func _on_species_unlocked(species_id: StringName) -> void:
 		hud.show_toast("新物种已解锁：%s" % cfg.display_title())
 	_refresh_status()
 	print("ENTRY|unlock|%s|unlocked=%s" % [String(species_id), str(_unlocked_ids())])
+	# T037 D9：解锁发生即落盘（跨世进度不能只留在内存）。
+	save_now(&"unlock")
 
 
 ## 发现新地点：Toast 只报稳定 ID（地点没有配置化显示名，不编名字）。
 func _on_place_discovered_toast(place_id: String) -> void:
 	if hud != null:
 		hud.show_toast("发现新地点：%s" % place_id)
+	# T037 D9：新发现即落盘（`discovered_ids` 是跨世保留项）。
+	save_now(&"discovery")
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +729,12 @@ func _enter_select() -> void:
 ## 只改**呈现**，不改 `LifeCycle` 的任何状态（状态迁移仍由 `request_select()` 负责）。
 func _present_menu() -> void:
 	if menu != null:
-		menu.open_menu(_previous_record_text())
+		# 读档提示借用菜单的「上一世」文字位（HUD 在此被隐藏），消费一次即清空。
+		var previous := _previous_record_text()
+		if _load_notice != "":
+			previous = _load_notice if previous == "" else "%s\n%s" % [_load_notice, previous]
+			_load_notice = ""
+		menu.open_menu(previous)
 	if hud != null:
 		hud.visible = false
 	if status_label != null:
@@ -522,6 +791,9 @@ func _on_life_settled(record: Dictionary) -> void:
 		discovery.player = null
 	_enter_select()
 	_present_settle(record)
+	# T037 D4/D9：结算页已展示 → 清空 pending 并落盘（第二次写，与死亡时的第一次成对）。
+	_clear_pending_settlement()
+	save_now(&"settle_shown")
 
 
 ## 创建玩家身体并回呼 `mark_spawned()`（决策 D1：状态机不建节点）。
@@ -586,10 +858,16 @@ func _spawn_player(species_id: StringName) -> void:
 func _on_player_died(reason: StringName) -> void:
 	if lifecycle == null or not lifecycle.is_alive():
 		return
+	# T037 D4：先标记"死亡已发生、结算页尚未展示"，再归档 → 结算页呈现后清空。
+	var sm := _save_manager()
+	if sm != null:
+		sm.set("pending_settlement_life_id", lifecycle.life_id)
 	lifecycle.end_life(&"died", {"damage_reason": String(reason)})
 	print("ENTRY|died|life=%s|reason=%s|archive=%d" % [
 		lifecycle.life_id, String(reason), archive_count()
 	])
+	# T037 D9：死亡结算时写第一次（pending 非空）。
+	save_now(&"death")
 
 
 func _on_survival_changed(state: SurvivalState) -> void:

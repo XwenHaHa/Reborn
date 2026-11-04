@@ -151,6 +151,8 @@ class_name SpeciesConfig extends Resource
   - **`total_count` 包含已实例化与未实例化个体**；实例化/销毁表现不改变它
 - `CurrentLife`：`life_id`、`species_id`、`life_state`、`transform`、`survival`、`spawn_world_time`、`last_safe_spot_id`、`current_events`、`current_discovered_ids`
 - `WorldSnapshot`：`save_version`(=1)、`revision`(int)、`world_time`、`resources`、`regions`、`discovered_ids`、`unlocked_species`、`life_records`、`current_life`、`pending_settlement_life_id`
+  - **T037 实现扩展**（只增不改，便于诊断/ID 单调）：`events`、`life_counter`、`event_seq`、`saved_reason`（只写不读）
+  - `last_safe_spot_id` 仍在 `CurrentLife` 契约内，**T037 预留未建**（T042 落地；读档不读该键）
 
 **读取校验**：拒绝未知版本、重复 ID、未知物种、负数/超容量、非有限数值（`is_finite()`）。
 恢复可选指标前夹紧到 0～100 并**记录修复**。严重结构错误走坏档回退，**不静默开新游戏**。
@@ -168,7 +170,7 @@ class_name SpeciesConfig extends Resource
 | `CurrentLife` | `transform` 已补齐（`GameState.sync_current_life()` 存活期同步）；`survival` 以既有 `snapshot` 键承载（不复制第二份）；`spawn_world_time→start_world_time`；`life_state` 真源 `LifeCycle.state`（不入档）；`last_safe_spot_id` **缺**（T042）；`current_events/current_discovered_ids` 有等价替代 |
 | `LifeRecord` | 4 项一致；`food_count→food_gained`（累计增益，**不可逆**）、`capture_count→captures`、`escape_count→escapes`、`discovered_ids→discoveries`、`events→event_first/event_last` 为语义偏移 |
 | `LifeEvent` | `life_id/world_time` 一致；`event_id→seq`、`type→kind`、`reason/amount→data.*` 为语义偏移；`source_id` 按 D5 **不补**（同一事实不存两份） |
-| `WorldSnapshot` | **整容器缺**（`save_version/revision/pending_settlement_life_id` 无落点）→ **T037** 组装 |
+| `WorldSnapshot` | **T037 已组装**（10 契约键 + 4 实现键）；`pending_settlement_life_id` = "死亡已发生、结算页尚未展示"，读档补弹后清空 |
 | 信号 | `action_noise` 一致；其余 5 条为名称/参数/类型偏移（详见证据 §3.2），`captured` 无 `capture_id/region_id`、`died` 无 `life_id` |
 
 ## 4. 输入与交互接口
@@ -357,23 +359,25 @@ API `time_of_day() / day_index()（0 起）/ is_daytime() / phase_name()` **全�
 
 ## 8. 保存与恢复策略
 
-一个逻辑进度槽，物理上用 `Reborn_A` / `Reborn_B` 双槽（`user://`）。
-**Revision 单调增加，每次写非当前槽**；写成功后重新读取并做结构校验，才视为最新完成快照；**保留另一槽，不删除旧槽**。
-加载检查两个槽，选 Revision 最大的**有效**快照，**不依赖未验证的原子替换**。
+**T037 落地口径（已实测；取代下文旧双槽设想）**：一个逻辑槽，物理上
+`user://savegame_v1.json`（主档）+ `user://savegame_v1.json.bak`（上一版有效快照）。JSON 纯数据便于排查；
+`Transform3D/Vector3` 以 `{"$t":[...]}` / `{"$v":[...]}` 标记编码，其余只用 String/int/float/bool/Array/Dictionary。
 
-格式用 `ResourceSaver` + `save_data.gd`（Godot 原生，类型安全），或 JSON 便于人工排查。
-**T037 实测后固定，不预先假定可靠性。**
-
-一次仅一个异步写入。新变化保留最新待写 Revision，当前写完再生成最新权威快照；
-**关键事务不可在序列化中途修改该快照**。节流 1 s（见 `Parameters.md`），死亡/退出绕过等待但仍串行。
-正常退出等结果，失败提供重试或明确"退出将丢最近进度"的确认。
-
-双槽是**需要故障注入验证**的回退方案，**不宣称任何断电场景零丢失**。
-无有效槽时显示恢复失败与明确新游戏选项，**不静默覆盖**。
-
-**加载顺序**：校验数据 → 暂停模拟 → 恢复世界数据 → 重建固定与捕获资源 →
-根据区域总数实例化 NPC → 选择结算或恢复身体 → 验证落点与安全距离 → 绑定 UI/输入 → 解除暂停。
-短暂保护期间禁止敌人伤害，不能无限重复领资源。
+- **写入**：先写 `savegame_v1.json.tmp`（`flush` 后关闭）→ 把现有主档复制为 `.bak` → `rename_absolute(tmp, 主档)`
+  （Windows 覆盖改名失败时删除主档后重试一次，已有 `.bak` 可回退）。写完 `revision += 1`。
+  重复保存幂等：除 `revision/saved_reason` 外内容一致（断言 F1/F4）。
+- **版本**：`save_version=1`；缺失/非整数/非有限 → `corrupt`；等值不匹配 → `version_mismatch`（**不隔离、不覆盖**）。
+- **损坏恢复**：解析失败或结构非法 → 主档改名 `.corrupt-<unix时间戳>`（不删除）→ 用 `.bak` 再校验；
+  可用则 `recovered_backup`，否则 `corrupt`（不静默开新游戏）。字段缺失补默认并记 `repairs`；
+  负数/超容量夹紧、非有限值回默认、坏条目跳过；`current_life` 与 `pending` 同时非空 → 清 `pending`。
+- **玩家可见**：修复载入 Toast「存档已修复 N 处后载入」；备份恢复「主存档损坏，已从备份恢复」；
+  损坏无备份「存档损坏，已隔离；未载入」；版本不兼容「存档版本不兼容（vN），未载入」。
+- **自动存盘时机**：死亡结算（`pending` 写入，第 1 次）→ 结算页展示后清 `pending`（第 2 次）；
+  新发现/新解锁各自落盘；退出时 `_exit_tree` 存一次。只有正式运行（`current_scene == self`）启用；
+  测试/工具显式 `set_persistence_enabled(true)`。
+- **加载顺序**：`SaveManager.validate` → 建关卡/区域账本 → 世界时间 → 区域种群 → 资源点（按稳定 ID 匹配/补建）
+  → 长期层（档案/事件/发现/解锁/计数器）→ 当前生命（存活恢复身体；`pending` 非空补弹结算页）→ 绑定 HUD/输入。
+- **安全项**：存档只落在 `user://`，不写个人绝对路径与令牌（断言 A7）；设置仍另存 `user://settings.cfg`，不混入死亡进度。
 
 ## 9. 与 UE5 方案的差异清单（迁移对照）
 

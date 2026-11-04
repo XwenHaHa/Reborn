@@ -315,6 +315,43 @@ func events_of_kind(kind: StringName) -> Array:
 	return out
 
 
+# ---------------------------------------------------------------------------
+# 存档长期层（T037）
+# ---------------------------------------------------------------------------
+
+## 长期层快照（原生值；编码/校验在 `SaveManager`）。键集合 = T037 D3 的扩展字段。
+func snapshot_long_term() -> Dictionary:
+	return {
+		"life_records": life_records.duplicate(true),
+		"events": events.duplicate(true),
+		"current_life": current_life.duplicate(true),
+		"unlocked_species": unlocked_list().map(func(id: StringName) -> String: return String(id)),
+		"discovered_ids": discovered_place_list(),
+		"life_counter": _life_counter,
+		"event_seq": _event_seq,
+	}
+
+
+## 用读档快照**覆盖**长期层。`data` 必须已由 `SaveManager.validate()` 校验。
+## 不发出任何信号（读档不是新发现/新解锁）；`discovery_unlock_rules` 是接线数据，不覆盖。
+func restore_long_term(data: Dictionary) -> bool:
+	if data.is_empty():
+		return false
+	life_records = (data.get("life_records", []) as Array).duplicate(true)
+	events = (data.get("events", []) as Array).duplicate(true)
+	current_life = (data.get("current_life", {}) as Dictionary).duplicate(true)
+	unlocked_species = {}
+	for id in (data.get("unlocked_species", []) as Array):
+		unlocked_species[StringName(String(id))] = true
+	discovered_places = {}
+	# 契约只存稳定 ID（首次发现的世界时间不参与跨世规则；读档回填 0.0）。
+	for id in (data.get("discovered_ids", []) as Array):
+		discovered_places[String(id)] = 0.0
+	_life_counter = maxi(0, int(data.get("life_counter", 0)))
+	_event_seq = maxi(0, int(data.get("event_seq", 0)))
+	return true
+
+
 ## 人可读的一行档案摘要（HUD / 日志 / 结算提示共用）。
 func archive_line(rec: Dictionary) -> String:
 	if rec.is_empty():

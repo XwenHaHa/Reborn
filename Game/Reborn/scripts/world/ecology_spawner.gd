@@ -444,6 +444,11 @@ func _dominant_reason(rejected: Dictionary) -> String:
 func _physics_process(_delta: float) -> void:
 	if _pending and _nav_ready():
 		_pending = false
+		# 玩家可能在导航就绪前死亡并被 `LifeCycle._release_body()` 释放；此时不能再 setup 已释放对象。
+		if _player != null and not is_instance_valid(_player):
+			_player = null
+		if _player == null:
+			return
 		setup(_player, _origin)
 
 

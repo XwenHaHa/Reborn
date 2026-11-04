@@ -77,3 +77,25 @@ func to_dictionary() -> Dictionary:
 		"stamina": stamina,
 		"last_damage_reason": last_damage_reason,
 	}
+
+
+## 读档：从纯数据字典重建状态（T037）。缺键回默认 100，非有限值回默认；
+## **容量夹紧由调用方**（`SurvivalController.set_state()`）用当前物种配置做。
+static func from_dictionary(d: Dictionary) -> SurvivalState:
+	var out := SurvivalState.new()
+	if d == null or d.is_empty():
+		return out
+	out.health = _finite_or(d.get("health", 100.0), 100.0)
+	out.hunger = _finite_or(d.get("hunger", 100.0), 100.0)
+	out.thirst = _finite_or(d.get("thirst", 100.0), 100.0)
+	out.stamina = _finite_or(d.get("stamina", 100.0), 100.0)
+	out.last_damage_reason = StringName(String(d.get("last_damage_reason", "")))
+	return out
+
+
+static func _finite_or(value: Variant, fallback: float) -> float:
+	if value is int:
+		return float(value)
+	if value is float and is_finite(value):
+		return float(value)
+	return fallback
