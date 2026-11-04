@@ -23,6 +23,10 @@ extends CharacterBody3D
 ## 输入：默认读 `Input`（玩家）。`player_controlled = false` 时不读输入，改由外部每帧写
 ## `move_intent` / `want_sprint` / `want_crouch` / `want_jump`（为测试与将来的 NPC 留口）。
 
+## ART14：角色质感材质（PBR 校正 / 绒毛法线 / 轮廓光 / 次表面近似）。
+## 用 preload 而非全局类名：无头/未导入环境里全局类缓存可能不新鲜。
+const A14CharacterMaterial := preload("res://scripts/characters/character_material.gd")
+
 signal configured(species_id: StringName)
 ## 蹲/站状态真的改变时发出（被头顶挡住时不发）
 signal stance_changed(crouching: bool)
@@ -444,6 +448,8 @@ func _rebuild_visual() -> void:
 		body_mesh.visible = false
 	if visual_root != null:
 		visual_root.visible = not captured
+		# ART14：只改材质呈现（粗糙度/镜面/后续 shader），不碰网格、碰撞与动画
+		A14CharacterMaterial.apply_to(visual_root, species_config)
 	_sync_visual()
 	_bind_visual_animation()
 
