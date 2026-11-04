@@ -536,8 +536,8 @@ func _add_light_and_env(parent: Node3D) -> void:
 	sun.directional_shadow_max_distance = 45.0
 	sun.shadow_bias = 0.03
 	# ART16：默认 2.0 的法线偏移把阴影根部推开，0.31 m 的猫脚下出现"影子离脚"。
-	# 0.6 让阴影终止线贴回接触处；方向/能量/色温/最大距离一字未动。
-	sun.shadow_normal_bias = 0.6
+	# 0.7 让阴影终止线贴回接触处；方向/能量/色温/最大距离一字未动。
+	sun.shadow_normal_bias = 0.7
 	parent.add_child(sun)
 	sun.owner = parent
 
