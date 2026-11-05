@@ -201,15 +201,11 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# T042：Esc（`pause` 动作）的鼠标/暂停语义由 `MainEntry` 的暂停层统一处理，
+	# 身体不再自行切换鼠标捕获（否则 NPC 实例也会响应，且与暂停菜单抢状态）。
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var motion := event as InputEventMouseMotion
 		apply_look(-motion.relative.x * mouse_sensitivity, -motion.relative.y * mouse_sensitivity)
-	elif event.is_action_pressed("pause"):
-		Input.mouse_mode = (
-			Input.MOUSE_MODE_VISIBLE
-			if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
-			else Input.MOUSE_MODE_CAPTURED
-		)
 
 
 ## 偏航/俯仰（弧度）。鼠标事件经 `_unhandled_input` 调它；测试可直接调它，走同一段代码。

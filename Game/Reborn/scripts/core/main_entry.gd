@@ -14,6 +14,9 @@ const LEVEL_SCENE_PATH := "res://scenes/maps/l_courtyard.tscn"
 const BODY_SCENE_PATH := "res://scenes/characters/animal_body.tscn"
 const HUD_SCENE_PATH := "res://scenes/ui/hud.tscn"
 const RESOURCE_SCENE_PATH := "res://scenes/world/resource_point.tscn"
+## T042：新脚本用 `preload` 显式依赖，避免依赖 `.godot` 全局类缓存的刷新时机。
+const PAUSE_MENU_SCRIPT := preload("res://scripts/ui/pause_menu.gd")
+const END_LIFE_CONFIRM_SCRIPT := preload("res://scripts/ui/end_life_confirm.gd")
 const SPECIES_DIR := "res://resources/species"
 const PlacementSafetyLib = preload("res://scripts/world/placement_safety.gd")
 
@@ -64,6 +67,12 @@ var menu: MainMenu = null
 var settle_panel: LifeSettlePanel = null
 ## T041 破坏性操作二次确认层：插在 `MainMenu` 之上、`LifeSettlePanel` 之下。
 var confirm_dialog: NewGameConfirm = null
+## T042 暂停层：插在 `Hud` 之上、`MainMenu` 之下（只在存活期可达）。
+var pause_menu = null
+## T042「结束本次生命」二次确认：暂停层之上。
+var end_life_confirm = null
+## T042 暂停状态（`SceneTree.paused` 由本入口统一开关）。
+var _paused := false
 ## 选物种时的展示相机（挂在关卡里）；玩家出生后由玩家相机接管
 var menu_camera: Camera3D = null
 ## 菜单补光（挂在菜单相机下、不投阴影）：展示动物的正脸常被主光甩进阴影，加一盏只用于菜单的补光
@@ -119,6 +128,8 @@ func _ready() -> void:
 		apply_saved_snapshot(_loaded_snapshot, false)
 	_build_ecology()
 	_build_hud()
+	# T042：暂停层贴 HUD 之上、菜单之下（存活期菜单/状态/确认/结算都隐藏）。
+	_build_pause_layers()
 	# T033（ART09 遮挡遗留）：`LifeStatus` 必须在 `MainMenu` **之后**加入——
 	# 同 canvas 后加入者绘制在上，状态文字才不会被菜单（尤其右上 MvpNote）盖住；
 	# `LifeSettlePanel` 仍最后加入、绘制在最上（T032 A9 契约）。
@@ -138,6 +149,11 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	# T042：暂停是本节点的全局状态，离场前必须解除，避免把暂停留给后续场景/测试。
+	if _paused:
+		_paused = false
+		if get_tree() != null:
+			get_tree().paused = false
 	# T037 D9：退出时存一次；T039 D3：双坏阻断期间禁止自动写新档。
 	if not _load_blocked:
 		save_now(&"exit")
@@ -148,6 +164,11 @@ func _exit_tree() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# T042：Esc 统一走优先级守卫（结算页 > 确认层 > 暂停）；未消费时继续走既有菜单路径。
+	if event.is_action_pressed("pause") or event.is_action_pressed("ui_cancel"):
+		if handle_escape():
+			get_viewport().set_input_as_handled()
+		return
 	if lifecycle == null or lifecycle.state != LifeCycle.State.SELECTING:
 		return
 	if confirm_dialog != null and confirm_dialog.is_open():
@@ -897,6 +918,21 @@ func _build_confirm() -> void:
 	confirm_dialog.cancelled.connect(_on_new_game_cancelled)
 
 
+## T042：暂停层 + 结束确认。调用点在 `_build_hud()` 之后、`_build_menu()` 之前 →
+## `Hud < PauseMenu < EndLifeConfirm < MainMenu < LifeStatus < NewGameConfirm < LifeSettlePanel`。
+func _build_pause_layers() -> void:
+	pause_menu = PAUSE_MENU_SCRIPT.new() as Control
+	pause_menu.name = "PauseMenu"
+	add_child(pause_menu)
+	pause_menu.resume_requested.connect(_on_pause_resume_requested)
+	pause_menu.end_life_requested.connect(_on_pause_end_life_requested)
+	end_life_confirm = END_LIFE_CONFIRM_SCRIPT.new() as Control
+	end_life_confirm.name = "EndLifeConfirm"
+	add_child(end_life_confirm)
+	end_life_confirm.confirmed.connect(_on_end_life_confirmed)
+	end_life_confirm.cancelled.connect(_on_end_life_cancelled)
+
+
 func _build_settle_panel() -> void:
 	settle_panel = LifeSettlePanel.new()
 	settle_panel.name = "LifeSettlePanel"
@@ -929,6 +965,146 @@ func _present_settle(record: Dictionary) -> void:
 func dismiss_settle() -> void:
 	if settle_panel != null:
 		settle_panel.dismiss()
+
+
+# ---------------------------------------------------------------------------
+# 暂停与主动结束（T042）
+# ---------------------------------------------------------------------------
+
+func is_paused() -> bool:
+	return _paused
+
+
+## 存活期打开暂停：树暂停 + 世界时钟门闩双保险；结算页/确认层存在时拒绝。
+func open_pause() -> bool:
+	if _paused:
+		return true
+	if lifecycle == null or not lifecycle.is_alive():
+		return false
+	if settle_panel != null and settle_panel.is_presenting():
+		return false
+	if confirm_dialog != null and confirm_dialog.is_open():
+		return false
+	if end_life_confirm != null and end_life_confirm.is_open():
+		return false
+	if pause_menu == null:
+		return false
+	_paused = true
+	_apply_time_gate(false)
+	if get_tree() != null:
+		get_tree().paused = true
+	pause_menu.open()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	print("ENTRY|pause|open|world_time=%.4f|advancing=false" % world_time_now())
+	return true
+
+
+## 恢复：逐字段还原（暂停期没有任何节点跑 `_process/_physics_process`）。
+func resume_game() -> bool:
+	if not _paused:
+		return false
+	if end_life_confirm != null:
+		end_life_confirm.close()
+	if pause_menu != null:
+		pause_menu.close()
+	_paused = false
+	if get_tree() != null:
+		get_tree().paused = false
+	if lifecycle != null and lifecycle.is_alive():
+		_apply_time_gate(true)
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	print("ENTRY|pause|resume|world_time=%.4f|advancing=%s" % [
+		world_time_now(), str(lifecycle != null and lifecycle.is_alive())
+	])
+	return true
+
+
+## Esc 优先级唯一入口：结算页 > 确认层 > 暂停。返回是否消费。
+func handle_escape() -> bool:
+	if settle_panel != null and settle_panel.is_presenting():
+		return false
+	if confirm_dialog != null and confirm_dialog.is_open():
+		return false
+	if end_life_confirm != null and end_life_confirm.is_open():
+		cancel_end_life()
+		return true
+	if _paused:
+		resume_game()
+		return true
+	if lifecycle != null and lifecycle.is_alive():
+		return open_pause()
+	return false
+
+
+## 暂停菜单里的「结束本次生命」→ 打开二次确认（默认「取消」）。
+func request_end_life() -> bool:
+	if not _paused:
+		return false
+	if lifecycle == null or not lifecycle.is_alive():
+		return false
+	if end_life_confirm == null:
+		return false
+	end_life_confirm.open()
+	print("ENTRY|end_life_confirm|open|focus=%s" % end_life_confirm.default_button_text())
+	return true
+
+
+func cancel_end_life() -> bool:
+	if end_life_confirm == null or not end_life_confirm.is_open():
+		return false
+	end_life_confirm.cancel()
+	return true
+
+
+func confirm_end_life() -> bool:
+	if end_life_confirm == null or not end_life_confirm.is_open():
+		return false
+	end_life_confirm.confirm()
+	return true
+
+
+## 确认后走 `_on_player_died` 同一条正常死亡路径：归档 → pending → death/settle 两次写 → 结算页。
+## 禁止直接重生/清档/跳结算；重生仍由玩家在结算后选物种。
+func _on_end_life_confirmed() -> void:
+	if not _paused:
+		return
+	if end_life_confirm != null:
+		end_life_confirm.close()
+	if pause_menu != null:
+		pause_menu.close()
+	_paused = false
+	if get_tree() != null:
+		get_tree().paused = false
+	if lifecycle == null or not lifecycle.is_alive():
+		_apply_time_gate(false)
+		return
+	var life := lifecycle.life_id
+	var sm := _save_manager()
+	if sm != null:
+		sm.set("pending_settlement_life_id", life)
+	lifecycle.end_life(&"died", {"damage_reason": "player_quit"})
+	print("ENTRY|end_life|player_quit|life=%s|archive=%d|settle=%d" % [
+		life, archive_count(), lifecycle.settle_count
+	])
+	save_now(&"death")
+
+
+func _on_pause_resume_requested() -> void:
+	resume_game()
+
+
+func _on_pause_end_life_requested() -> void:
+	request_end_life()
+
+
+func _on_end_life_cancelled() -> void:
+	pass
+
+
+func _apply_time_gate(value: bool) -> void:
+	var wd := _wd()
+	if wd != null:
+		wd.set("time_advancing", value)
 
 
 func _enter_select() -> void:
