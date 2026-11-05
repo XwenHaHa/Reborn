@@ -25,6 +25,10 @@ signal quit_requested
 signal setting_changed(key: StringName, value: float)
 ## 当前选中的物种变了（ART06：`MainEntry` 用它换菜单主视觉；只发选中，不触发出生）
 signal selection_changed(species_id: StringName)
+## T041：玩家点了「继续」（有可恢复存档时）
+signal resume_requested
+## T041：玩家点了「新游戏」（是否弹确认由 `MainEntry` 决定）
+signal new_game_requested
 
 enum Page { MAIN, SPECIES }
 
@@ -72,6 +76,18 @@ var _hint_label: Label = null
 var _cards_box: VBoxContainer = null
 var _mvp_note: Control = null
 var _locked_box: VBoxContainer = null
+
+## T041 会话态：有可恢复存档 → 显示「继续」；双坏阻断 → 只显示阻断页
+var _resume_available := false
+var _blocked_view := false
+var _blocked_message_text := ""
+var _input_locked := false
+var _resume_button: Button = null
+var _new_game_button: Button = null
+var _session_notice: Label = null
+var _blocked_box: VBoxContainer = null
+var _blocked_message: Label = null
+var _blocked_button: Button = null
 
 ## 物种选择页（ART09-C）：左侧大卡 + 底部缩略图行
 var _species_card: Panel = null
@@ -175,29 +191,92 @@ func close_menu() -> void:
 	_set_previews_running(false)
 
 
+# ---------------------------------------------------------------------------
+# T041 会话态（继续 / 新游戏 / 双坏阻断）
+# ---------------------------------------------------------------------------
+
+## 由 `MainEntry` 在每次进入菜单前推进：是否显示「继续」、是否进入阻断页、会话提示文字。
+func set_session_state(resume_available: bool, blocked: bool, message: String) -> void:
+	_resume_available = resume_available
+	_blocked_view = blocked
+	_blocked_message_text = message if blocked else ""
+	if _resume_button != null:
+		_resume_button.visible = resume_available and not blocked
+	if _blocked_box != null:
+		_blocked_box.visible = blocked
+	if _blocked_message != null:
+		_blocked_message.text = _blocked_message_text
+	if _session_notice != null:
+		_session_notice.text = "" if blocked else message
+		_session_notice.visible = not blocked and message != ""
+	if blocked and _blocked_button != null:
+		_blocked_button.call_deferred("grab_focus")
+	show_page(Page.MAIN if blocked else _page)
+
+
+## 确认层打开时锁住菜单的键盘输入（鼠标由确认层遮罩拦截）。
+func set_input_locked(locked: bool) -> void:
+	_input_locked = locked
+
+
+func resume_available() -> bool:
+	return _resume_available
+
+
+func is_blocked_view() -> bool:
+	return _blocked_view
+
+
+func blocked_message() -> String:
+	return _blocked_message_text
+
+
+func session_notice_text() -> String:
+	return _session_notice.text if _session_notice != null else ""
+
+
+func resume_button_visible() -> bool:
+	return _resume_button != null and _resume_button.visible
+
+
+func resume_button_text() -> String:
+	return _resume_button.text if _resume_button != null else ""
+
+
+func new_game_button_text() -> String:
+	return _new_game_button.text if _new_game_button != null else ""
+
+
+func blocked_button_text() -> String:
+	return _blocked_button.text if _blocked_button != null else ""
+
+
 ## 切换页面：`Page.MAIN` = 标题 + 开始/物种/设置/退出；`Page.SPECIES` = 进入世界/返回 + 卡片
 func show_page(page: int) -> void:
 	_page = page
 	_settings_panel.visible = false
 	var main := page == Page.MAIN
+	var blocked := _blocked_view
 	if _main_buttons != null:
-		_main_buttons.visible = main
+		_main_buttons.visible = main and not blocked
+	if _blocked_box != null:
+		_blocked_box.visible = main and blocked
 	if _species_buttons != null:
 		_species_buttons.visible = not main
 	if _species_card != null:
-		_species_card.visible = not main
+		_species_card.visible = not main and not blocked
 	# 物种页用左侧大卡替代原来的「标题 + 四按钮」栏
 	if _left_column != null:
 		_left_column.visible = main
 	# 展板的物种选择界面没有右栏和 MVP 说明：那两块版面留给大卡与主视觉
 	if _right_column != null:
-		_right_column.visible = main
+		_right_column.visible = main and not blocked
 	if _rail_shade != null:
-		_rail_shade.visible = main
+		_rail_shade.visible = main and not blocked
 	if _mvp_note != null:
-		_mvp_note.visible = main
+		_mvp_note.visible = main and not blocked
 	if _cards_box != null:
-		_cards_box.visible = true
+		_cards_box.visible = not blocked
 	_refresh_cards()
 	_refresh_hint()
 
@@ -379,7 +458,13 @@ func set_setting(key: StringName, value: float) -> void:
 # ---------------------------------------------------------------------------
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if not visible:
+	if not visible or _input_locked:
+		return
+	if _blocked_view:
+		# 阻断页唯一出路：确认开始新游戏（没有「取消」，不能 Esc 退出）。
+		if event.is_action_pressed("ui_accept"):
+			new_game_requested.emit()
+			get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("ui_cancel"):
 		if _settings_panel.visible:
@@ -514,14 +599,27 @@ func _build_left_column() -> void:
 	column.add_child(_label(TAGLINE_2, BoardTokens.FONT_TAGLINE_SMALL, COLOR_DIM))
 	column.add_child(_spacer(30))
 
+	# T041 会话提示（读档损坏/备份恢复/版本不兼容）：放在按钮上方，进入菜单即可读到。
+	_session_notice = _label("", 13, Color(0.930, 0.875, 0.730))
+	_session_notice.name = "SessionNotice"
+	_session_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_session_notice.custom_minimum_size = Vector2(BoardTokens.BUTTON_W, 0.0)
+	_session_notice.visible = false
+	column.add_child(_session_notice)
+
 	_main_buttons = _button_column()
 	_main_buttons.name = "MainButtons"
 	column.add_child(_main_buttons)
 
-	var start := _button("开始游戏", true)
-	start.name = "StartButton"
-	start.pressed.connect(func() -> void: commit())
-	_main_buttons.add_child(start)
+	# T041：有存档时「继续」在上；「新游戏」永远显示（无存档时无需确认）
+	_resume_button = _button("继续", true)
+	_resume_button.name = "StartButton"
+	_resume_button.pressed.connect(func() -> void: resume_requested.emit())
+	_main_buttons.add_child(_resume_button)
+	_new_game_button = _button("新游戏", false)
+	_new_game_button.name = "NewGameButton"
+	_new_game_button.pressed.connect(func() -> void: new_game_requested.emit())
+	_main_buttons.add_child(_new_game_button)
 	var pick := _button("物种选择", false)
 	pick.name = "SpeciesButton"
 	pick.pressed.connect(func() -> void: show_page(Page.SPECIES))
@@ -534,6 +632,28 @@ func _build_left_column() -> void:
 	quit.name = "QuitButton"
 	quit.pressed.connect(func() -> void: quit_requested.emit())
 	_main_buttons.add_child(quit)
+
+	# T041 双坏阻断页：唯一出路「确认开始新游戏」。按钮标签本身就是确认，
+	# 因此不再叠第二层确认（没有可覆盖的旧档，两份坏档已隔离）。
+	_blocked_box = VBoxContainer.new()
+	_blocked_box.name = "BlockedBox"
+	_blocked_box.add_theme_constant_override("separation", 10)
+	_blocked_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_blocked_box.visible = false
+	column.add_child(_blocked_box)
+	var blocked_title := _label("存档不可用", 18, COLOR_ACCENT)
+	blocked_title.name = "BlockedTitle"
+	_blocked_box.add_child(blocked_title)
+	_blocked_message = _label("", 13, COLOR_TEXT)
+	_blocked_message.name = "BlockedMessage"
+	_blocked_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_blocked_message.custom_minimum_size = Vector2(BoardTokens.BUTTON_W, 0.0)
+	_blocked_box.add_child(_blocked_message)
+	_blocked_button = _button("确认开始新游戏", true)
+	_blocked_button.name = "BlockedConfirmButton"
+	_blocked_button.focus_mode = Control.FOCUS_ALL
+	_blocked_button.pressed.connect(func() -> void: new_game_requested.emit())
+	_blocked_box.add_child(_blocked_button)
 
 	# ART09-C：物种页的按钮已搬进左侧大卡（`_build_species_card()`），
 	# 左栏只保留主菜单的四按钮，避免两套按钮组同时占位。
@@ -906,6 +1026,10 @@ func _build_hint() -> void:
 
 func _refresh_hint() -> void:
 	if _hint_label == null:
+		return
+	if _blocked_view:
+		_hint_label.text = "存档不可用 · 只能确认开始新游戏"
+		_hint_label.offset_left = 0.0
 		return
 	if _page == Page.SPECIES:
 		_hint_label.text = "1 / 2 选择物种 · Enter 进入世界 · Esc 返回"
@@ -1379,6 +1503,13 @@ func _clear() -> void:
 	_strip_slots.clear()
 	_strip_previews.clear()
 	_settings_panel = null
+	_session_notice = null
+	_resume_button = null
+	_new_game_button = null
+	_blocked_box = null
+	_blocked_message = null
+	_blocked_button = null
+	_input_locked = false
 
 
 func _index_of(species_id: StringName) -> int:

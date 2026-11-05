@@ -62,6 +62,8 @@ var menu: MainMenu = null
 ## 生命结算覆盖层（T032，策划 §9.3/§9.4）：**运行期建立**，加在 `menu` **之后** →
 ## 同 canvas 后加入者绘制在上，死亡后盖在选物种画面上方（`_enter_select` 时序不变，决策 D1/D5）。
 var settle_panel: LifeSettlePanel = null
+## T041 破坏性操作二次确认层：插在 `MainMenu` 之上、`LifeSettlePanel` 之下。
+var confirm_dialog: NewGameConfirm = null
 ## 选物种时的展示相机（挂在关卡里）；玩家出生后由玩家相机接管
 var menu_camera: Camera3D = null
 ## 菜单补光（挂在菜单相机下、不投阴影）：展示动物的正脸常被主光甩进阴影，加一盏只用于菜单的补光
@@ -98,6 +100,8 @@ var _load_notice := ""
 var _persist_enabled := false
 ## T039 D3：双坏隔离后阻断本会话开新局（不静默进入新游戏、退出不写新档）。
 var _load_blocked := false
+## T041：开新局时丢弃当前一世（不弹结算、不落盘）。
+var _discarding_new_game := false
 
 
 func _ready() -> void:
@@ -120,13 +124,14 @@ func _ready() -> void:
 	# `LifeSettlePanel` 仍最后加入、绘制在最上（T032 A9 契约）。
 	_build_menu()
 	_build_status()
+	_build_confirm()
 	_build_settle_panel()
 	_build_lifecycle()
 	_wire_gamestate_signals()
 	_toast_load_status()
-	# T037 D8 最后一步：当前生命（存活直接恢复 / 待结算补弹）；无法恢复就进选物种。
-	if not _restore_life_from_snapshot(_loaded_snapshot):
-		_enter_select()
+	_apply_menu_session_state()
+	# T041 D1：有可恢复存档也停在菜单，由玩家点「继续」；无存档/无当前生命直接进选物种。
+	_enter_select()
 	print("ENTRY|ready|species=%d|test_mode=%s|unlocked=%s" % [
 		_configs.size(), str(test_mode), str(_unlocked_ids())
 	])
@@ -144,6 +149,8 @@ func _exit_tree() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if lifecycle == null or lifecycle.state != LifeCycle.State.SELECTING:
+		return
+	if confirm_dialog != null and confirm_dialog.is_open():
 		return
 	var slots := selectable_slots()
 	for i in SELECT_ACTIONS.size():
@@ -191,6 +198,145 @@ func select_species(species_id: StringName) -> bool:
 ## T039 D9：双坏隔离后本会话是否被阻断。
 func is_load_blocked() -> bool:
 	return _load_blocked
+
+
+# ---------------------------------------------------------------------------
+# T041：继续 / 新游戏确认
+# ---------------------------------------------------------------------------
+
+## 「继续」是否可用：读档成功（含备份恢复）且快照里有当前生命或待结算。
+func can_continue_game() -> bool:
+	if _load_blocked:
+		return false
+	if _load_status != "ok" and _load_status != "recovered_backup":
+		return false
+	if _loaded_snapshot.is_empty():
+		return false
+	var current: Variant = _loaded_snapshot.get("current_life", {})
+	if current is Dictionary and not (current as Dictionary).is_empty():
+		return true
+	return String(_loaded_snapshot.get("pending_settlement_life_id", "")) != ""
+
+
+## 玩家点「继续」：按 T037 顺序恢复当前生命（世界层已在菜单建立前应用）。
+func continue_game() -> bool:
+	if not can_continue_game():
+		print("ENTRY|continue|rejected|status=%s|blocked=%s" % [_load_status, str(_load_blocked)])
+		return false
+	var ok := _restore_life_from_snapshot(_loaded_snapshot)
+	print("ENTRY|continue|ok=%s|state=%s|life=%s" % [
+		str(ok), lifecycle_state_name(), current_life_id()
+	])
+	return ok
+
+
+## 新游戏入口：有可覆盖旧档 → 打开确认层（默认焦点取消）；无旧档 → 直接开新局。
+## 双坏阻断页的按钮标签本身即确认，直接清阻断并开新局。
+## 返回 true = 新局已开始；false = 等待确认或被阻断。
+func request_new_game() -> bool:
+	if _load_blocked:
+		return _start_new_game(true)
+	var sm := _save_manager()
+	if sm != null and sm.has_method("snapshot_exists") and bool(sm.call("snapshot_exists")):
+		return _open_new_game_confirm()
+	if not _loaded_snapshot.is_empty() or _load_status == "version_mismatch":
+		return _open_new_game_confirm()
+	if sm != null and FileAccess.file_exists(String(sm.call("backup_path"))):
+		return _open_new_game_confirm()
+	return _start_new_game(false)
+
+
+func _open_new_game_confirm() -> bool:
+	if confirm_dialog == null:
+		return false
+	var msg := "确定开始新游戏？当前存档将被清除，且无法恢复。"
+	if _load_status == "version_mismatch":
+		msg = "旧存档版本不兼容。确认后将清除旧档并开始新游戏。"
+	confirm_dialog.open(msg)
+	if menu != null:
+		menu.set_input_locked(true)
+	print("ENTRY|new_game_confirm|open|status=%s|focus=%s" % [
+		_load_status, confirm_dialog.default_button_text()
+	])
+	return false
+
+
+func _on_menu_resume() -> void:
+	continue_game()
+
+
+func _on_menu_new_game() -> void:
+	request_new_game()
+
+
+func _on_new_game_confirmed() -> void:
+	_start_new_game(false)
+
+
+func _on_new_game_cancelled() -> void:
+	if menu != null:
+		menu.set_input_locked(false)
+
+
+## 清档 + 重置长期数据 + 重建区域账本，进入物种选择。
+func _start_new_game(blocked_origin: bool) -> bool:
+	var gs := _game_state()
+	var sm := _save_manager()
+	if gs == null or not gs.has_method("reset_for_new_game"):
+		push_error("MainEntry: 缺少 GameState.reset_for_new_game")
+		return false
+	if sm == null or not sm.has_method("clear_slot"):
+		push_error("MainEntry: 缺少 SaveManager.clear_slot")
+		return false
+	var was_blocked := _load_blocked
+	_load_blocked = false
+	# 玩家可能正在存活期点「新游戏」：先丢弃这一世（不归档、不弹结算、不落盘）。
+	_discarding_new_game = true
+	if lifecycle != null and lifecycle.state == LifeCycle.State.ALIVE:
+		lifecycle.end_life(&"new_game")
+	_discarding_new_game = false
+	sm.call("clear_slot")
+	gs.call("reset_for_new_game")
+	_loaded_snapshot = {}
+	_load_status = "none"
+	_load_message = ""
+	_load_repairs = []
+	_load_notice = ""
+	_last_record = {}
+	_last_hunger = NAN
+	_last_thirst = NAN
+	_npcs_wired.clear()
+	if ecology != null and is_instance_valid(ecology) and ecology.has_method("clear"):
+		ecology.call("clear")
+	_init_region_population()
+	_setup_long_term()
+	if confirm_dialog != null:
+		confirm_dialog.close()
+	dismiss_settle()
+	# 存活期被丢弃后状态机停在 SETTLING，必须回到 SELECTING 才能选物种。
+	if lifecycle != null and lifecycle.state == LifeCycle.State.SETTLING:
+		_enter_select()
+	if menu != null:
+		menu.set_input_locked(false)
+		menu.set_unlocked(_unlocked_ids())
+		menu.set_session_state(false, false, "")
+		menu.show_page(MainMenu.Page.SPECIES)
+	_refresh_status()
+	print("ENTRY|new_game|blocked_origin=%s|was_blocked=%s|state=%s" % [
+		str(blocked_origin), str(was_blocked), lifecycle_state_name()
+	])
+	return true
+
+
+func _apply_menu_session_state() -> void:
+	if menu == null:
+		return
+	var notice := ""
+	if _load_blocked:
+		notice = _load_message if _load_message != "" else "存档损坏，已隔离；未载入"
+	else:
+		notice = _load_notice
+	menu.set_session_state(can_continue_game(), _load_blocked, notice)
 
 
 ## T040：最近一次玩家落点解析结果（`{ok, position, reason, fallback, region_id, desired}`）。
@@ -742,6 +888,15 @@ func _on_place_discovered_toast(place_id: String) -> void:
 # ---------------------------------------------------------------------------
 
 ## 结算页与菜单同层、**后加入**（同 canvas 后加入者绘制在上；不是 CanvasLayer——T030 H8 契约）。
+## T041：确认层先于结算页加入 → `MainMenu < LifeStatus < NewGameConfirm < LifeSettlePanel`。
+func _build_confirm() -> void:
+	confirm_dialog = NewGameConfirm.new()
+	confirm_dialog.name = "NewGameConfirm"
+	add_child(confirm_dialog)
+	confirm_dialog.confirmed.connect(_on_new_game_confirmed)
+	confirm_dialog.cancelled.connect(_on_new_game_cancelled)
+
+
 func _build_settle_panel() -> void:
 	settle_panel = LifeSettlePanel.new()
 	settle_panel.name = "LifeSettlePanel"
@@ -790,12 +945,15 @@ func _enter_select() -> void:
 ## 只改**呈现**，不改 `LifeCycle` 的任何状态（状态迁移仍由 `request_select()` 负责）。
 func _present_menu() -> void:
 	if menu != null:
+		_apply_menu_session_state()
 		# 读档提示借用菜单的「上一世」文字位（HUD 在此被隐藏），消费一次即清空。
 		var previous := _previous_record_text()
-		if _load_notice != "":
+		if _load_notice != "" and not _load_blocked:
 			previous = _load_notice if previous == "" else "%s\n%s" % [_load_notice, previous]
 			_load_notice = ""
 		menu.open_menu(previous)
+		if confirm_dialog != null and confirm_dialog.is_open():
+			menu.set_input_locked(true)
 	if hud != null:
 		hud.visible = false
 	if status_label != null:
@@ -844,6 +1002,15 @@ func _on_spawn_requested(species_id: StringName) -> void:
 
 
 func _on_life_settled(record: Dictionary) -> void:
+	if _discarding_new_game:
+		# 新游戏主动丢弃的一世：不展示结算、不写盘（清档后立刻写新档会违背“确认后才清”）。
+		_last_record = {}
+		if hud != null:
+			hud.unbind()
+		player = null
+		if discovery != null:
+			discovery.player = null
+		return
 	_last_record = record
 	if hud != null:
 		hud.unbind()
@@ -1141,6 +1308,9 @@ func _build_menu() -> void:
 	menu.species_committed.connect(_on_menu_species_committed)
 	menu.setting_changed.connect(_on_menu_setting_changed)
 	menu.quit_requested.connect(_on_menu_quit)
+	menu.resume_requested.connect(_on_menu_resume)
+	menu.new_game_requested.connect(_on_menu_new_game)
+	_apply_menu_session_state()
 	_build_menu_camera()
 
 

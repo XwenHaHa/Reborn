@@ -128,6 +128,24 @@ func snapshot_exists() -> bool:
 	return FileAccess.file_exists(save_path)
 
 
+## T041：清空当前槽（主档 / 备份 / 写入中间文件）。`.corrupt-*` 隔离档**保留**，
+## 供证据与人工恢复；不碰任何真实用户目录之外的内容。
+func clear_slot() -> void:
+	for p in [save_path, backup_path(), tmp_path(), save_path + ".old", backup_path() + ".tmp"]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(p)
+	revision = 0
+	pending_settlement_life_id = ""
+	last_status = "none"
+	last_message = ""
+	last_repairs = []
+	last_warning = ""
+	last_failure_reason = ""
+	last_failure_message = ""
+	last_write_reason = ""
+	last_quarantine.clear()
+
+
 # ---------------------------------------------------------------------------
 # 快照组装（只读 autoload 与场景资源点，不写任何东西）
 # ---------------------------------------------------------------------------
