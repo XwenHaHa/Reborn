@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T026 老鼠藏身与掩体规则 断言
 ##
 ## 覆盖（`Docs/Tasks/T026.md` §4；数值只读 `Docs/Parameters.md` 第 71/73 行）：
@@ -53,6 +55,8 @@ func _initialize() -> void:
 	_cat_cfg = load(CAT) as SpeciesConfig
 	_mouse_cfg = load(MOUSE) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
+	# T043a：注入假时钟，世界时间只由 `_physics_step()` 推进；保持 time_advancing=true
+	GameClock.use_fake()
 	await _section_a_data()
 	await _section_b_cover_vision_only()
 	await _section_c_hole_blocks_cat()
@@ -370,7 +374,7 @@ func _section_c_hole_blocks_cat() -> void:
 	var t0 := _now()
 	while _now() - t0 < 1.5:
 		_push_towards(_cat, hole_point)
-		await physics_frame
+		await _physics_step()
 		min_cat = minf(min_cat, _cat.global_position.distance_to(hole_point))
 	_cat.move_intent = Vector2.ZERO
 	await _advance_frames(4)
@@ -390,7 +394,7 @@ func _section_c_hole_blocks_cat() -> void:
 	var t1 := _now()
 	while _now() - t1 < 2.5:
 		_push_towards(_mouse, hole_point)
-		await physics_frame
+		await _physics_step()
 		min_mouse = minf(min_mouse, _mouse.global_position.distance_to(hole_point))
 	_mouse.move_intent = Vector2.ZERO
 	await _advance_frames(4)
@@ -469,7 +473,7 @@ func _section_d_hiding_resources() -> void:
 	var max_thirst := t0
 	var max_health := hp0
 	while _now() - t0 < 2.5 and is_instance_valid(mai) and mai.state_id() == &"hidden":
-		await physics_frame
+		await _physics_step()
 		var now := _now()
 		var dt := now - last_world
 		last_world = now
@@ -561,7 +565,7 @@ func _section_e_integration() -> void:
 	var min_cat := INF
 	var t0 := _now()
 	while _now() - t0 < 14.0:
-		await physics_frame
+		await _physics_step()
 		min_cat = minf(min_cat, _cat.global_position.distance_to(hole_point))
 	var cat_travel := Vector2(_cat.global_position.x - cat_from.x, _cat.global_position.z - cat_from.z).length()
 	# 先读状态再关 AI（关掉会释放 AI 实例）
@@ -842,19 +846,26 @@ func _run_seconds(seconds: float, until: Callable = Callable()) -> float:
 	if _wd == null:
 		return 0.0
 	var t0: float = _now()
-	var frames := 0
-	var max_frames := int(maxf(240.0, seconds * 240.0))
-	while _now() - t0 < seconds and frames < max_frames and not paused:
+	var frames := maxi(1, int(round(seconds * 60.0)))
+	for i in frames:
 		if until.is_valid() and bool(until.call()):
 			break
-		await physics_frame
-		frames += 1
+		await _physics_step()
+		if _now() - t0 >= seconds:
+			break
 	return _now() - t0
 
 
 func _advance_frames(n: int) -> void:
 	for i in n:
-		await physics_frame
+		await _physics_step()
+
+
+## 一个固定物理步：世界时间 +1/60 s，然后等该物理帧
+func _physics_step() -> void:
+	if _wd != null:
+		_wd.set_world_time(_now() + 1.0 / 60.0)
+	await physics_frame
 
 
 func _clip(s: String) -> String:

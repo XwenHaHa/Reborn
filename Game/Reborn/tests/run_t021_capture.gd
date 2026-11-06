@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T021 猫扑击与捕获结算 断言
 ##
 ## 覆盖（`Docs/Tasks/T021.md` §2/§3/§4；数值真源 `Docs/Parameters.md` 第 67 / 77 行）：
@@ -55,6 +57,9 @@ func _initialize() -> void:
 	_cat_cfg = load(CAT) as SpeciesConfig
 	_mouse_cfg = load(MOUSE) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
+	# T043a：注入假时钟（`_process` 不再叠加真实 delta），世界时间只由 `_physics_step()` 推进；
+	# 保持 `time_advancing=true`，生存/体力照常 tick（不误判为暂停）。
+	GameClock.use_fake()
 	if _wd != null and _wd.has_signal("capture_reported") \
 			and not _wd.is_connected("capture_reported", _on_capture_reported):
 		_wd.connect("capture_reported", _on_capture_reported)
@@ -272,7 +277,7 @@ func _section_c_sweep() -> void:
 	var max_step := 0.0
 	var max_y_gap := 0.0
 	while _cat.is_pouncing() and frames < 120:
-		await physics_frame
+		await _physics_step()
 		frames += 1
 		var now := _cat.global_position
 		max_step = maxf(max_step, Vector2(now.x - prev.x, now.z - prev.z).length())
@@ -839,7 +844,7 @@ func _run_out_pounce(body: AnimalBody = null) -> int:
 		return 0
 	var frames := 0
 	while target.is_pouncing() and frames < 240:
-		await physics_frame
+		await _physics_step()
 		frames += 1
 	return frames
 
@@ -863,23 +868,30 @@ func _time_now() -> float:
 	return float(_wd.get("world_time")) if _wd != null else 0.0
 
 
-## 推进**真实世界时间**直到经过 `seconds`（或超出真实时间预算）；返回实际经过秒数。
-##
-## 物理帧长度固定为 1/60 s，但世界时间来自 `WorldDirector._process()` 的**真实 delta**，
-## 所以这里按真实时钟兜底，避免在极快的无头环境里被"帧数上限"提前掐断（T020 的 240 帧上限会）。
+## 推进**世界时间**直到经过 `seconds`：按固定物理步把权威世界时间 +1/60 s 注入
+## （不读真实时钟、不按帧数掐断；世界时间由测试驱动，见 `_initialize()`）。
 func _run_seconds(seconds: float) -> float:
 	if _wd == null:
 		return 0.0
 	var t0 := _time_now()
-	var deadline := Time.get_ticks_msec() + int(seconds * 1000.0 * 4.0) + 2000
-	while _time_now() - t0 < seconds and Time.get_ticks_msec() < deadline:
-		await physics_frame
+	var frames := maxi(1, int(round(seconds * 60.0)))
+	for i in frames:
+		await _physics_step()
+		if _time_now() - t0 >= seconds:
+			break
 	return _time_now() - t0
 
 
 func _advance_frames(n: int) -> void:
 	for _i in n:
-		await physics_frame
+		await _physics_step()
+
+
+## 一个固定物理步：世界时间 +1/60 s，然后等该物理帧
+func _physics_step() -> void:
+	if _wd != null:
+		_wd.set_world_time(_time_now() + 1.0 / 60.0)
+	await physics_frame
 
 
 func _clip(s: String) -> String:

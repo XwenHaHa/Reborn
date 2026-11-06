@@ -88,11 +88,12 @@ func _advance_physics(n: int) -> void:
 		await physics_frame
 
 
-## 真实毫秒等待（headless 帧推进不等价于真实时间，t033 E 段同法）。
-func _wait_real_ms(ms: int) -> void:
-	var t0 := Time.get_ticks_msec()
-	while Time.get_ticks_msec() - t0 < ms:
-		await process_frame
+## 权威世界时间快进（不睡眠）：推进 `world_time` 后等物理帧让资源恢复结算。
+func _advance_world_ms(ms: int) -> void:
+	var wd := _wd()
+	if wd != null:
+		wd.call("set_world_time", float(wd.get("world_time")) + float(ms) / 1000.0)
+	await _advance_physics(3)
 
 
 func _assert(key: String, expected: String, actual: String, ok: bool) -> void:
@@ -193,7 +194,7 @@ func _section_b_gate_and_scale(entry: MainEntry) -> void:
 		entry.lifecycle.time_is_advancing())
 	# ALIVE：真实等待 → world_time 递增（1:1 sim/real 由 T014 证过，这里证出生后时钟在走）
 	var wt0 := float(wd.get("world_time"))
-	await _wait_real_ms(300)
+	await _advance_world_ms(300)
 	var wt1 := float(wd.get("world_time"))
 	_assert("B3_time_grows_alive", ">0", str(wt1 - wt0), wt1 > wt0)
 	# 死亡 → SETTLING：门闩立即生效，world_time 冻结在死亡时刻
@@ -203,8 +204,8 @@ func _section_b_gate_and_scale(entry: MainEntry) -> void:
 	_assert("B4_death_time_positive", ">0", str(t_death), t_death > 0.0)
 	_assert("B5_time_frozen_after_death", "false", str(entry.lifecycle.time_is_advancing()),
 		not entry.lifecycle.time_is_advancing())
-	# 真实毫秒等待（对照：若门闩失效，300 ms 足够 world_time 漂移）
-	await _wait_real_ms(600)
+	# 门闩关死：再跑若干帧，world_time 不得漂移（不睡眠）
+	await _advance_physics(4)
 	_assert("B6_time_exactly_frozen", str(t_death), str(wd.get("world_time")),
 		is_equal_approx(float(wd.get("world_time")), t_death))
 	# 时钟读数在门闩期间不翻转；选物种状态行不含天读数
@@ -241,7 +242,7 @@ func _section_c_rebirth_keeps_time(entry: MainEntry) -> void:
 	_assert("C4_world_time_continues", ">=%s" % str(t_death), str(wd.get("world_time")),
 		float(wd.get("world_time")) >= t_death)
 	var wt0 := float(wd.get("world_time"))
-	await _wait_real_ms(200)
+	await _advance_world_ms(200)
 	_assert("C5_time_grows_after_respawn", ">0", str(float(wd.get("world_time")) - wt0),
 		float(wd.get("world_time")) - wt0 > 0.0)
 
@@ -312,7 +313,7 @@ func _section_d_resource_recovery(entry: MainEntry) -> void:
 	var wt_frozen := float(wd.get("world_time"))
 	rp.set("units", 1)
 	rp.set("next_refill_at", wt_frozen + 0.01)
-	await _wait_real_ms(600)
+	await _advance_physics(4)
 	_assert("D7_no_refill_while_frozen", "1", str(rp.get("units")),
 		int(rp.get("units")) == 1)
 	_assert("D8_next_refill_untouched", str(wt_frozen + 0.01), str(rp.get("next_refill_at")),
@@ -326,7 +327,7 @@ func _section_d_resource_recovery(entry: MainEntry) -> void:
 	entry.level.add_child(cap_food2)
 	await _advance_physics(3)
 	cap_food2.set("expire_at", float(wd.get("world_time")) + 300.0)
-	await _wait_real_ms(400)
+	await _advance_physics(4)
 	_assert("D9_no_expire_while_frozen", "1", str(cap_food2.get("units")),
 		int(cap_food2.get("units")) == 1)
 	cap_food2.queue_free()
@@ -341,7 +342,7 @@ func _section_d_resource_recovery(entry: MainEntry) -> void:
 		accepted and entry.lifecycle_state_name() == "alive")
 	rp.set("units", 1)
 	rp.set("next_refill_at", float(wd.get("world_time")) + 0.01)
-	await _wait_real_ms(300)
+	await _advance_world_ms(300)
 	_assert("D11_refills_when_time_advances", "2", str(rp.get("units")),
 		int(rp.get("units")) == 2)
 

@@ -15,6 +15,9 @@ extends SceneTree
 ##   & '<godot_console.exe>' --headless --path 'E:\Reborn\Game\Reborn' `
 ##       --script 'res://tests/run_t018_hud.gd' --quit-after 90000
 
+## T043a：单一时钟接缝。测试用假时间，世界时间由本测试逐帧注入（不再真等秒）。
+const GameClock := preload("res://scripts/core/game_clock.gd")
+
 const CAT := "res://resources/species/cat.tres"
 const MOUSE := "res://resources/species/mouse.tres"
 const BODY := "res://scenes/characters/animal_body.tscn"
@@ -44,6 +47,7 @@ var _hud: PlayerHud = null
 
 func _initialize() -> void:
 	print("TEST|run_t018_hud|engine=%s" % Engine.get_version_info().string)
+	GameClock.use_fake()
 	_cat = load(CAT) as SpeciesConfig
 	_mouse = load(MOUSE) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
@@ -156,7 +160,10 @@ func _section_d_interaction_hint() -> void:
 	_assert("D_contains_action", "含 '进食'", "'%s'" % text, text.contains("进食"))
 	_assert("D_contains_id", "含目标 ID", "'%s'" % text, text.contains("seed_food_1"))
 	seed_point.queue_free()
-	await _advance_frames(3)
+	var gone_frames := 0
+	while _hud.interaction_visible() and gone_frames < 60:
+		await process_frame
+		gone_frames += 1
 	_assert("D_hidden_after_removal", "false", str(_hud.interaction_visible()), not _hud.interaction_visible())
 
 	# 水点 → 饮水
@@ -393,15 +400,18 @@ func _eye() -> Vector3:
 	return _body.global_position
 
 
-## 推进真实世界时间 `seconds` 秒（暂停时不死等；T014 §6 的坑）
+## T043a：按固定物理帧推进世界时间（不再按墙钟轮询）。门闩关闭时不推进。
 func _run_world_seconds(seconds: float, max_frames := 20000) -> float:
 	if _wd == null:
 		return 0.0
 	var t0: float = _wd.world_time
-	var frames := 0
-	while _wd.world_time - t0 < seconds and frames < max_frames and not paused:
-		await process_frame
-		frames += 1
+	var steps := mini(max_frames, int(ceil(seconds * 60.0)))
+	for i in steps:
+		if paused:
+			break
+		if bool(_wd.get("time_advancing")):
+			_wd.set_world_time(_wd.world_time + 1.0 / 60.0)
+		await physics_frame
 	return _wd.world_time - t0
 
 

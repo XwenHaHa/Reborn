@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T019 老鼠 NPC 觅食与警戒 断言
 ##
 ## 覆盖（`Docs/Tasks/T019.md` §6；数值来自 `Docs/Parameters.md` 第 71 行）：
@@ -42,6 +44,9 @@ func _initialize() -> void:
 	_mouse = load(MOUSE) as SpeciesConfig
 	_cat = load(CAT) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
+	# 注入假时钟（`_process` 不再叠加真实 delta）→ 世界时间只由下面 `_physics_step()` 推进；
+	# 保留 `time_advancing=true`，让生存/生态照常 tick（不误判为暂停）。
+	GameClock.use_fake()
 
 	_section_a_state_machine()
 	await _section_b_target_selection()
@@ -230,19 +235,20 @@ func _section_f_alert() -> void:
 			food.cancel_call_count() == cancel_before + 1)
 	_assert("F_no_units_lost", str(units_before), str(food.units), food.units == units_before)
 	_assert_near("F_no_hunger_gain", hunger_before, _npc.survival.state.hunger, EPS)
-	# 0.3 s 内仍在警戒；超过后回落
-	await _run_seconds(0.2)
+	# 0.3 s 内仍在警戒；超过后回落。按**权威世界时间**推进，不按帧数猜时间
+	await _step_until_world(_world_seconds() + 0.20)
 	_assert("F_still_alert_at_0_2", "alert", str(_ai.state_id()), _ai.state_id() == &"alert")
-	await _run_seconds(0.2)
+	await _step_until_world(_world_seconds() + 0.155)
 	_assert("F_left_alert_after_0_3", "非 alert", str(_ai.state_id()), _ai.state_id() != &"alert")
 	_assert("F_has_alert_false", "false", str(_ai.has_alert()), not _ai.has_alert())
 	# 重复注入：仍保持 alert，但不无限延长（以最后一次注入 + 0.3 s 为界）
 	_ai.alert_for(Vector3(0.0, 0.0, 4.0), &"heard_noise")
-	await _run_seconds(0.15)
+	await _step_until_world(_world_seconds() + 0.15)
 	_ai.alert_for(Vector3(0.0, 0.0, 3.0), &"heard_noise")
-	await _run_seconds(0.2)
+	var re_inject := _world_seconds()
+	await _step_until_world(re_inject + 0.20)
 	_assert("F_repeated_alert_still_alert", "alert", str(_ai.state_id()), _ai.state_id() == &"alert")
-	await _run_seconds(0.25)
+	await _step_until_world(re_inject + 0.35)
 	_assert("F_repeated_alert_ends", "非 alert（不无限延长）", str(_ai.state_id()), _ai.state_id() != &"alert")
 	food.queue_free()
 	await _advance_frames(5)
@@ -404,8 +410,7 @@ func _fresh_arena() -> void:
 	ground.position = Vector3(0.0, -0.5, 0.0)
 	_region.add_child(ground)
 	await _advance_frames(2)
-	_region.bake_navigation_mesh(false)
-	await _advance_frames(4)
+	await _bake_and_sync()
 
 	var npc := (load(BODY) as PackedScene).instantiate() as AnimalBody
 	npc.species_config = _mouse
@@ -419,6 +424,30 @@ func _fresh_arena() -> void:
 	_ai = npc.ai as MouseAI
 	if _ai == null:
 		push_warning("NPC 没有 MouseAI（实现缺失）")
+
+
+## 等异步烘焙真正完成并强制导航地图同步（CPU 负载下固定帧数等不到烘焙完成）。
+func _bake_and_sync() -> void:
+	var done := [false]
+	var cb := func() -> void: done[0] = true
+	_region.bake_finished.connect(cb, CONNECT_ONE_SHOT)
+	_region.bake_navigation_mesh(false)
+	for i in 900:
+		if done[0]:
+			break
+		await physics_frame
+	if not done[0]:
+		_region.bake_navigation_mesh(true)   # 兜底：同步烘焙
+	await physics_frame
+	# 重新挂载同一份 navmesh 会触发 region 向 server 重投，再强制同步地图；
+	# 只靠固定帧数等待在 CPU 负载下会拿到空路径（T043a 实测）。
+	var nm := _region.navigation_mesh
+	_region.navigation_mesh = null
+	_region.navigation_mesh = nm
+	NavigationServer3D.map_set_active(_region.get_navigation_map(), true)
+	NavigationServer3D.map_force_update(_region.get_navigation_map())
+	await physics_frame
+	await physics_frame
 
 
 func _free_world() -> void:
@@ -446,24 +475,43 @@ func _add_food(id: String, pos: Vector3, eater_cfg: SpeciesConfig, units: int, d
 	return rp
 
 
-## 推进真实世界时间，直到 `until()` 为真或超时；返回实际经过秒数
+## 推进固定物理步数：每步把**权威世界时间**推进 1/60 s（`set_world_time` 直接注入，
+## 不依赖 idle 帧的 `_process` 批处理，避免 AI 读到的世界时间滞后）。
+## 世界时间由测试驱动，故关闭 `time_advancing`，防止 `_process` 再叠加真实 delta。
 func _run_seconds(seconds: float, until: Callable = Callable()) -> float:
-	if _wd == null:
-		return 0.0
-	var t0: float = _wd.world_time
-	var frames := 0
-	var max_frames := int(maxf(120.0, seconds * 240.0))
-	while _wd.world_time - t0 < seconds and frames < max_frames and not paused:
+	var frames := maxi(1, int(round(seconds * 60.0)))
+	var done := 0
+	for i in frames:
 		if until.is_valid() and bool(until.call()):
 			break
-		await physics_frame
-		frames += 1
-	return _wd.world_time - t0
+		await _physics_step()
+		done += 1
+	return float(done) / 60.0
 
 
 func _advance_frames(n: int) -> void:
 	for i in n:
-		await physics_frame
+		await _physics_step()
+
+
+## 一个固定物理步：世界时间 +1/60 s，然后等该物理帧
+func _physics_step() -> void:
+	if _wd != null:
+		_wd.set_world_time(_world_seconds() + 1.0 / 60.0)
+	await physics_frame
+
+
+## 权威世界时间（`WorldDirector.world_time`）：测试推进与断言都以它为准，不按帧数猜时间
+func _world_seconds() -> float:
+	return float(_wd.get("world_time")) if _wd != null else 0.0
+
+
+## 推进世界时间直到到达 `target`（有界，防止世界时钟停走时死循环）
+func _step_until_world(target: float, max_frames := 900) -> void:
+	for i in max_frames:
+		if _world_seconds() >= target:
+			return
+		await _physics_step()
 
 
 func _clip(s: String) -> String:

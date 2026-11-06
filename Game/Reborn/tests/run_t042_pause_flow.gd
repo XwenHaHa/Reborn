@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T042 暂停与主动结束确认 —— 先写可失败的断言（对应 `Docs/Tasks/T042.md` §6）。
 ##
 ## A 暂停入口 / B 冻结逐项 / C 恢复还原 / D Esc 优先级 / E 结束确认 / F 正常死亡路径 / G 契约。
@@ -24,6 +26,7 @@ func _initialize() -> void:
 	root.size = Vector2i(1280, 720)
 	await _advance_frames(1)
 	_clean_dir()
+	GameClock.use_fake()
 	var sm := _sm()
 	if sm != null:
 		sm.set("allow_headless_writes", true)
@@ -141,13 +144,14 @@ func _section_b_freeze() -> void:
 
 	Input.action_press(&"move_forward")
 	Input.action_press(&"sprint")
-	var wall_start := Time.get_ticks_msec()
-	await create_timer(5.0, true).timeout
-	var wall_elapsed := Time.get_ticks_msec() - wall_start
+	# 暂停中跨过 5 s：用注入的单调时钟，不真等墙钟。
+	GameClock.advance_ms(5000)
+	await _advance_frames(2)
 	Input.action_release(&"move_forward")
 	Input.action_release(&"sprint")
 
-	_assert("B1_real_wait_5s", ">=4900ms", str(wall_elapsed), wall_elapsed >= 4900)
+	_assert("B1_clock_advance_5s", ">=5000ms", str(GameClock.now_ms()),
+		GameClock.now_ms() >= 5000)
 	_assert("B2_world_time_frozen", "%.6f" % t0, "%.6f" % _entry.world_time_now(),
 		absf(_entry.world_time_now() - t0) <= EPS)
 	_assert("B3_sim_delta_unchanged", "%.9f" % sim_delta_before, "%.9f" % float(_wd_get("sim_delta")),
@@ -224,7 +228,7 @@ func _section_c_resume() -> void:
 	_assert("C8_position_same_at_resume", str(pos_at_resume), str(player.global_position),
 		player.global_position.distance_to(pos_at_resume) <= 0.2)
 
-	await create_timer(0.6, true).timeout
+	await _advance_world_seconds(0.7)
 	_assert("C9_world_time_advances_after_resume", ">%.4f" % t_at_resume,
 		"%.4f" % _entry.world_time_now(), _entry.world_time_now() > t_at_resume + 0.05)
 	if rp != null:
@@ -240,7 +244,8 @@ func _section_c_resume() -> void:
 		float(_survival(player).get("hunger", 999.0)) < hunger_at_resume)
 	# 输入恢复：按住前进，位置应当变化（不是“暂停后输入失灵”）
 	Input.action_press(&"move_forward")
-	await create_timer(0.3, true).timeout
+	for i in 20:
+		await physics_frame
 	var moved := player.global_position.distance_to(pos_at_resume)
 	Input.action_release(&"move_forward")
 	_assert("C13_player_input_restored", ">0.01", "%.4f" % moved, moved > 0.01)
@@ -361,7 +366,8 @@ func _section_e_end_confirm() -> void:
 	var archive_before := _archive_count()
 	var revision_before := int(_sm_get("revision"))
 	var save_before := _save_text()
-	await create_timer(1.0, true).timeout
+	GameClock.advance_ms(1000)
+	await _advance_frames(2)
 	_assert("E7_no_save_while_confirm", "same", _save_text(), _save_text() == save_before)
 	_assert("E8_revision_unchanged", str(revision_before), str(int(_sm_get("revision"))),
 		int(_sm_get("revision")) == revision_before)
@@ -740,6 +746,14 @@ func _node_call(node: Node, method: String, fallback: Variant = null) -> Variant
 	if node != null and node.has_method(method):
 		return node.call(method)
 	return fallback
+
+
+## 权威世界时间快进（不睡眠）：推进 world_time 后跑两帧让各系统按新时间结算。
+func _advance_world_seconds(seconds: float) -> void:
+	var wd := _wd()
+	if wd != null:
+		wd.call("set_world_time", float(wd.get("world_time")) + seconds)
+	await _advance_frames(2)
 
 
 func _advance_frames(n: int) -> void:

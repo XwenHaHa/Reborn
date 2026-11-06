@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T024 追击、搜索和放弃 断言
 ##
 ## 覆盖（`Docs/Tasks/T024.md` §6；数值只读 `Docs/Parameters.md` 第 69 行）：
@@ -59,6 +61,9 @@ func _initialize() -> void:
 	_cat_cfg = load(CAT) as SpeciesConfig
 	_mouse_cfg = load(MOUSE) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
+	# 注入假时钟：`_process` 不再叠加真实 delta，世界时间只由 `_physics_step()` 推进；
+	# `time_advancing` 保持 true，生存/生态照常 tick（不会被误判为暂停）。
+	GameClock.use_fake()
 	await _section_a_contract()
 	await _section_b_chase()
 	await _section_c_search()
@@ -285,9 +290,7 @@ func _section_d_timeout() -> void:
 	_hide_prey()
 	_free_walls()
 	await _advance_frames(4)
-	var t0 := _now()
-	var gave_up := await _run_seconds(8.0, func() -> bool: return _ai.state_reason() == &"search_timeout")
-	var spent := _now() - t0
+	var spent := await _run_seconds(8.0, func() -> bool: return _ai.state_reason() == &"search_timeout")
 	_assert("D1_timeout_to_explore", "explore/search_timeout（%.2f s）" % spent,
 		"%s/%s" % [str(_ai.state_id()), str(_ai.state_reason())], _ai.state_reason() == &"search_timeout")
 	_assert("D1_timeout_about_5s", "5.0 ±1.0 s", "%.2f s" % spent, absf(spent - SEARCH_TIMEOUT) <= 1.0)
@@ -332,10 +335,9 @@ func _section_d_timeout() -> void:
 	_hide_prey()
 	_free_walls()
 	await _advance_frames(4)
-	var t1 := _now()
-	var gave_up2 := await _run_seconds(8.0, func() -> bool: return _ai.give_up_count() >= 2)
-	_assert("D4_second_give_up", "≥ 2（%.2f s）" % (_now() - t1), str(_ai.give_up_count()), _ai.give_up_count() >= 2)
-	_assert("D4_second_also_about_5s", "≈ 5 s", "%.2f s" % (_now() - t1), absf((_now() - t1) - SEARCH_TIMEOUT) <= 1.2)
+	var spent2 := await _run_seconds(8.0, func() -> bool: return _ai.give_up_count() >= 2)
+	_assert("D4_second_give_up", "≥ 2（%.2f s）" % spent2, str(_ai.give_up_count()), _ai.give_up_count() >= 2)
+	_assert("D4_second_also_about_5s", "≈ 5 s", "%.2f s" % spent2, absf(spent2 - SEARCH_TIMEOUT) <= 1.2)
 
 
 # ---------------------------------------------------------------------------
@@ -690,8 +692,7 @@ func _fresh_world(opts: Dictionary = {}) -> void:
 	_world.add_child(_region)
 	_add_box(_region, "ArenaGround", Vector3(ARENA, 1.0, ARENA), Vector3(0.0, -0.5, 0.0))
 	await _advance_frames(2)
-	_region.bake_navigation_mesh(false)
-	await _advance_frames(8)
+	await _bake_and_sync()
 
 	if opts.has("hole_at"):
 		_add_hide_spot(opts["hole_at"], String(opts.get("hole_id", "HideSpot_Hole")))
@@ -719,6 +720,29 @@ func _fresh_world(opts: Dictionary = {}) -> void:
 	if opts.has("prey_at"):
 		_place_prey(opts["prey_at"])
 		await _advance_frames(3)
+
+
+## 等异步烘焙真正完成并强制导航地图同步（CPU 负载下固定帧数等不到烘焙完成）。
+func _bake_and_sync() -> void:
+	var done := [false]
+	var cb := func() -> void: done[0] = true
+	_region.bake_finished.connect(cb, CONNECT_ONE_SHOT)
+	_region.bake_navigation_mesh(false)
+	for i in 900:
+		if done[0]:
+			break
+		await physics_frame
+	if not done[0]:
+		_region.bake_navigation_mesh(true)
+	await physics_frame
+	var nm := _region.navigation_mesh
+	_region.navigation_mesh = null
+	_region.navigation_mesh = nm
+	NavigationServer3D.map_set_active(_region.get_navigation_map(), true)
+	NavigationServer3D.map_force_update(_region.get_navigation_map())
+	await physics_frame
+	await physics_frame
+
 
 
 func _free_world() -> void:
@@ -873,27 +897,29 @@ func _on_chase_ended(encounter_id: String, prey_alive: bool) -> void:
 	_chase_events.append({"kind": "end", "id": encounter_id, "alive": prey_alive})
 
 
-func _now() -> float:
-	return float(_wd.get("world_time")) if _wd != null else 0.0
-
-
+## 推进固定物理步数：每步把**权威世界时间**推进 1/60 s（`set_world_time` 直接注入，
+## 不依赖 idle 帧的 `_process` 批处理，避免 AI 读到的世界时间滞后）。
 func _run_seconds(seconds: float, until: Callable = Callable()) -> float:
-	if _wd == null:
-		return 0.0
-	var t0: float = _now()
-	var frames := 0
-	var max_frames := int(maxf(240.0, seconds * 240.0))
-	while _now() - t0 < seconds and frames < max_frames and not paused:
+	var frames := maxi(1, int(round(seconds * 60.0)))
+	var done := 0
+	for i in frames:
 		if until.is_valid() and bool(until.call()):
 			break
-		await physics_frame
-		frames += 1
-	return _now() - t0
+		await _physics_step()
+		done += 1
+	return float(done) / 60.0
 
 
 func _advance_frames(n: int) -> void:
 	for i in n:
-		await physics_frame
+		await _physics_step()
+
+
+## 一个固定物理步：世界时间 +1/60 s，然后等该物理帧
+func _physics_step() -> void:
+	if _wd != null:
+		_wd.set_world_time(float(_wd.get("world_time")) + 1.0 / 60.0)
+	await physics_frame
 
 
 func _clip(s: String) -> String:

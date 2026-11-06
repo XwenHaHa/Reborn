@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T033 正式物种选择与重生（`Docs/Tasks/T033.md` §6）
 ##
 ## 验证：
@@ -346,12 +348,13 @@ func _section_e_toast(_entry: MainEntry) -> void:
 	hud.show_toast(sample)
 	_assert("E1_toast_visible", "true", str(hud.toast_visible()), hud.toast_visible())
 	_assert("E2_toast_text_exact", sample, hud.toast_text(), hud.toast_text() == sample)
-	# 短时长自动隐藏（真实毫秒等待；headless 帧推进不等价于真实时间）
+	# 短时长自动隐藏（注入单调时钟，不真等毫秒）
+	GameClock.use_fake()
 	hud.show_toast(sample, 0.05)
-	var t0 := Time.get_ticks_msec()
-	while Time.get_ticks_msec() - t0 < 400:
-		await process_frame
+	GameClock.advance_ms(400)
+	await _advance_frames(2)
 	_assert("E3_toast_expires", "false", str(hud.toast_visible()), not hud.toast_visible())
+	GameClock.use_real()
 	# 空文本直接隐藏
 	hud.show_toast("")
 	_assert("E4_toast_empty_hidden", "false", str(hud.toast_visible()), not hud.toast_visible())

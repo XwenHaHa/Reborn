@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T027 按玩家物种布置测试生态 断言（`Docs/Tasks/T027.md` §4）
 ##
 ## 覆盖：
@@ -38,6 +40,8 @@ var _wd: Node = null
 func _initialize() -> void:
 	print("TEST|run_t027_ecology|engine=%s" % Engine.get_version_info().string)
 	_wd = root.get_node_or_null("WorldDirector")
+	# T043a：注入假时钟，世界时间只由 `_physics_step()` 推进；保持 time_advancing=true
+	GameClock.use_fake()
 	await _section_a_interface()
 	await _section_b_by_player_species()
 	await _section_c_player_not_counted()
@@ -336,7 +340,7 @@ func _section_d_spawn_safety() -> void:
 	var attacks := 0
 	var t0 := _now()
 	while _now() - t0 < 4.0:
-		await physics_frame
+		await _physics_step()
 		for b in _eco.npc_bodies():
 			min_live = minf(min_live, b.global_position.distance_to(_player.global_position))
 			if b.attack != null:
@@ -397,7 +401,7 @@ func _section_e_integration() -> void:
 		var max_d := d0
 		var t4 := _now()
 		while _now() - t4 < 8.0:
-			await physics_frame
+			await _physics_step()
 			var st := String(prey.ai.state_id()) if prey.ai != null else ""
 			if st != "" and not states.has(st):
 				states.append(st)
@@ -428,7 +432,7 @@ func _section_e_integration() -> void:
 		_assert("E2_pounce_started", "true", str(started), started)
 		var t2 := _now()
 		while _now() - t2 < 2.5 and _capture_count() == cap_before:
-			await physics_frame
+			await _physics_step()
 		_assert("E2_capture_ledger_plus_one", "%d" % (cap_before + 1), str(_capture_count()),
 			_capture_count() == cap_before + 1)
 		_assert("E2_prey_marked_captured", "true", str(hunted.captured), hunted.captured)
@@ -467,7 +471,7 @@ func _section_e_integration() -> void:
 		var d3_min := d3_0
 		var t3 := _now()
 		while _now() - t3 < 8.0:
-			await physics_frame
+			await _physics_step()
 			var st := String(cat_npc.ai.state_id()) if cat_npc.ai != null else ""
 			if st != "" and not states3.has(st):
 				states3.append(st)
@@ -488,7 +492,7 @@ func _section_e_integration() -> void:
 		_place_actor_in_front(cat_npc, _player, 0.55)
 		var t3b := _now()
 		while _now() - t3b < 1.8:
-			await physics_frame
+			await _physics_step()
 		var hp2: float = _player.survival.state.health
 		_assert("E3b_player_took_damage", "< %.1f" % hp1, "%.1f" % hp2, hp2 < hp1 - EPS)
 		_assert("E3b_player_survived_one_predator", "≥ 30.0（不秒杀）", "%.1f" % hp2, hp2 >= 30.0)
@@ -626,7 +630,14 @@ func _snap_on_layer(point: Vector3, layer: int) -> Vector3:
 
 func _advance(n: int) -> void:
 	for i in n:
-		await physics_frame
+		await _physics_step()
+
+
+## 一个固定物理步：世界时间 +1/60 s，然后等该物理帧（T043a：世界时间由测试驱动）
+func _physics_step() -> void:
+	if _wd != null:
+		_wd.set_world_time(_now() + 1.0 / 60.0)
+	await physics_frame
 
 
 func _assert(id: String, expected: String, actual: String, ok: bool) -> void:

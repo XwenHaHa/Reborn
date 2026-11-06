@@ -33,6 +33,10 @@ var _mouse: SpeciesConfig = null
 func _initialize() -> void:
 	root.size = Vector2i(1280, 720)
 	await _advance_frames(1)
+	# T043a：冻结世界时间——读档/账本断言不能被区域种群恢复（只吃 world_time）在夹具步骤间漂移
+	var wd0 := root.get_node_or_null("WorldDirector")
+	if wd0 != null:
+		wd0.set("time_advancing", false)
 	_cat = load("res://resources/species/cat.tres") as SpeciesConfig
 	_mouse = load("res://resources/species/mouse.tres") as SpeciesConfig
 	var packed := load(MAIN_SCENE) as PackedScene
@@ -193,8 +197,8 @@ func _section_c_reconcile() -> void:
 	_assert("C7_near_idempotent", "removed=0,pending≥1",
 		"removed=%s pending=%s" % [rep2.get("removed", -1), rep2.get("pending_excess", -1)],
 		int(rep2.get("removed", -1)) == 0 and int(rep2.get("pending_excess", -1)) >= 1)
+	# 就地收敛：不夹 `await`，避免主循环的低频 pending 重试抢在断言前把探针退场（T043a）
 	probe.global_position = _entry.player.global_position + Vector3(0.0, 0.0, 13.0)
-	await _advance_frames(2)
 	var rep_far: Dictionary = wd.call("reconcile_region_population",
 		_entry.player.global_position) if wd.has_method("reconcile_region_population") else {}
 	_assert("C8_far_removed", "≥1", str(rep_far.get("removed", 0)),
@@ -270,9 +274,9 @@ func _section_d_position_fallback() -> void:
 	_assert("D8_resolution_reason", "非 valid", str(resolved.get("reason", "")),
 		String(resolved.get("reason", "")) != "" and String(resolved.get("reason", "")) != "valid")
 	_assert("D9_resolution_matches_player", "同一点",
-		"res=%s player=%s" % [str(resolved.get("position", null)), str(_entry.player.global_position if _entry.player else null)],
-		_entry.player != null and (resolved.get("position", Vector3.ZERO) as Vector3) \
-			.distance_to(_entry.player.global_position) <= 0.05)
+		"res=%s player=%s" % [str(resolved.get("position", null)), str(_applied_player_pos)],
+		_applied_player_present and (resolved.get("position", Vector3.ZERO) as Vector3) \
+			.distance_to(_applied_player_pos) <= 0.05)
 
 	# 合法存档位置必须原样保留（T037 D12 的精确 transform 语义）。
 	var raw2 := _raw_snapshot()
@@ -281,8 +285,9 @@ func _section_d_position_fallback() -> void:
 	raw2["current_life"]["start_position"] = exact
 	raw2["pending_settlement_life_id"] = ""
 	await _apply_raw(raw2)
-	_assert("D10_valid_exact_transform", str(exact), str(_entry.player.global_position if _entry.player else null),
-		_entry.player != null and _entry.player.global_position.distance_to(exact) <= 0.05)
+	# 与 D9 同口径：断言"读档应用后的落点"（`_applied_player_pos`），而不是物理沉降后的实时坐标
+	_assert("D10_valid_exact_transform", str(exact), str(_applied_player_pos if _applied_player_present else null),
+		_applied_player_present and _applied_player_pos.distance_to(exact) <= 0.05)
 
 
 # ---------------------------------------------------------------------------
@@ -553,6 +558,11 @@ func _load_status() -> String:
 	return String(_sm().get("last_status"))
 
 
+## 读档后**立即**记录的玩家落点（用于与 resolve 结果比对；之后物理帧可能让身体微沉）。
+var _applied_player_pos := Vector3.ZERO
+var _applied_player_present := false
+
+
 func _apply_raw(raw: Dictionary) -> void:
 	await _kill_player()
 	var checked: Dictionary = _sm().call("validate", raw)
@@ -560,6 +570,8 @@ func _apply_raw(raw: Dictionary) -> void:
 		print("T040|apply|validate=%s" % String(checked.get("status", "")))
 		return
 	_entry.call("apply_saved_snapshot", checked.get("snapshot", {}), true)
+	_applied_player_present = _entry.player != null
+	_applied_player_pos = _entry.player.global_position if _applied_player_present else Vector3.ZERO
 	await _advance_frames(4)
 	await _wait_ecology()
 

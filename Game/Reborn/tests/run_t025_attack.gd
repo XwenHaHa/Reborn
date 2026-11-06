@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T025 NPC 攻击与玩家受伤 断言
 ##
 ## 覆盖（`Docs/Tasks/T025.md` §6；数值只读 `Docs/Parameters.md` 第 69 行）：
@@ -63,6 +65,9 @@ func _initialize() -> void:
 	_cat_cfg = load(CAT) as SpeciesConfig
 	_mouse_cfg = load(MOUSE) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
+	# T043a：注入假时钟（`_process` 不再叠加真实 delta），世界时间只由 `_physics_step()` 推进；
+	# 保持 `time_advancing=true`，生存/体力照常 tick（不误判为暂停）。
+	GameClock.use_fake()
 	await _section_a_contract()
 	await _section_b_telegraph()
 	await _section_c_dodge()
@@ -408,7 +413,7 @@ func _section_d_recovery() -> void:
 	var min_hp := 100.0
 	var t0 := _now()
 	while _now() - t0 < 1.0:
-		await physics_frame
+		await _physics_step()
 		min_hp = minf(min_hp, _prey.survival.state.health)
 		samples += 1
 	_assert("D_samples", "≥ 30 帧", str(samples), samples >= 30)
@@ -611,7 +616,7 @@ func _section_g_mouse_no_attack() -> void:
 	var saw_attack := false
 	var t0 := _now()
 	while _now() - t0 < 3.0:
-		await physics_frame
+		await _physics_step()
 		if mouse_ai != null and mouse_ai.state_id() == &"attack":
 			saw_attack = true
 			break
@@ -927,23 +932,32 @@ func _now() -> float:
 	return float(_wd.get("world_time")) if _wd != null else 0.0
 
 
+## 推进**世界时间**直到经过 `seconds`（或 `until()` 为真）：按固定物理步把权威世界时间
+## +1/60 s 注入（不读真实时钟；世界时间由测试驱动，见 `_initialize()`）。
 func _run_seconds(seconds: float, until: Callable = Callable()) -> float:
 	if _wd == null:
 		return 0.0
 	var t0: float = _now()
-	var frames := 0
-	var max_frames := int(maxf(240.0, seconds * 240.0))
-	while _now() - t0 < seconds and frames < max_frames and not paused:
+	var frames := maxi(1, int(round(seconds * 60.0)))
+	for i in frames:
 		if until.is_valid() and bool(until.call()):
 			break
-		await physics_frame
-		frames += 1
+		await _physics_step()
+		if _now() - t0 >= seconds:
+			break
 	return _now() - t0
 
 
 func _advance_frames(n: int) -> void:
 	for i in n:
-		await physics_frame
+		await _physics_step()
+
+
+## 一个固定物理步：世界时间 +1/60 s，然后等该物理帧
+func _physics_step() -> void:
+	if _wd != null:
+		_wd.set_world_time(_now() + 1.0 / 60.0)
+	await physics_frame
 
 
 func _clip(s: String) -> String:

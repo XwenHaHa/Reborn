@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T038 存档写入队列与关键事务 —— 先写可失败的断言（对应 `Docs/Tasks/T038.md` §6）。
 ##
 ## A 队列基础 / B 节流 / C 关键事务 / D 串行 / E 失败注入 / F 读档回退 / G T037 兼容。
@@ -23,6 +25,7 @@ func _initialize() -> void:
 	root.size = Vector2i(1280, 720)
 	await _advance_frames(1)
 	_clean_test_dir()
+	GameClock.use_fake()
 	var sm := _sm()
 	sm.set("allow_headless_writes", true)
 	sm.call("set_save_path", SAVE_PATH)
@@ -96,8 +99,9 @@ func _section_a_queue() -> void:
 func _section_b_throttle() -> void:
 	var sm := _sm()
 	sm.set("throttle_seconds", 0.05)
-	# 等过 A 段那次普通写留下的窗口，B 的前缘写才有意义。
-	await create_timer(0.12).timeout
+	# 等过 A 段那次普通写留下的窗口（假时钟精确跨窗，不真等）。
+	GameClock.advance_ms(120)
+	await _advance_frames(2)
 	var rev_before := _file_revision()
 	# 前缘：第一个普通请求在下一次帧处理时立刻写。
 	_request(&"b_lead", false)
@@ -115,7 +119,7 @@ func _section_b_throttle() -> void:
 		_file_revision() == rev_after_lead)
 	_assert("B3_window_coalesced", ">=%d" % (c0 + 1), str(int(_stat(sm, "coalesced", 0))),
 		int(_stat(sm, "coalesced", 0)) >= c0 + 1)
-	await create_timer(0.12).timeout
+	GameClock.advance_ms(120)
 	await _advance_frames(2)
 	_assert("B4_one_write_after_window", "%d" % (rev_after_lead + 1), str(_file_revision()),
 		_file_revision() == rev_after_lead + 1)

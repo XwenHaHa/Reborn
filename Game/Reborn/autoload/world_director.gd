@@ -1,4 +1,8 @@
 extends Node
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
+
+
 ## 世界统一入口（Autoload 单例）
 ##
 ## 职责（T002 阶段只实现时间；T014/T034 扩充资源注册与区域账本）：
@@ -28,13 +32,27 @@ signal noise_emitted(source_id: String, position: Vector3, loudness: float, worl
 var noise_event_count: int = 0
 
 
-func _process(delta: float) -> void:
+## T043a：世界时间只从 GameClock 的单调差值推进，不读引擎 delta。
+
+
+func _process(_delta: float) -> void:
+	# T043a：单一时钟接缝。生产 = 真实单调时钟；测试可注入假时间。
+	# 不用引擎 delta：引擎 delta 在世界暂停/拖动窗口后可能跳变，且测试无法精确控制。
+	# 生产侧只消费差值，不判断"是否测试"。
+	var d_ms := GameClock.take_delta_ms()
 	if not time_advancing:
 		sim_delta = 0.0
 		return
-	sim_delta = delta
-	world_time += delta
+	sim_delta = float(d_ms) / 1000.0
+	world_time += sim_delta
 	region_population_advance_to(world_time)   # T035 种群恢复只吃世界时间
+
+
+func _notification(what: int) -> void:
+	# 树暂停恢复时，_process 已停了一整段；重置基线，避免恢复首帧把暂停时长补进世界时间。
+	if what == NOTIFICATION_UNPAUSED:
+		GameClock.reset_delta()
+
 
 
 ## 供存档/读档设置世界时间，不触发恢复结算。

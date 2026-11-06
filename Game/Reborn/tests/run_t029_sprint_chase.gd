@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T029 猫 AI 追击冲刺（`Docs/Tasks/T029.md` §4）
 ##
 ## 验证 `CatAI` 只在 `CHASE` 且**水平距离 > chase_sprint_min_gap** 时置 `body.want_sprint = true`，
@@ -40,6 +42,9 @@ func _initialize() -> void:
 	_cat_cfg = load(CAT) as SpeciesConfig
 	_mouse_cfg = load(MOUSE) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
+	# 注入假时钟：`_process` 不再叠加真实 delta，世界时间只由 `_step()` 推进；
+	# `time_advancing` 保持 true，生存/生态照常 tick（不会被误判为暂停）。
+	GameClock.use_fake()
 	await _section_a_contract()
 	await _section_b_state_gating()
 	await _section_c_speed()
@@ -110,9 +115,8 @@ func _section_b_state_gating() -> void:
 	_place_prey(_front(6.0))
 	await _advance_frames(2)
 	var seen_alert := false
-	var t0 := _now()
-	while _now() - t0 < 1.2:
-		await physics_frame
+	for i in _frames_for(1.2):
+		await _step()
 		if String(_ai.state_id()) == "alert":
 			seen_alert = true
 			break
@@ -279,8 +283,7 @@ func _fresh_world() -> void:
 	_world.add_child(_region)
 	_add_box(_region, "ArenaGround", Vector3(ARENA, 1.0, ARENA), Vector3(0.0, -0.5, 0.0))
 	await _advance_frames(2)
-	_region.bake_navigation_mesh(false)
-	await _advance_frames(8)
+	await _bake_and_sync()
 
 	_npc = (load(BODY) as PackedScene).instantiate() as AnimalBody
 	_npc.species_config = _cat_cfg
@@ -295,6 +298,30 @@ func _fresh_world() -> void:
 	# 默认是**关**（平衡待定，见 `Docs/Evidence/T029.md`）；本套件要验证能力本身，所以显式打开
 	_ai.chase_sprint_enabled = true
 	await _advance_frames(SPAWN_FRAMES)
+
+
+## 等异步烘焙真正完成并强制导航地图同步（CPU 负载下固定帧数等不到烘焙完成）。
+func _bake_and_sync() -> void:
+	var done := [false]
+	var cb := func() -> void: done[0] = true
+	_region.bake_finished.connect(cb, CONNECT_ONE_SHOT)
+	_region.bake_navigation_mesh(false)
+	for i in 900:
+		if done[0]:
+			break
+		await physics_frame
+	if not done[0]:
+		_region.bake_navigation_mesh(true)
+	await physics_frame
+	# 重新挂载同一份 navmesh 会触发 region 向 server 重投，再强制同步地图；
+	# 只靠固定帧数等待在 CPU 负载下会拿到空路径（T043a 实测）。
+	var nm := _region.navigation_mesh
+	_region.navigation_mesh = null
+	_region.navigation_mesh = nm
+	NavigationServer3D.map_set_active(_region.get_navigation_map(), true)
+	NavigationServer3D.map_force_update(_region.get_navigation_map())
+	await physics_frame
+	await physics_frame
 
 
 func _free_world() -> void:
@@ -362,14 +389,17 @@ func _make_navmesh() -> NavigationMesh:
 	return nm
 
 
+func _frames_for(seconds: float) -> int:
+	return maxi(1, int(round(seconds * 60.0)))
+
+
 ## 把猫带到 `CHASE`：先放正前方 6 m（进视野 → alert → approach），再**瞬移** > 0.5 m 触发"猎物跳变"。
 ## （T024：`CHASE` 只在猎物跳变或搜索中重新发现时进入，光靠"看见"只会停在 `APPROACH`）
 func _drive_to_chase() -> bool:
 	_place_prey(_front(6.0))
 	await _advance_frames(3)
-	var t0 := _now()
-	while _now() - t0 < 4.0:
-		await physics_frame
+	for i in _frames_for(4.0):
+		await _step()
 		if _ai == null or not is_instance_valid(_ai):
 			return false
 		var st := String(_ai.state_id())
@@ -379,9 +409,8 @@ func _drive_to_chase() -> bool:
 		return true
 	_place_prey(_front(8.0))
 	await _advance_frames(3)
-	t0 = _now()
-	while _now() - t0 < 4.0:
-		await physics_frame
+	for i in _frames_for(4.0):
+		await _step()
 		if _ai == null or not is_instance_valid(_ai):
 			return false
 		if String(_ai.state_id()) == "chase":
@@ -392,9 +421,8 @@ func _enter_search() -> void:
 	var behind := _npc.global_position - _front_dir() * 15.0
 	_place_prey(behind)
 	await _advance_frames(2)
-	var t0 := _now()
-	while _now() - t0 < 3.0:
-		await physics_frame
+	for i in _frames_for(3.0):
+		await _step()
 		var st := String(_ai.state_id())
 		if st == "search":
 			return
@@ -410,15 +438,14 @@ func _front_dir() -> Vector3:
 # 采样与辅助
 # ---------------------------------------------------------------------------
 
-## 在 `seconds` 内每物理帧采样 `want_sprint` 与水平距离
+## 在 `seconds` 内每物理帧采样 `want_sprint` 与水平距离（按固定物理步数，不看墙钟）
 func _sample_seconds(seconds: float) -> Dictionary:
 	var frames := 0
 	var true_frames := 0
 	var min_gap := INF
 	var max_gap := 0.0
-	var t0 := _now()
-	while _now() - t0 < seconds:
-		await physics_frame
+	for i in _frames_for(seconds):
+		await _step()
 		frames += 1
 		if _npc == null or not is_instance_valid(_npc):
 			break
@@ -433,33 +460,32 @@ func _sample_seconds(seconds: float) -> Dictionary:
 		"min_gap": min_gap if min_gap < INF else -1.0, "max_gap": max_gap}
 
 
-## 测 `seconds` 内的**水平**位移速率（m/s）
+## 测 `seconds` 内的**水平**位移速率（m/s）。时长取固定物理步数（步骤数 × 1/60），
+## 不取墙钟 world_time，避免 CPU 负载下 world_time 跑得比物理步快而提前结束采样。
 func _measure_rate(seconds: float) -> float:
 	if _npc == null or not is_instance_valid(_npc):
 		return -1.0
 	var start := _npc.global_position
-	var t0 := _now()
-	var frames := 0
-	while _now() - t0 < seconds:
-		await physics_frame
-		frames += 1
+	var frames := _frames_for(seconds)
+	for i in frames:
+		await _step()
 	var moved := Vector2(_npc.global_position.x - start.x, _npc.global_position.z - start.z).length()
-	var dt := _now() - t0
+	var dt := float(frames) / 60.0
 	if dt <= 0.0001:
 		return -1.0
 	return moved / dt
 
 
-## 跑到指定状态（或超时），返回耗时
+## 跑到指定状态（或超时），返回耗时（按固定物理步数计）
 func _run_until(state: StringName, timeout: float) -> float:
-	var t0 := _now()
-	while _now() - t0 < timeout:
-		await physics_frame
+	var frames := _frames_for(timeout)
+	for i in frames:
+		await _step()
 		if _ai == null or not is_instance_valid(_ai):
 			return -1.0
 		if _ai.state_id() == state:
-			return _now() - t0
-	return _now() - t0
+			return float(i + 1) / 60.0
+	return float(frames) / 60.0
 
 
 func _read_source(path: String) -> String:
@@ -471,13 +497,17 @@ func _read_source(path: String) -> String:
 	return text
 
 
-func _now() -> float:
-	return float(_wd.get("world_time")) if _wd != null else 0.0
-
-
 func _advance_frames(n: int) -> void:
 	for i in n:
-		await physics_frame
+		await _step()
+
+
+## 固定物理步：把**权威世界时间**推进 1/60 s（`set_world_time` 直接注入，不依赖 idle 帧
+## 的 `_process` 批处理），然后等该物理帧。世界时间由测试驱动 → 关闭自动推进。
+func _step() -> void:
+	if _wd != null:
+		_wd.set_world_time(float(_wd.get("world_time")) + 1.0 / 60.0)
+	await physics_frame
 
 
 func _assert(id: String, expected: String, actual: String, ok: bool) -> void:

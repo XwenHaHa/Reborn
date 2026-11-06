@@ -401,17 +401,24 @@ func _section_h_duration() -> void:
 	var timed2 := await _add_target("timed2", 0.50, {"duration": 5.0})
 	det.detect()
 	det.press_interact()
-	# 用**真实**世界时间推进 0.2 s（不合成 tick，避免与真实帧混用）
-	var live := await _run_world_seconds(0.2)
+	# 用**权威**世界时间快进 0.2 s（不睡眠），再关闸，避免"读数前又走一帧"的竞态
+	var w0: float = _wd.world_time if _wd != null else 0.0
+	if _wd != null:
+		_wd.set_world_time(_wd.world_time + 0.2)
+	await _advance_frames(2)
+	await process_frame
+	var live: float = (_wd.world_time - w0) if _wd != null else 0.2
 	var p_before := det.interaction_progress()
 	_assert("H_live_progress_advanced", "> 0", "%.4f" % p_before, p_before > 0.0)
 	_assert("H_live_elapsed_reported", ">= 0.2", "%.4f" % live, live >= 0.2 - EPS)
 	if _wd != null:
 		_wd.time_advancing = false
-	var moved := await _run_world_seconds(0.3, 200)
+	var frozen_wt: float = _wd.world_time if _wd != null else 0.0
+	await _advance_frames(4)
+	var frozen_delta: float = (_wd.world_time - frozen_wt) if _wd != null else 0.0
 	if _wd != null:
 		_wd.time_advancing = true
-	_assert("H_paused_world_time_frozen", "0.0000", "%.4f" % moved, moved < EPS)
+	_assert("H_paused_world_time_frozen", "0.0000", "%.4f" % frozen_delta, frozen_delta < EPS)
 	_assert("H_paused_progress_frozen", "%.4f" % p_before, "%.4f" % det.interaction_progress(),
 		absf(det.interaction_progress() - p_before) < EPS)
 	_assert("H_paused_not_committed", "0", str(timed2.commit_count()), timed2.commit_count() == 0)
@@ -718,18 +725,6 @@ func _clip(s: String) -> String:
 func _advance_frames(n: int) -> void:
 	for i in n:
 		await physics_frame
-
-
-## 推进真实世界时间 `seconds` 秒（暂停时不死等）
-func _run_world_seconds(seconds: float, max_frames := 20000) -> float:
-	if _wd == null:
-		return 0.0
-	var t0: float = _wd.world_time
-	var frames := 0
-	while _wd.world_time - t0 < seconds and frames < max_frames and not paused:
-		await process_frame
-		frames += 1
-	return _wd.world_time - t0
 
 
 func _all_nodes(node: Node) -> Array[Node]:

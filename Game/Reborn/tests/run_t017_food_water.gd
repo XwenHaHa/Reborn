@@ -20,6 +20,9 @@ extends SceneTree
 ##   & '<godot_console.exe>' --headless --path 'E:\Reborn\Game\Reborn' `
 ##       --script 'res://tests/run_t017_food_water.gd' --quit-after 90000
 
+## T043a：单一时钟接缝。测试用假时间，世界时间由本测试逐帧注入（不再真等秒）。
+const GameClock := preload("res://scripts/core/game_clock.gd")
+
 const CAT := "res://resources/species/cat.tres"
 const MOUSE := "res://resources/species/mouse.tres"
 const BODY := "res://scenes/characters/animal_body.tscn"
@@ -42,6 +45,7 @@ var _body: AnimalBody = null
 
 func _initialize() -> void:
 	print("TEST|run_t017_food_water|engine=%s" % Engine.get_version_info().string)
+	GameClock.use_fake()
 	_cat = load(CAT) as SpeciesConfig
 	_mouse = load(MOUSE) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
@@ -646,14 +650,19 @@ func _advance_frames(n: int) -> void:
 		await physics_frame
 
 
+## T043a：按固定物理帧推进世界时间（不再按墙钟轮询）。门闩关闭时不推进，
+## 因此「暂停不提交 / 暂停不恢复」仍逐帧真实校验，但不消耗真实等待时间。
 func _run_world_seconds(seconds: float, max_frames := 20000) -> float:
 	if _wd == null:
 		return 0.0
 	var t0: float = _wd.world_time
-	var frames := 0
-	while _wd.world_time - t0 < seconds and frames < max_frames and not paused:
-		await process_frame
-		frames += 1
+	var steps := mini(max_frames, int(ceil(seconds * 60.0)))
+	for i in steps:
+		if paused:
+			break
+		if bool(_wd.get("time_advancing")):
+			_wd.set_world_time(_wd.world_time + 1.0 / 60.0)
+		await physics_frame
 	return _wd.world_time - t0
 
 

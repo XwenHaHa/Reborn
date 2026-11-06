@@ -104,10 +104,13 @@ func _advance_frames(n: int) -> void:
 		await process_frame
 
 
-func _wait_real_ms(ms: int) -> void:
-	var t0 := Time.get_ticks_msec()
-	while Time.get_ticks_msec() - t0 < ms:
-		await process_frame
+## 权威世界时间快进（不睡眠）：推进 world_time 后跑物理帧，让 survival 回调同步。
+func _advance_world_ms(ms: int) -> void:
+	var wd := _wd()
+	if wd != null:
+		wd.call("set_world_time", float(wd.get("world_time")) + float(ms) / 1000.0)
+	for i in 3:
+		await physics_frame
 
 
 func _assert(key: String, expected: String, actual: String, ok: bool) -> void:
@@ -393,8 +396,8 @@ func _section_c_live_sync(entry: MainEntry) -> void:
 			and cur.has("snapshot") and cur.has("transform"))
 	_assert("A7b_archive_pure_data", "无 Object 引用", "", _is_pure_data(cur))
 
-	# C2/C3 存活期同步：等一次 0.2 s 的 survival 回调
-	await _wait_real_ms(700)
+	# C2/C3 存活期同步：快进世界时间触发 survival 回调
+	await _advance_world_ms(700)
 	cur = gs.get("current_life") as Dictionary
 	var snap: Dictionary = cur.get("snapshot", {})
 	var live := entry.player.survival.state
@@ -414,7 +417,7 @@ func _section_c_live_sync(entry: MainEntry) -> void:
 	var moved := entry.player.global_position + Vector3(0.5, 0.0, 0.0)
 	entry.player.global_position = moved
 	await _advance_frames(2)
-	await _wait_real_ms(700)
+	await _advance_world_ms(700)
 	cur = gs.get("current_life") as Dictionary
 	tpos = cur.get("transform", Transform3D())
 	_assert("C4_transform_follows_move", "≈ 新位置（≤0.15 m）",
@@ -553,7 +556,7 @@ func _section_f_rebirth_multi_life(entry: MainEntry) -> void:
 	_assert("F4b_unlock_persists", "含 Cat", str(unlocked),
 		unlocked.has(CAT_ID))
 
-	await _wait_real_ms(700)
+	await _advance_world_ms(700)
 	var cur := gs.get("current_life") as Dictionary
 	var snap: Dictionary = cur.get("snapshot", {})
 	_assert("F5_fresh_survival", "health≈100",

@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T020 老鼠视觉、听觉与逃跑 断言
 ##
 ## 覆盖（`Docs/Tasks/T020.md` §6；数值真源 `Docs/Parameters.md` 第 71 / 73 行）：
@@ -51,6 +53,8 @@ func _initialize() -> void:
 	_mouse = load(MOUSE) as SpeciesConfig
 	_cat = load(CAT) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
+	# T043a：注入假时钟，世界时间只由 `_physics_step()` 推进；保持 time_advancing=true
+	GameClock.use_fake()
 	if _wd != null and _wd.has_signal("noise_emitted") and not _wd.is_connected("noise_emitted", _on_noise_event):
 		_wd.connect("noise_emitted", _on_noise_event)
 
@@ -751,19 +755,26 @@ func _run_seconds(seconds: float, until: Callable = Callable()) -> float:
 	if _wd == null:
 		return 0.0
 	var t0: float = _now()
-	var frames := 0
-	var max_frames := int(maxf(240.0, seconds * 240.0))
-	while _now() - t0 < seconds and frames < max_frames and not paused:
+	var frames := maxi(1, int(round(seconds * 60.0)))
+	for i in frames:
 		if until.is_valid() and bool(until.call()):
 			break
-		await physics_frame
-		frames += 1
+		await _physics_step()
+		if _now() - t0 >= seconds:
+			break
 	return _now() - t0
 
 
 func _advance_frames(n: int) -> void:
 	for i in n:
-		await physics_frame
+		await _physics_step()
+
+
+## 一个固定物理步：世界时间 +1/60 s，然后等该物理帧
+func _physics_step() -> void:
+	if _wd != null:
+		_wd.set_world_time(_now() + 1.0 / 60.0)
+	await physics_frame
 
 
 ## ART13：等待导航服务器**真正把刚烘焙/加载的 region 更新应用**到地图上，再让后续断言开始。

@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T022 猫循环回归与打包 断言
 ##
 ## 覆盖（`Docs/Tasks/T022.md` §4/§5；数值只读 `Docs/Parameters.md` 第 61/62/63/64/67/71/73/75/77 行）：
@@ -71,6 +73,9 @@ func _initialize() -> void:
 	_cat_cfg = load(CAT) as SpeciesConfig
 	_mouse_cfg = load(MOUSE) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
+	# T043a：注入假时钟（`_process` 不再叠加真实 delta），世界时间只由 `_physics_step()` 推进；
+	# 保持 `time_advancing=true`，生存/生态照常 tick（不误判为暂停）。
+	GameClock.use_fake()
 	if _wd != null and _wd.has_signal("capture_reported") \
 			and not _wd.is_connected("capture_reported", _on_capture_reported):
 		_wd.connect("capture_reported", _on_capture_reported)
@@ -751,8 +756,25 @@ func _fresh_arena_for_combat() -> void:
 	_world.add_child(_region)
 	_add_box(_region, "ArenaGround", Vector3(ARENA, 1.0, ARENA), Vector3(0.0, -0.5, 0.0))
 	await _advance_frames(2)
+	# 烘焙必须等到 `bake_finished` 并强制地图同步；固定帧数在 CPU 负载下会拿到空路径（T043a）
+	var done := [false]
+	var cb := func() -> void: done[0] = true
+	_region.bake_finished.connect(cb, CONNECT_ONE_SHOT)
 	_region.bake_navigation_mesh(false)
-	await _advance_frames(6)
+	for i in 900:
+		if done[0]:
+			break
+		await physics_frame
+	if not done[0]:
+		_region.bake_navigation_mesh(true)   # 兜底：同步烘焙
+	await physics_frame
+	var nm2 := _region.navigation_mesh
+	_region.navigation_mesh = null
+	_region.navigation_mesh = nm2
+	NavigationServer3D.map_set_active(_region.get_navigation_map(), true)
+	NavigationServer3D.map_force_update(_region.get_navigation_map())
+	await physics_frame
+	await physics_frame
 
 
 func _free_world() -> void:
@@ -936,7 +958,7 @@ func _walk_towards(body: AnimalBody, target: Vector3, seconds: float) -> void:
 	var t0 := _time_now()
 	while _time_now() - t0 < seconds:
 		_steer_towards(body, target)
-		await physics_frame
+		await _physics_step()
 	body.move_intent = Vector2.ZERO
 	body.want_sprint = false
 
@@ -962,7 +984,7 @@ func _walk_until(body: AnimalBody, target: Vector3, max_seconds: float, arrive_r
 			body.want_sprint = false
 			return true
 		_steer_towards(body, target)
-		await physics_frame
+		await _physics_step()
 	body.move_intent = Vector2.ZERO
 	body.want_sprint = false
 	return false
@@ -987,24 +1009,32 @@ func _run_out_pounce(body: AnimalBody) -> int:
 	return frames
 
 
-## 推进**真实世界时间**直到经过 `seconds`（或 `until()` 为真 / 超出真实时间预算）；返回实际经过秒数。
-## 物理帧长度固定为 1/60 s，但世界时间来自 `WorldDirector._process()` 的**真实 delta**，
-## 所以按真实时钟兜底，避免在极快的无头环境里被"帧数上限"提前掐断。
+## 推进**世界时间**直到经过 `seconds`（或 `until()` 为真）：按固定物理步把权威世界时间
+## +1/60 s 注入（不读真实时钟；世界时间由测试驱动，见 `_initialize()`）。
 func _run_seconds(seconds: float, until := Callable()) -> float:
 	if _wd == null:
 		return 0.0
 	var t0 := _time_now()
-	var deadline := Time.get_ticks_msec() + int(seconds * 1000.0 * 3.0) + 2000
-	while _time_now() - t0 < seconds and Time.get_ticks_msec() < deadline:
+	var frames := maxi(1, int(round(seconds * 60.0)))
+	for i in frames:
 		if until.is_valid() and bool(until.call()):
 			break
-		await physics_frame
+		await _physics_step()
+		if _time_now() - t0 >= seconds:
+			break
 	return _time_now() - t0
 
 
 func _advance_frames(n: int) -> void:
 	for _i in n:
-		await physics_frame
+		await _physics_step()
+
+
+## 一个固定物理步：世界时间 +1/60 s，然后等该物理帧
+func _physics_step() -> void:
+	if _wd != null:
+		_wd.set_world_time(_time_now() + 1.0 / 60.0)
+	await physics_frame
 
 
 func _time_now() -> float:

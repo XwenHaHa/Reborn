@@ -1,5 +1,9 @@
 class_name PlayerHud
 extends Control
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
+
+
 ## 最小正式 HUD（T018）
 ##
 ## 真源：`轮生_Reborn_开发计划_v1.0.md` 第 134 行「状态、低值警告和交互提示可见；**调试数值不混入最终界面**」；
@@ -96,7 +100,7 @@ func _process(_delta: float) -> void:
 	_refresh_skills()
 	# Toast 超时收口（T033）：真实毫秒对比，不跟帧率走
 	if _toast_label != null and _toast_label.visible \
-			and _toast_until_ms > 0 and Time.get_ticks_msec() > _toast_until_ms:
+			and _toast_until_ms > 0 and GameClock.now_ms() > _toast_until_ms:
 		_toast_label.visible = false
 
 
@@ -253,7 +257,7 @@ func show_toast(text: String, duration: float = TOAST_DURATION) -> void:
 	# 空文本 = 立即隐藏；非零时长 = 按真实毫秒截止（`_process` 里统一收口）
 	var show := not text.is_empty() and duration > 0.0
 	_toast_label.visible = show
-	_toast_until_ms = Time.get_ticks_msec() + int(duration * 1000.0) if show else 0
+	_toast_until_ms = GameClock.now_ms() + int(duration * 1000.0) if show else 0
 
 
 func toast_text() -> String:

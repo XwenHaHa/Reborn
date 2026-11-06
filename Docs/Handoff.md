@@ -1,4 +1,13 @@
-﻿# 开发交接：2026-11-05（T042 暂停与主动结束确认落地 —— **P5 进行中，下一步 T043**）
+﻿# 开发交接：2026-11-05（T042 暂停与主动结束确认落地 —— **P5 进行中，T043a 收口中，T043 未开始**）
+
+## T043a（T043 前置，in-progress）
+
+- 已完成：`scripts/core/game_clock.gd` 单一时钟接缝；`WorldDirector._process` 只消费 `GameClock.take_delta_ms()`（生产零测试分支）；`hud.gd` Toast 到期与 `save_manager.gd` 写档节流改走接缝。
+- 已完成：22 套测试改为假时钟 + 世界时间逐物理帧注入；`Tools/t040_headless_batch.ps1` 加 `checks>0`/`failures=0`/格式可解析/`RESULT` 未知/`SCRIPT ERROR` 守卫并整体非零退出。
+- 已验：M1（t033 改回真实时钟 → RED）、M2（去掉 `checks>0` → 空跑假绿）、M3（结果格式不可解析 → RED）；临时探针已删除。
+- 待下一轮：被改套件 ×3 收尾、CPU 负载复跑、全量 order 批（0 RED/0 checks=0/逐套对账）、两预设重导出与包内抽检（`visible_hits=0`）、最终证据回填。中间提交见 `Docs/Evidence/T043a.md`。
+- **T042 的 done 不动；T043 未开始。**
+
 
 ## 真实状态
 

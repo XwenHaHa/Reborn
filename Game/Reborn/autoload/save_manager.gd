@@ -1,4 +1,8 @@
 extends Node
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
+
+
 ## 存档持久化（T037 格式 + T038 写入队列）：快照组装、纯数据编码、校验修复、原子写与坏档恢复。
 ##
 ## 依据：`Docs/TechnicalDesign.md` §3（`WorldSnapshot` 契约与校验规则）、§8；
@@ -267,7 +271,7 @@ func _process(_delta: float) -> void:
 		return
 	if _writing:
 		return
-	var now := Time.get_ticks_msec()
+	var now := GameClock.now_ms()
 	if now - _last_normal_write_ms < int(throttle_seconds * 1000.0):
 		return
 	var pending_reason := _pending_reason
@@ -313,7 +317,7 @@ func _perform_write(reason: StringName, critical: bool) -> Dictionary:
 		last_failure_reason = String(reason)
 		last_failure_message = last_message
 	if not critical:
-		_last_normal_write_ms = Time.get_ticks_msec()
+		_last_normal_write_ms = GameClock.now_ms()
 	return result
 
 

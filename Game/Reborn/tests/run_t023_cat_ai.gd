@@ -1,4 +1,6 @@
 extends SceneTree
+
+const GameClock := preload("res://scripts/core/game_clock.gd")
 ## T023 猫 NPC 巡游与发现 断言
 ##
 ## 覆盖（`Docs/Tasks/T023.md` §5；数值只读 `Docs/Parameters.md` 第 22/23/69/73 行）：
@@ -66,6 +68,8 @@ func _initialize() -> void:
 	_cat_cfg = load(CAT) as SpeciesConfig
 	_mouse_cfg = load(MOUSE) as SpeciesConfig
 	_wd = root.get_node_or_null("WorldDirector")
+	# T043a：注入假时钟，世界时间只由 `_physics_step()` 推进；保持 time_advancing=true
+	GameClock.use_fake()
 	await _section_a_contract()
 	await _section_b_patrol()
 	await _section_c_vision()
@@ -814,8 +818,25 @@ func _fresh_world(opts: Dictionary = {}) -> void:
 	for i in points.size():
 		_add_marker(points[i], "Patrol%02d" % i, "patrol_points")
 	await _advance_frames(2)
+	# 烘焙必须等到 `bake_finished` 并强制地图同步；固定帧数在 CPU 负载下会拿到空路径（T043a）
+	var bake_done := [false]
+	var bake_cb := func() -> void: bake_done[0] = true
+	_region.bake_finished.connect(bake_cb, CONNECT_ONE_SHOT)
 	_region.bake_navigation_mesh(false)
-	await _advance_frames(8)
+	for i in 900:
+		if bake_done[0]:
+			break
+		await physics_frame
+	if not bake_done[0]:
+		_region.bake_navigation_mesh(true)   # 兜底：同步烘焙
+	await physics_frame
+	var nm2 := _region.navigation_mesh
+	_region.navigation_mesh = null
+	_region.navigation_mesh = nm2
+	NavigationServer3D.map_set_active(_region.get_navigation_map(), true)
+	NavigationServer3D.map_force_update(_region.get_navigation_map())
+	await physics_frame
+	await physics_frame
 
 	var cat_at: Vector3 = opts.get("cat_at", Vector3(0.0, CAT_Y, 0.0))
 	_npc = (load(BODY) as PackedScene).instantiate() as AnimalBody
@@ -1003,19 +1024,26 @@ func _run_seconds(seconds: float, until: Callable = Callable()) -> float:
 	if _wd == null:
 		return 0.0
 	var t0: float = _now()
-	var frames := 0
-	var max_frames := int(maxf(240.0, seconds * 240.0))
-	while _now() - t0 < seconds and frames < max_frames and not paused:
+	var frames := maxi(1, int(round(seconds * 60.0)))
+	for i in frames:
 		if until.is_valid() and bool(until.call()):
 			break
-		await physics_frame
-		frames += 1
+		await _physics_step()
+		if _now() - t0 >= seconds:
+			break
 	return _now() - t0
 
 
 func _advance_frames(n: int) -> void:
 	for i in n:
-		await physics_frame
+		await _physics_step()
+
+
+## 一个固定物理步：世界时间 +1/60 s，然后等该物理帧
+func _physics_step() -> void:
+	if _wd != null:
+		_wd.set_world_time(_now() + 1.0 / 60.0)
+	await physics_frame
 
 
 func _clip(s: String) -> String:

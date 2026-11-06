@@ -92,13 +92,6 @@ func _advance_physics(n: int) -> void:
 		await physics_frame
 
 
-## 真实毫秒等待（headless 帧推进不等价于真实时间；t033/t034 同法）
-func _wait_real_ms(ms: int) -> void:
-	var t0 := Time.get_ticks_msec()
-	while Time.get_ticks_msec() - t0 < ms:
-		await process_frame
-
-
 func _assert(key: String, expected: String, actual: String, ok: bool) -> void:
 	if ok:
 		_pass += 1
@@ -372,16 +365,16 @@ func _section_d_recovery_world_time(entry: MainEntry) -> void:
 	wd.call("region_population_advance_to", float(wd.get("world_time")) + 20000.0)
 	_assert("D4_never_over_capacity", "4", str(wd.call("region_total", rid0, MOUSE_ID)),
 		int(wd.call("region_total", rid0, MOUSE_ID)) == 4)
-	# D5 门闩反证：死亡 → SELECTING，next=冻结时刻+0.01，真实等 600 ms 不恢复
+	# D5 门闩反证：死亡 → SELECTING，next=冻结时刻+0.01，再跑若干帧不恢复
 	entry.player.survival.apply_damage(9999.0, &"t035_gate")
 	await _advance_frames(2)
 	var frozen := float(wd.get("world_time"))
 	_set_record(rid0, MOUSE_ID, 1, frozen + 0.01)
-	await _wait_real_ms(600)
+	await _advance_physics(4)
 	_assert("D5_frozen_no_recovery", "1", str(wd.call("region_total", rid0, MOUSE_ID)),
 		int(wd.call("region_total", rid0, MOUSE_ID)) == 1 \
 			and is_equal_approx(float(wd.get("world_time")), frozen))
-	# D6 ALIVE 正对照：重生后真实等 300 ms → +1（时间重新走）。
+	# D6 ALIVE 正对照：重生后恢复推进 → +1（时间重新走）。
 	# 重生会重铺生态（setup→clear→再铺 2 只新鼠），先等布置完成再做后续断言。
 	entry.dismiss_settle()
 	await _advance_frames(2)

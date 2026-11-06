@@ -2,18 +2,47 @@
 
 Reborn 项目的辅助工具脚本。运行游戏的正式入口是 `RunGame.cmd` / `OpenEditor.cmd`。
 
+## 零窗口启动器（2026-11-05 起强制）
+
+**所有自动化调用**（导出、打包、headless 回归、包内断言、批量脚本、取证截图）**一律经
+`Tools\NoWindow.vbs` 启动**；禁止直接 `powershell -File ...`，禁止任何自动化使用
+`*_console.exe`。
+
+```bat
+wscript.exe E:\Reborn\Tools\NoWindow.vbs ^
+  E:\Reborn\Tools\Probes\export_outer.log ^
+  "powershell -NoProfile -ExecutionPolicy Bypass -File E:\Reborn\Tools\t043_package.ps1"
+```
+
+- `NoWindow.vbs` 用 `WScript.Shell.Run(cmd, 0, True)` 以 `windowStyle=0` 起 `cmd.exe`，
+  stdout/stderr 重定向到日志，并回传子进程退出码。`wscript.exe` 是 GUI 子系统，
+  `cmd`/`powershell`/`python`/`godot` 全部共享同一个**隐藏控制台**，不会新增可见窗口。
+- 需要“整段过程可见窗口 = 0”的证据时，使用 `Tools\ZeroWindowRun.ps1`（同样经
+  `NoWindow.vbs` 启动）：它运行目标脚本并全程 5 ms 轮询用户桌面，任何**新出现的可见
+  顶层窗口**都记 `HIT|...`，末尾 `WINDOWWATCH|summary|visible_hits=N|other_windows=M`。
+  `visible_hits` 只统计自动化链自己的进程（godot/python/cmd/powershell/wscript/conhost/
+  reborn）；用户桌面上的第三方窗口（Chrome、企业微信等）记为 `OTHER|...` 并单独计数。
+- **GUI 子系统 exe 不能用 `&` 直接调用**：PowerShell 对 GUI exe 不等待、不捕获 stdout，
+  `$LASTEXITCODE` 为空（2026-11-05 全量批处理因此 54 套全部空跑、checks=0）。必须用
+  `Start-Process -Wait -RedirectStandardOutput/-RedirectStandardError`，或走
+  `CaptureRun.ps1`（内部 CreateProcessW + 等待）。
+- 头less 统一用 **GUI exe + `--headless`**。`*_console.exe` 是控制台程序，即使
+  `--headless` 也会弹终端，任何自动化都不得使用。
+
 ## CaptureRun.ps1 —— 实跑/取证的统一启动包装（2026-11-02 起生效，含 headless）
 
 **所有 Godot 实跑（渲染截图与 headless 导入/生成器/回归）一律通过本包装启动，
 不要再直接 `& godot.exe ...`。**
 
-```powershell
-# 非 headless（渲染截图，窗口在自建隐藏桌面上，用户桌面零可见）
-powershell -NoProfile -ExecutionPolicy Bypass -File E:\Reborn\Tools\CaptureRun.ps1 `
-    -Script tests/tool_capture_creek.gd -UserArgs creek -TimeoutSec 300
-# headless（导入 / 生成器 / 回归，零窗口，日志落文件）
-powershell -NoProfile -ExecutionPolicy Bypass -File E:\Reborn\Tools\CaptureRun.ps1 `
-    -Headless -Script tests/run_art09_frame_contract.gd -TimeoutSec 300
+```bat
+rem 非 headless（渲染截图，窗口在自建隐藏桌面上，用户桌面零可见）
+rem 外层一律先经 NoWindow.vbs，不得直接 powershell -File
+wscript.exe E:\Reborn\Tools\NoWindow.vbs E:\Reborn\Tools\Probes\capture_creek.log ^
+  "powershell -NoProfile -ExecutionPolicy Bypass -File E:\Reborn\Tools\CaptureRun.ps1 -Script tests/tool_capture_creek.gd -UserArgs creek -TimeoutSec 300"
+
+rem headless（导入 / 生成器 / 回归，零窗口，日志落文件）
+wscript.exe E:\Reborn\Tools\NoWindow.vbs E:\Reborn\Tools\Probes\capture_headless.log ^
+  "powershell -NoProfile -ExecutionPolicy Bypass -File E:\Reborn\Tools\CaptureRun.ps1 -Headless -Script tests/run_art09_frame_contract.gd -TimeoutSec 300"
 ```
 
 | 参数 | 说明 |
