@@ -18,6 +18,7 @@ extends SceneTree
 ##       --script 'res://tests/run_t036_contract.gd' --quit-after 300000
 ## 结果口径：RESULT|pass=<n>|fail=<n> 全绿；失败时另打 RESULT|failed=<清单>。
 
+const GameClock := preload("res://scripts/core/game_clock.gd")
 const MAIN_SCENE := "res://scenes/core/main.tscn"
 const CAT_ID := &"Cat"
 const MOUSE_ID := &"Mouse"
@@ -53,6 +54,9 @@ var _rp: Node3D = null
 
 
 func _initialize() -> void:
+	# T043a：注入假时钟，`_process` 不再按真实帧间隔累加 world_time；
+	# 世界时间只由 `_advance_world_ms()` / `set_world_time()` 显式推进（G4 归零不漂移）。
+	GameClock.use_fake()
 	root.size = Vector2i(1280, 720)
 	var packed := load(MAIN_SCENE) as PackedScene
 	if packed == null:
