@@ -748,12 +748,15 @@ func _node_call(node: Node, method: String, fallback: Variant = null) -> Variant
 	return fallback
 
 
-## 权威世界时间快进（不睡眠）：推进 world_time 后跑两帧让各系统按新时间结算。
+## 权威世界时间快进（不睡眠）：推进 world_time 后等**物理帧**让各系统按新时间结算。
+## 资源恢复与饥饿消耗都在 `_physics_process`（`resource_point.gd` / `survival_controller.tick_to`），
+## 只等 `process_frame` 不保证夹到物理帧，断言会抢在结算前跑（全量批里复现过 C10/C12 假红）。
 func _advance_world_seconds(seconds: float) -> void:
 	var wd := _wd()
 	if wd != null:
 		wd.call("set_world_time", float(wd.get("world_time")) + seconds)
-	await _advance_frames(2)
+	for i in 3:
+		await physics_frame
 
 
 func _advance_frames(n: int) -> void:
