@@ -5,7 +5,7 @@
 
 [ext_resource type="Script" path="res://scripts/data/species_config.gd" id="1_cfg"]
 [ext_resource type="Script" path="res://scripts/ai/cat_ai.gd" id="2_ai"]
-[ext_resource type="PackedScene" path="res://assets/characters/cat/sm_cat_004.glb" id="3_vis"]
+[ext_resource type="PackedScene" path="res://assets/characters/cat/sm_cat_005.glb" id="3_vis"]
 [ext_resource type="Texture2D" path="res://assets/ui/portraits/portrait_cat.png" id="4_portrait"]
 
 [resource]

@@ -116,11 +116,11 @@
 | 尺寸契约 | 主体（不含尾）匹配 `CapsuleShape3D` 0.16 / 0.48；**高 ≤0.48 m**、长 ≤0.62 m（现状 V008：0.389 × 0.601 m） |
 | 原点/朝向 | 原点=四脚着地地面中心（`min_y≈0`）；朝 `-Z` |
 | 材质/贴图 | ≤2 槽；baseColor ≤2048²；粗糙度按短毛（0.6–0.85） |
-| 面数 | 15k–40k（现 V008 = 9,568，低于新预算下限 → 允许提高以换结构） |
+| 面数 | ≤**40k**（T044 本机实测预算）；现 `sm_cat_005` = **8,376 tris**（余量 ≥4×） |
 | 骨骼/动画 | 必须：`root/spine/head/tail×3/leg×4`；Idle/Walk/Run/AttackCue（原地动画） |
 | 碰撞 | 无（Godot 侧胶囊） |
 | 参考状态 | **reference_pending**（见 manifest：候选 4 个，均未下载） |
-| 当前状态 | `modeling`（V008 在用但未 approved；V009 not-accepted） |
+| 当前状态 | `modeling`——在用 **`sm_cat_005.glb`**（T046-A：重展开 + 从旧贴图重烘焙；面部 UV 各向异性 `>4×` 由 545 面降为 0）；未 approved |
 
 ### 4.2 `MOUSE_BODY_001`（鼠，玩家 + 猎物 NPC）
 

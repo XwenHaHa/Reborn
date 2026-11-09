@@ -12,7 +12,7 @@ extends SceneTree
 ##       --script 'res://tests/run_art02_cat.gd' --quit-after 30000
 ## 退出码：0 = 全部通过；1 = 有失败。
 
-const ASSET := "res://assets/characters/cat/sm_cat_004.glb"
+const ASSET := "res://assets/characters/cat/sm_cat_005.glb"
 const CAT_CFG := "res://resources/species/cat.tres"
 const MOUSE_CFG := "res://resources/species/mouse.tres"
 const BODY_SCENE := "res://scenes/characters/animal_body.tscn"
@@ -58,7 +58,7 @@ func _check_asset_layer() -> void:
 	print("ASSET|root_class=%s|root_name=%s|children=%d" % [
 		inst.get_class(), inst.name, inst.get_child_count()])
 	_assert("asset_root_is_node3d", "Node3D", inst.get_class(), inst is Node3D)
-	_assert("asset_root_name", "sm_cat_004", str(inst.name), String(inst.name) == "sm_cat_004")
+	_assert("asset_root_name", "sm_cat_005", str(inst.name), String(inst.name) == "sm_cat_005")
 
 	var mi := _find_mesh(inst)
 	_assert("asset_has_mesh", "MeshInstance3D", str(mi != null), mi != null)

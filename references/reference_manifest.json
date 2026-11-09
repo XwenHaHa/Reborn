@@ -2,7 +2,7 @@
  "schema_version": 1,
  "project": "Reborn",
  "updated": "2026-11-09",
- "updated_by": "agent (T044 资产规格与清单)",
+ "updated_by": "agent (T046-A 面部 UV 返工)",
  "policy": {
   "state_flow": [
    "reference_pending",
@@ -53,12 +53,11 @@
    },
    "spec": "Docs/ART_ASSET_SPEC.md#41",
    "current_ingame_asset": {
-    "file": "Game/Reborn/assets/characters/cat/sm_cat_001.glb",
-    "version": "V008",
-    "tris": 9568,
+    "file": "Game/Reborn/assets/characters/cat/sm_cat_005.glb",
+    "version": "T046-A（重展开 + 重烘焙）",
+    "tris": 8376,
     "material_slots": 2,
-    "texture": "2048x2048 albedo",
-    "rigged": false,
+    "rigged": true,
     "status": "in_use_not_approved"
    },
    "candidates": [
@@ -207,13 +206,27 @@
     }
    ],
    "notes": [
-    "另一个检索结果 'Cat [Murdered: Soul Suspect]'（uid 836312de…, 7,372 面, CC-BY, 作者 mark2580）**不列入候选**：作品名指向商业游戏角色，存在游戏提取物风险，页面标注的 CC-BY 不能覆盖原作版权。"
+    "另一个检索结果 'Cat [Murdered: Soul Suspect]'（uid 836312de…, 7,372 面, CC-BY, 作者 mark2580）**不列入候选**：作品名指向商业游戏角色，存在游戏提取物风险，页面标注的 CC-BY 不能覆盖原作版权。",
+    "2026-11-09 T046-A：因面部 UV 严重拉伸（p95 14×、545 面 >4×）做了整体重展开 + 从旧贴图重烘焙，产出 sm_cat_005 并接入；网格/骨骼/权重/动画未改，几何与 004 等价（焊点后 4,264 v / 8,376 f）。"
    ],
    "open_questions": [
     "是否授权登录 Sketchfab 下载",
     "是否接受 CC-BY 署名",
     "走自带骨骼还是重新绑骨"
-   ]
+   ],
+   "output_asset_latest": {
+    "glb": "Art/Exports/Cat/SM_Cat_005.glb（6288292 B，sha256 4370ca607dbfc48e）",
+    "godot_asset": "Game/Reborn/assets/characters/cat/sm_cat_005.glb（同名文件，sha256 4370ca607dbfc48e）",
+    "generator": "Tools/Blender/t046b_cat_head_uv.py（T046-A：整体 Smart UV Project + 从旧贴图烘焙）",
+    "tris": 8376,
+    "material_slots": 2,
+    "bones": 33,
+    "uv": "单层 UVMap；各向异性 p95 1.287 / max 2.227 / >4x 面数 0（旧 004：p95 14.017 / max 85.807 / 545 面）",
+    "textures": "Cat_BaseColor_005 2048^2 sRGB + Cat_Normal_005 2048^2 Non-Color（内嵌 GLB）",
+    "verified": "run_art02_cat.gd 72/72 PASS；全量 54 套 4560/0；1.2 m 三向视觉复核无 bake 接缝（Art/Probes/t046b_cat_*.png）",
+    "wired_at": "resources/species/cat.tres 的 ExtResource(3_vis) = sm_cat_005.glb",
+    "approved": false
+   }
   },
   {
    "asset_id": "MOUSE_BODY_001",
