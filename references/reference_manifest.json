@@ -1,8 +1,8 @@
 {
  "schema_version": 1,
  "project": "Reborn",
- "updated": "2026-10-21",
- "updated_by": "agent (Reference Lock round 1)",
+ "updated": "2026-11-09",
+ "updated_by": "agent (T044 资产规格与清单)",
  "policy": {
   "state_flow": [
    "reference_pending",
@@ -750,6 +750,213 @@
    "open_questions": [
     "围栏走木/石/金属哪种",
     "是否需要端头/转角模块"
+   ]
+  },
+  {
+   "asset_id": "ENV_BUSH_001",
+   "category": "environment",
+   "state": "modeling",
+   "origin": "procedural",
+   "owner_decision": "ART01（2026-10-21）起作为草丛掩体视觉，未 approved",
+   "chosen_candidate": "ENV_BUSH_001（Tools/Blender/art01_bush_001.py 程序化生成）",
+   "spec": "Docs/ART_ASSET_SPEC.md#2",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/environment/sm_bush_001.glb",
+    "version": "v003",
+    "status": "in-game（非 approved）"
+   },
+   "candidates": [],
+   "notes": "自建程序化资产：确定性 seed、无外部贴图、双面 CULL_DISABLED、零碰撞、2 材质槽、≤3000 tris。来源与许可是**自有**，不进入 THIRD_PARTY_NOTICES。",
+   "open_questions": [
+    "正式草丛是否改用第三方扫描资产（当前无候选）"
+   ]
+  },
+  {
+   "asset_id": "ENV_BUSH_002",
+   "category": "environment",
+   "state": "modeling",
+   "origin": "procedural",
+   "owner_decision": "ART03-⑧～⑪（2026-10-21）重做草丛，未 approved",
+   "chosen_candidate": "ENV_BUSH_002（Tools/Blender/art09_grass_002.py 程序化生成 + 程序化倍率贴图）",
+   "spec": "Docs/ART_ASSET_SPEC.md#2",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/environment/sm_bush_002.glb",
+    "version": "v005（4,480 tris / 贴图 ≤512²）",
+    "status": "in-game（非 approved）"
+   },
+   "candidates": [],
+   "notes": "自建程序化资产；贴图由旧 → 新两版脚本生成（非第三方），不入许可清单。",
+   "open_questions": [
+    "叶形在 720p 远景仍偏'板条'（见 ART03 证据）"
+   ]
+  },
+  {
+   "asset_id": "ENV_MOUND_001",
+   "category": "environment",
+   "state": "modeling",
+   "origin": "procedural",
+   "owner_decision": "ART03-⑬（2026-10-21），未 approved",
+   "chosen_candidate": "ENV_Mound_001（Tools/Blender/art10_props_002.py）",
+   "spec": "Docs/ART_ASSET_SPEC.md#2",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/environment/sm_mound_001.glb",
+    "version": "198 tris",
+    "status": "in-game（非 approved）"
+   },
+   "candidates": [],
+   "notes": "自建；复用地面 shader。",
+   "open_questions": []
+  },
+  {
+   "asset_id": "ENV_ROOF_001",
+   "category": "environment",
+   "state": "modeling",
+   "origin": "procedural",
+   "owner_decision": "ART03-⑬（2026-10-21），未 approved",
+   "chosen_candidate": "ENV_Roof_001（Tools/Blender/art10_props_002.py）",
+   "spec": "Docs/ART_ASSET_SPEC.md#2",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/environment/sm_roof_001.glb",
+    "version": "228 tris",
+    "status": "in-game（非 approved）"
+   },
+   "candidates": [],
+   "notes": "自建（木板条 + 托梁）；碰撞仍是 Godot 侧盒体。",
+   "open_questions": []
+  },
+  {
+   "asset_id": "ENV_ROOT_BARRIER_001",
+   "category": "environment",
+   "state": "modeling",
+   "origin": "procedural",
+   "owner_decision": "ART03-⑭（2026-10-21），未 approved",
+   "chosen_candidate": "ENV_RootBarrier_001（Tools/Blender/art11_root_barrier.py）",
+   "spec": "Docs/ART_ASSET_SPEC.md#2",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/environment/sm_root_barrier_001.glb",
+    "version": "640 tris（平铺 7+4 块）",
+    "status": "in-game（非 approved）"
+   },
+   "candidates": [],
+   "notes": "自建；26 m 屏障平铺，洞口净空与碰撞未改。",
+   "open_questions": [
+    "根管偏规整、接缝有周期性"
+   ]
+  },
+  {
+   "asset_id": "ENV_WALL_LOW_001",
+   "category": "environment",
+   "state": "modeling",
+   "origin": "derived_from:wall_stefan_wr",
+   "owner_decision": "ART03-⑮（2026-10-22）取 wall_stone 最上 0.8 m 作矮墙一皮",
+   "chosen_candidate": "wall_stefan_wr / wall_stone（CC-BY，作者 Stefan）",
+   "spec": "Docs/ART_ASSET_SPEC.md#45b",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/environment/sm_wall_low_001.glb",
+    "version": "663 tris / 1 材质槽 / 2.436584×0.8×0.302739 m",
+    "status": "in-game（非 approved）"
+   },
+   "candidates": [],
+   "notes": "许可随 `ENV_FENCE_MODULE_001` 的同源文件（CC-BY 4.0，`Docs/THIRD_PARTY_ASSETS.md` 已登记）；本派生件不产生新的署名义务差异。",
+   "open_questions": []
+  },
+  {
+   "asset_id": "ENV_QUOIN_001",
+   "category": "environment",
+   "state": "modeling",
+   "origin": "derived_from:wall_stefan_wr",
+   "owner_decision": "ART03-⑮-3（2026-10-22）转角料石",
+   "chosen_candidate": "wall_stefan_wr / wall_stone（CC-BY，作者 Stefan）",
+   "spec": "Docs/ART_ASSET_SPEC.md#45d",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/environment/sm_quoin_001.glb",
+    "version": "176 tris / 1 材质槽 / 0.382×1.6×0.422 m",
+    "status": "in-game（非 approved）"
+   },
+   "candidates": [],
+   "notes": "与矮墙同源、同贴图（× 倍率色）；许可随同源件。",
+   "open_questions": []
+  },
+  {
+   "asset_id": "ENV_SHELTER_POST_001",
+   "category": "environment",
+   "state": "modeling",
+   "origin": "procedural",
+   "owner_decision": "ART03-⑮-2（2026-10-22）门垛立柱",
+   "chosen_candidate": "ENV_Shelter_Post_001（Tools/Blender/art13_shelter_post.py）",
+   "spec": "Docs/ART_ASSET_SPEC.md#45c",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/environment/sm_shelter_post_001.glb",
+    "version": "28 tris / 1 材质槽 / 0.16×1.62×0.36 m",
+    "status": "in-game（非 approved）"
+   },
+   "candidates": [],
+   "notes": "自建；配色对齐棚顶木料，无贴图。",
+   "open_questions": []
+  },
+  {
+   "asset_id": "ENV_HDRI_SKY",
+   "category": "environment",
+   "state": "reference_confirmed",
+   "origin": "third_party",
+   "owner_decision": "ART07/ART09-A 起用作天空球（CC0）",
+   "chosen_candidate": "mossy_forest_2k.hdr（Poly Haven）",
+   "spec": "Docs/ART_ASSET_SPEC.md#2",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/environment/hdri/mossy_forest_2k.hdr",
+    "version": "2k",
+    "status": "in-game"
+   },
+   "candidates": [
+    {
+     "candidate_id": "mossy_forest",
+     "title": "Mossy Forest",
+     "source_site": "Poly Haven",
+     "source_url": "https://polyhaven.com/a/mossy_forest",
+     "author": "Greg Zaal / Poly Haven",
+     "license": {
+      "label": "CC0",
+      "url": "https://polyhaven.com/license",
+      "requirements": "CC0 1.0 Universal - 无需署名（本仓库仍自愿登记）"
+     },
+     "downloaded": true,
+     "local_path": "Game/Reborn/assets/environment/hdri/"
+    }
+   ],
+   "notes": "随包分发，`THIRD_PARTY_NOTICES.md` 已列 SHA256。",
+   "open_questions": []
+  },
+  {
+   "asset_id": "ENV_TEXTURE_SET_GROUND",
+   "category": "environment",
+   "state": "reference_confirmed",
+   "origin": "third_party",
+   "owner_decision": "ART03-⑫ 起用于地面/溪岸材质（CC0 1K）",
+   "chosen_candidate": "Poly Haven 1K 贴图集（forest_floor 等）",
+   "spec": "Docs/ART_ASSET_SPEC.md#2",
+   "current_ingame_asset": {
+    "file": "Game/Reborn/assets/environment/tex/*.jpg",
+    "version": "1k",
+    "status": "in-game"
+   },
+   "candidates": [
+    {
+     "candidate_id": "polyhaven_1k_set",
+     "title": "Poly Haven 1K 贴图集",
+     "source_site": "Poly Haven",
+     "source_url": "https://polyhaven.com/textures",
+     "license": {
+      "label": "CC0",
+      "url": "https://polyhaven.com/license",
+      "requirements": "CC0 1.0 Universal - 无需署名"
+     },
+     "downloaded": true,
+     "local_path": "Game/Reborn/assets/environment/tex/"
+    }
+   ],
+   "notes": "逐文件 SHA256 由 `Tools/t043_package.ps1` 生成到 `THIRD_PARTY_NOTICES.md`。",
+   "open_questions": [
+    "地表贴图正式选型（forest_leaves_02/03/04）仍待美术批准"
    ]
   }
  ],
