@@ -160,10 +160,17 @@ Start-Sleep -Seconds 4
 $ratio1 = 0.0
 $ok1 = [RebornReleaseProbe]::Grab($hwnd, $menuPng, [ref]$ratio1)
 Write-Host ("RELEASE|frame=menu|png={0}|non_black_ratio={1:F3}" -f $menuPng, $ratio1)
-# 无存档首启菜单：Tab 聚焦唯一按钮（新游戏），Enter 进入存活。
+# 无存档首启菜单：Tab 聚焦「新游戏」，Enter 进物种选择页；**再 Enter 才 commit() 出生**。
+# 注：MainMenu.commit() 在非物种页只切页、在物种页才 emit，所以必须第二次 Enter；
+# 只按一次的结果是停在物种选择页（2026-11-09 实测：旧序列抓到的是选物种页，不是存活 HUD）。
 [RebornReleaseProbe]::Key($hwnd, 0x09) # VK_TAB
 Start-Sleep -Milliseconds 600
-[RebornReleaseProbe]::Key($hwnd, 0x0D) # VK_RETURN
+[RebornReleaseProbe]::Key($hwnd, 0x0D) # VK_RETURN -> 物种选择页
+Start-Sleep -Milliseconds 1500
+for ($i = 0; $i -lt 2; $i++) {
+    [RebornReleaseProbe]::Key($hwnd, 0x0D) # 首次 commit 出生；第二次在菜单隐藏后被忽略
+    Start-Sleep -Milliseconds 1200
+}
 Start-Sleep -Seconds 4
 if (-not [RebornReleaseProbe]::Alive()) {
     Write-Host "RELEASE|FAIL|process_exited_after_enter"

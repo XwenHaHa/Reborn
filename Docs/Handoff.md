@@ -1,4 +1,4 @@
-﻿# 开发交接：2026-11-09（T043a 时间敏感断言收口完成 —— **P5 进行中，T043 进行中**）
+﻿# 开发交接：2026-11-09（T043 存档测试矩阵与打包完成 —— **P5 收口，下一任务 T044 / P6 阶段门**）
 
 ## T043a（T043 前置，done 2026-11-09）
 
@@ -12,6 +12,17 @@
 - **遗留**：`export_filter=all_resources` 体积策略待负责人拍板（`Reborn.exe` 109 MB / `Reborn.pck` 67 MB，含 `assets/` 源文件）。
 
 
+## T043（存档测试矩阵与打包，done 2026-11-09）
+
+- 矩阵 A–F 六类（落盘时机 / 损坏与恢复 / 强杀窗口 / 往返完整性 / 跨世连续性 / 边界）**全部有断言来源、无 `gap`**；缺口只靠新增 `tests/run_t043_save_matrix.gd`（60 条）收口，**存档 14 键格式、`save_version`、`revision`/`pending`/队列语义零改动**。
+- 变异 3 处全拦：M1 `revision += 0` → `53/7` 红；M2 资源记录丢 `expire_at` → `58/2` 红；M3 用同一审计器审 SelfTest 包 → `files=411 leak=196`、退出 1（反证审计非空转）。M1/M2 已 `git checkout` 复原。
+- 矩阵源码 ×3 = `60/0`×3；全量 **54 套 4560 checks / 0 失败**（同 T043a 批）。
+- 打包：`preset.0` 关控制台包装 → 导出后**无 `Reborn.console.exe`**；两预设 `EXIT=0`（`Reborn.pck` 66,996,328 / `SelfTest.pck` 68,206,852）、**PCK 审计 `files=215 leak=0`**、`THIRD_PARTY_NOTICES.md` 随包（CC-BY/CC0 逐项 SHA256）。
+- 包内断言：T043 `60/0`、T037 `69/0`、T039 `140/0`、T041 `93/0`、T042 `121/0`，全 `exit=0`、0 条 `SCRIPT ERROR`。
+- 发行包取证：隐藏桌面 + 临时 `APPDATA`（不碰真实存档），`visible_hits=0`、`console_windows=0`、`windows_seen=4`、两帧非黑 `0.917`/`0.940`；vision 判读首启菜单逐字正确、存活帧为第三人称猫且无菜单残留。
+- **修复取证工具缺陷**：`t043_release_capture.ps1` 旧序列只按一次 Enter → 停在物种选择页（`MainMenu.commit()` 在非物种页只切页），改为再按一次 Enter 才出生。
+- **未确认（不得写成已通过）**：发行包存活帧里右侧四条指标条 / 罗盘 / 「冲潜扑」提示未读到（两次 3× 放大复核均无），开发者取证帧同位置存在 → `HUD-NOT-CONFIRMED`；候选原因：1038×614 客户区裁切 或 `PrintWindow` 对 Vulkan 叠加层合成不完整，**均未定位**。
+- 证据 `Docs/Evidence/T043.md`；遗留：体积策略、`last_safe_spot_id`、版本不兼容旧档处置。
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
@@ -98,8 +109,9 @@
 | ART07 | **awaiting-review（2026-10-28；不是正式美术 approved）** | `Docs/Tasks/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`、`Docs/Evidence/ART07_ENVIRONMENT_COMPOSITION_CONTACT.md`、`Game/Reborn/tests/tool_make_courtyard.gd`、`Game/Reborn/shaders/grass_wind.gdshader`、`Game/Reborn/scenes/maps/l_courtyard.tscn`、`tests/run_t011_greybox.gd`、`Art/Probes/art07_{before,after}/` | 只复用现有资产的庭院表现层试作：16 株背景草簇、6 溪心石、3 庭院石、5 泥舌半岛、31 无碰撞阴影；草根明暗/实例差异、SSAO/ACES；指数雾关闭，远景 depth fog 参数保留但关闭；`CreekRock05` 移离溪缝机位视线。几何/碰撞/导航不变量未改。生成器装饰断言 229/229；回归 T011 229、T012 79、T020 164、T026 96、T027 96，全绿共 664 条；nav `.tres` 无 diff。视觉：overview 已无均匀雾幕、地标清楚但背景层次弱；溪缝清晰；courtyard/grass 仍有草石贴纸感/接地感不足。最后一轮窗口取证超时，当前截图对最后 shader 状态的对应关系未能复核；A5/A7 未通过，不提交为完成。P6/T053 未完成；**下一任务仍回到 T031** |
 | ART08 | **awaiting-review（2026-10-28；不是正式美术 approved）** | `Docs/Tasks/ART08_BOARD_BASELINE.md`、`Docs/Tasks/ART08_MENU.md`、`Docs/Tasks/ART08_CHARACTER_PIPELINE.md`、`Docs/Tasks/ART08_ENVIRONMENT_BOARD.md`、`Docs/Tasks/ART08_INTEGRATION.md`；`Docs/Evidence/ART08_*.md`；整合图 `Art/Probes/art08_integration/` | 按批准的视觉纵切片完成菜单结构、真实截图、角色资产授权门和环境不变量保护。ART08 契约 9/9、角色 15/15、环境 9/9；菜单/角色/环境/玩法相关回归全绿。**展板整体视觉 FAIL**：当前仍为庭院围墙与直线溪水，猫鼠仍用 `sm_cat_002` / `sm_mouse_002`，未新增猫扑击/鼠逃跑动作，右栏仍是实时 3D 卡片；非 headless 截图已留，但外部 vision 判读 NOT-RUN。提交 `d493cc6` / `c0ae0e9` / `6090559` / `07c1bc5`，未 push。**后续需要负责人逐项授权猫鼠新模型/动作及环境资产来源/许可**，再继续真正的美术替换；ART07 原有未提交改动仍保留，A5/A7 未通过。|
 | T042 | **done（2026-11-05，系统时钟）** | `Docs/Tasks/T042.md`；`Docs/Evidence/T042.md`；`scripts/ui/pause_menu.gd`（新）；`scripts/ui/end_life_confirm.gd`（新）；`scripts/core/main_entry.gd`；`scripts/characters/animal_body.gd`；`tests/run_t042_pause_flow.gd`（121 条）；`tests/tool_capture_t042_pause.gd`；`Art/Probes/t042_{pause_menu,end_life_confirm,player_quit_settle}.png` | Esc 暂停层（「游戏已暂停」「继续游戏」「结束本次生命」、焦点「继续游戏」）；**真冻结**双保险（`SceneTree.paused` + `time_advancing=false`），真实等 5 s 世界时间/资源/区域/NPC/玩家/生存/脚步/主档全部一字不变；恢复后不跳变；结束生命二次确认**默认「取消」**，确认走 `LifeCycle.end_life` 正常死亡（`damage_reason=player_quit`、`pending` 存盘、结算页「死亡（player_quit）」、`revision` +2），不重生不清档；暂停/取消不写盘；Esc 优先级「结算页 > 新游戏确认 > 结束确认 > 暂停 > 恢复」；树序 `Hud<PauseMenu<EndLifeConfirm<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 断言通过。121/121 ×3、变异 5 处全拦、重点回归 16 套、全量 53 套 4,500 条 0 失败、两预设重导出 + 包内 4 套、三帧 vision `visible_hits=0`。未验证真实鼠标键盘与 U01 |
+| T043 | **done（2026-11-09）** | `Docs/Tasks/T043.md`、`Docs/Evidence/T043.md`；`tests/run_t043_save_matrix.gd`（60 条）、`tests/tool_t043_package_probe.gd`、`Tools/t043_{package,package_assert,release_capture}.ps1`、`Tools/t043_pck_audit.py`；`Art/Probes/t043_release_{menu,hud}.png` | 存档测试矩阵与打包（P5 阶段门）：A–F 六类无 `gap`（缺口由新矩阵套件 60 条补齐：资源 `next_refill_at/expire_at` / 区域 `next_recover_at` 往返、`revision` 严格 +1 链、跨世 `world_time` 连续、`SETTLING/SELECTING` 期保存，14 键格式未变、**生产代码零改动**）；变异 M1 `revision += 0`（53/7 红）/M2 丢 `expire_at`（58/2 红）/M3 审计 SelfTest 包（`leak=196`、退出 1）全拦；矩阵 ×3 = 60/0；全量 54 套 4560/0；发布预设关控制台包装（导出后无 `Reborn.console.exe`）+ 两预设 `EXIT=0`（`Reborn.pck` 66,996,328 / `SelfTest` 68,206,852）+ PCK 审计 `leak=0` + `THIRD_PARTY_NOTICES.md` 随包 + 包内 T037/T039/T041/T042/T043 全绿；发行包隐藏桌面取证 `visible_hits=0`/`console_windows=0`、两帧非黑 0.917/0.940、vision 判读首启菜单正确与存活帧无菜单残留；**修复取证工具缺陷**（旧序列只按一次 Enter 停在物种选择页）。**未确认**：发行包存活帧右侧指标条/罗盘/按键提示未读到（`HUD-NOT-CONFIRMED`，根因未定位）。**未验证**：真实鼠标键盘、U01 真人试玩 | 
 
-**未完成**：正式角色与骨骼资产（P6）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**。**T043 进行中**（矩阵套件 60/0、打包与包内断言已过，缺证据文档与 done 判定）；**T044～T063 全部 pending（T037～T042 与 T043a 已 done）。**
+**未完成**：正式角色与骨骼资产（P6）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**、发行包存活帧右侧 HUD 未确认项。**T043 done（2026-11-09）**；**T044～T063 全部 pending（T037～T043 与 T043a 已 done；P5 已收口）。**
 
 
 **T030 的边界声明**：① 只做生命周期与记录，~~没做结算页（T032）~~ **T032 已落结算页（见下）**、存档仍属 T037；② ~~`MainEntry.test_mode = true` 临时开发态~~ **已于 T031 收口为默认 `false`（正式解锁门接入）**；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。
@@ -113,7 +125,7 @@
 **T040b 的边界声明**：① 只改**死亡扣账**与**收敛退场距离**两件事；存档格式、`save_version`、`revision`、队列/节流、`pending_settlement_life_id`、状态机语义、`SpeciesConfig` 数值、`nav/*.tres` 与 `l_courtyard.tscn` **零改动**；② 死亡扣账只认**已登记且未捕获**的个体，`source_id` 幂等（`natural_death_recorded`），**表现退场**（收敛退场/读档清场/重生重建）**不扣**；③ **不改已有 `next_recover_at`**——满容量死亡的恢复由既有 `region_population_advance_to()` 起算，未采纳“死亡即重排”（连续死亡会无限推迟恢复）；④ 12 m 内保留会产生**过渡态 `active > total`**（有意代价），只在捕获/自然死亡/读档/重生立即重试 + 入口每 60 物理帧（仅 `pending_excess>0`）重试；⑤ “超时清退/系统回收”当前**没有独立代码路径**，未来新增必须走 `report_natural_death`，否则会重新出现“复活”；⑥ T040 的 done 状态未改，只在其 D1 上追加修订注记。
 **T041 的边界声明**：① 只做进世界前的菜单门与破坏性确认；存档格式/`save_version`/`revision`/队列/节流/`pending_settlement_life_id`/`LifeCycle` 四态/`SpeciesConfig` **零改动**；② 启动**不再自动恢复存活生命**，点「继续」才恢复（世界层仍在菜单建立前应用，保证解锁集正确）；③ 双坏阻断页**唯一出路「确认开始新游戏」**，确认前 `select_species` 拒绝、`save_now=blocked`、退出不写档，`.corrupt-*` **保留不动**；④ 版本不兼容**不隔离**、旧档仍在，确认后才清；⑤ 新游戏确认层**默认焦点「取消」**、Esc 取消；无存档不弹确认、不显示继续；⑥ 树序 `Hud<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 已断言，结算页仍最上；⑦ 真实鼠标/键盘与 U01 真人试玩**未验证**。
 **T042 的边界声明**：① 只做暂停层、结束确认与正常死亡接线；存档格式/`save_version`/`revision`/队列/节流/`pending_settlement_life_id`/`LifeCycle` 四态/`SpeciesConfig` **零改动**；② 冻结是**双保险**：`SceneTree.paused=true`（AI/物理/输入停摆）+ `WorldDirector.time_advancing=false`（时钟门闩），恢复后逐字段还原；③ 暂停与取消**不写盘**，退出程序仍走既有出口径；④ 主动结束**不是抄近道**：`pending` → `LifeCycle.end_life(reason=died, damage_reason=player_quit)` → 结算页/写档（`saved_reason=death`），**不重生、不清档**，重生仍由玩家在结算后选物种；⑤ Esc 优先级固定「结算页 > `NewGameConfirm` > `EndLifeConfirm` > 暂停 > 恢复」；⑥ 树序 `Hud<PauseMenu<EndLifeConfirm<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 已断言，结算页仍最上；⑦ 真实鼠标/键盘与 U01 真人试玩**未验证**；⑧ `last_safe_spot_id` **字段已预留、本轮不实现**——安全点系统未立项，最小解除需先定义安全点判定（哪些区域算安全、敌人距离阈值、进出条件）；版本不兼容存档「保留旧档等以后版本」负责人本轮未表态，按现状（仅新游戏可选）执行。
-**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 完成（T030～T036）、P5 进行中（T037～T042 与 T040b、前置 T043a done；T043 进行中）** → **下一步 T043 收口（矩阵与打包已实测通过，缺 `Docs/Evidence/T043.md`、发行包视觉与 done 判定）**。
+**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 完成（T030～T036）、P5 完成（T037～T043 与 T040b、前置 T043a 全部 done）** → **下一步 T044「建立资产规格与清单」（总计划 :212，前置 T006/T029 已满足，P6 阶段门首任务）**。
 
 > ## ⚠ 本次最重要的教训
 >
@@ -472,7 +484,18 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 ## 下一步（按建议优先级）
 
-**前置已完成（T043a，2026-11-09）**：时间敏感断言收口 + 批处理守卫；全量 54 套 **4560/0**、两预设重导出 + PCK 审计 `leak=0` + 包内断言三项全 True、`visible_hits=0`（`Docs/Evidence/T043a.md` §5.6～§5.8）。**T043 现状**：`tests/run_t043_save_matrix.gd`（60 条）与 `Tools/t043_package.ps1` / `t043_pck_audit.py` / `t043_package_assert.ps1` / `t043_release_capture.ps1` 已落地并实跑通过；缺 `Docs/Evidence/T043.md`、发行包两帧视觉与 done 判定。
+**下一步 = T044（建立资产规格与清单，总计划 :212，前置 T006/T029 已满足）**：尺寸、朝向、材质数、预算、文件命名、来源；预算以本机实测确定，不套固定面数。
+
+**T043 已 done（2026-11-09）**：矩阵 A–F 无 `gap`、`run_t043_save_matrix` 60 条 ×3、变异 3 处全拦、全量 54 套 4560/0、两预设导出 `EXIT=0` + PCK `files=215 leak=0` + 包内 T037/T039/T041/T042/T043 全绿、发行包 `visible_hits=0`/`console_windows=0`、两帧 vision 判读。**未确认**：发行包存活帧右侧 HUD 元素（`HUD-NOT-CONFIRMED`，根因未定位，`Docs/Evidence/T043.md` §7.3）。下面第 1 条的 T043 原始规格**已兑现**，保留作历史。
+
+**P6 最小授权请求（T044 起需要，汇总见 `Docs/Tasks.md`）**：
+
+| # | 缺口 | 最小解除 |
+|---|---|---|
+| 1 | 正式猫/鼠模型与动作（攻击 / 扑击 / 逃逸） | 负责人授权采购可商用基础模型，或安排美术雕刻/重拓扑（接入链路已就绪） |
+| 2 | 环境地表贴图选型（`forest_leaves_02/03/04` 候选） | 美术批准选型与许可后再进生成器 |
+| 3 | 骨骼资产 | T006 已解除阻塞，按 P6 排期（T047 起） |
+| 4 | 打包体积策略（`export_filter=all_resources`） | 负责人拍板：改 `resources` 模式或排除 `*.glb` 源文件 |
 1. **T043（存档测试矩阵与打包）**（总计划 :190，前置 T037～T042 **已满足**）：存活重启、死亡重启、解锁重启、快速连续保存、损坏与无效位置均验证。**不要回退 T041/T042**：有档才显示继续、新游戏二次确认且默认「取消」、双坏阻断页唯一出路是「确认开始新游戏」、暂停真冻结且不写盘、主动结束走正常死亡路径、Esc 优先级「结算 > 新游戏确认 > 结束确认 > 暂停 > 恢复」、树序 `Hud<PauseMenu<EndLifeConfirm<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel`。**带上 T036 结论**：`LifeEvent.source_id` 按 D5 不补、`food_gained` 为累计增益（次数不可还原）。**待决**：`CurrentLife.last_safe_spot_id` 字段已预留、本轮不实现；安全点系统未立项，最小解除需先定义安全点判定（哪些区域算安全、敌人距离阈值、进出条件）；版本不兼容存档「保留旧档等以后版本」负责人未表态，按现状执行。**T034 昼夜对半边界（`NIGHT_START_RATIO=0.5`）与 `day_length=1200`** 维持不动，不并入起测值改数。
    必须带上 T029 的两条**待决策**（`Docs/Evidence/T029.md` §6）：**① 鼠洞不是安全区**（洞里能被打中）/ **② 冲刺会把 AI 冲出无护栏平台**（`split_platform` 实测 `y=-210 m`）。
    **U01 真人半边仍 NOT-RUN**：2～3 位外部试玩者的最小请求在 `Docs/Tasks/T028.md` §7 与 `Docs/Evidence/T028.md` §10，等负责人安排。
@@ -566,7 +589,7 @@ $proj = 'E:\Reborn\Game\Reborn'
 > **不要写物种名分支**：能力差异走配置字段（`can_jump` / `can_pounce` / `can_use_mouse_tunnel`，T031 后还有
 > `initially_unlocked` / `unlock_discovery`），有静态断言守着。
 > 打包：`export_presets.cfg` 两个预设；**导出产物拒绝 `--script`**，包内断言用 `--main-pack` + 编辑器二进制。
-> **P0 / P1 / P2 / P3 / P4 已完成；P5 进行中（T037/T038/T039/T040/T040b/T041 done）**。下一个动作：**T042 暂停与主动结束确认**
+> **P0 / P1 / P2 / P3 / P4 已完成；P5 已收口（T037～T043 与 T040b 全部 done）**。下一个动作：**T044 建立资产规格与清单（P6 阶段门）**；正式猫鼠模型/动作与地表贴图选型仍需负责人授权（见上方"P6 最小授权请求"）。
 > （单槽 + 原子写 + 单队列 + 备份/双坏阻断已落地：`user://savegame_v1.json` + `.bak` + `.corrupt-<ts>`、`save_version=1`、`.tmp` 不读档、双坏给「存档损坏，已隔离；未载入」且零写入；
 > 双坏阻断页唯一出路「确认开始新游戏」（T041）；强杀近似边界=进程被杀/句柄未 flush，**不能覆盖掉电与 OS 写缓存**）。
 > 带上 T037/T039/T041 遗留：`last_safe_spot_id` 预留位→T042、`source_id` 不补（D5）、`food_gained` 次数不可还原、~~双坏会话内确认→T041~~ **T041 已落地**、真实鼠标/键盘与 U01 真人试玩未验证；~~T035 的**死亡不扣账"复活"怪癖**~~ **已由 T040b 收口**、~~过渡态 active>total（T040）~~ **T040b 按 12 m 保留口径收口（过渡态仍可能短暂存在，属有意代价）**；T034 的**昼夜对半边界（`NIGHT_START_RATIO=0.5`）待并入起测值**（维持不动）、T029 的两条待决策：**鼠洞不是安全区**、**冲刺会把 AI 冲出平台**。
