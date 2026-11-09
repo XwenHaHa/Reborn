@@ -495,7 +495,11 @@ func _section_d_hiding_resources() -> void:
 	_assert("D1_thirst_not_full", "< 上限 100", "%.1f" % max_thirst, max_thirst < 100.0)
 	_assert("D1_health_not_restored", "Δ ≤ 0", "%.4f" % (max_health - hp0), max_health - hp0 <= 0.001)
 	_assert("D2_stamina_within_max", "≤ 100", "%.1f" % max_stamina, max_stamina <= 100.0 + EPS)
-	var stamina_step_limit: float = _mouse_cfg.stamina_regen_per_sec * (1.0 / 60.0) * 2.0
+	# 体力恢复按 `SurvivalController.UPDATE_INTERVAL`（0.2 s）**成块结算**（TD §5：「低频消耗可
+	# 0.2 s 更新但必须使用实际 delta」），单帧最大增量 = 速率 × 0.2 = 5.0。
+	# T052 起鼠的 FLEE 真的会用冲刺（3.0 m/s）→ 体力会掉 → 恢复块第一次落进"躲藏"窗口；
+	# 旧上限按"每帧 ×2 = 0.833"写的，实际测的是"体力从没掉过"这个偶然状态。
+	var stamina_step_limit: float = _mouse_cfg.stamina_regen_per_sec * 0.2 * 1.05
 	_assert("D2_stamina_no_jump", "帧增量 ≤ %.3f" % stamina_step_limit, "%.4f" % max_stamina_step,
 		max_stamina_step <= stamina_step_limit)
 	_assert("D3_hidden_rate_same_order", "±30%% of %.4f" % explore_rate, "%.4f" % hidden_rate,

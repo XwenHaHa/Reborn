@@ -26,6 +26,9 @@ const FLEE_COVER := &"cover"
 @export var immediate_flee_range: float = 1.80
 ## 找不到可达躲藏点 / 遮挡时的超时（秒）——**T020 新增值**（见 `Docs/Tasks/T020.md` §9）
 @export var flee_timeout: float = 3.0
+## T052：逃跑时是否用冲刺步速（鼠 walk 1.1 / sprint 3.0）。**默认开**——逃跑必须比巡游快，
+## 表现也随之从 `Walk` 切到 `Run`（`AnimalBody` 的 `want_sprint && speed > walk*1.15` 判据）。
+@export var flee_sprint: bool = true
 
 ## 当前觅食目标
 var _target: ResourcePoint = null
@@ -62,9 +65,12 @@ func setup(p_body: AnimalBody) -> void:
 func _step(world_time: float) -> void:
 	if body == null or not is_instance_valid(body):
 		return
-	# 1) 躲藏中：停住；无危险持续 hidden_hold_time → 外出
+	# T052：冲刺只属于逃跑。每帧先复位，`_step_flee` 里按 `flee_sprint` 再打开，
+	# 避免"逃完还在冲刺"（会让鼠一路跑着去觅食，也会多出冲刺噪声）。
+	body.want_sprint = false
 	if _state == State.HIDDEN:
 		body.move_intent = Vector2.ZERO
+		body.velocity = Vector3.ZERO
 		if _can_leave_hiding(world_time):
 			_leave_hiding(world_time)
 		return
@@ -250,6 +256,8 @@ func _step_flee(world_time: float) -> void:
 		if world_time - _flee_dest_set_at >= retry_window:
 			_register_path_failure(world_time)
 		return
+	# T052：逃跑用冲刺步速（数据开关 `flee_sprint`，默认开）——鼠 walk 1.1 / sprint 3.0，逃跑必须比巡游快
+	body.want_sprint = flee_sprint
 	_advance_along_path()
 	_track_progress(world_time)
 
@@ -257,6 +265,9 @@ func _step_flee(world_time: float) -> void:
 func _enter_hidden(world_time: float) -> void:
 	_clear_destination()
 	body.move_intent = Vector2.ZERO
+	# T052：到达落点即"站定"。逃跑用 sprint(3.0) 后靠摩擦减速会滑出 0.2 m，
+	# 那会让 T020/T026 的"躲藏中不位移"失真（实测 0.2111 / 0.0710 m）。
+	body.velocity = Vector3.ZERO
 	_hidden_count += 1
 	_hidden_since = world_time
 	change_state(State.HIDDEN, &"hidden")
