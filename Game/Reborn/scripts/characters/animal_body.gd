@@ -470,6 +470,9 @@ func _sync_visual() -> void:
 const VISUAL_ANIM_IDLE := &"Idle"
 const VISUAL_ANIM_WALK := &"Walk"
 const VISUAL_ANIM_RUN := &"Run"
+## T049：攻击提示（`AttackSettlement` 前摇期间播一次）。片段由 `t049_cat_attack_cue.py`
+## 追加到资产里（名字 `AttackCue`）；缺这段时下面所有逻辑都退化成原来的走/跑。
+const VISUAL_ANIM_ATTACK := &"AttackCue"
 const VISUAL_ANIM_MOVE_EPS := 0.05          # 低于这个速度算"站着"
 const VISUAL_ANIM_SPRINT_RATIO := 1.15      # 超过 walk 速度的 1.15 倍就切 Run
 ## 交叉淡入时长（秒）：站↔走/跑 用长一点，走↔跑 短一点（两者本身是连续步态）
@@ -490,9 +493,12 @@ func _bind_visual_animation() -> void:
 		return
 	# glTF 导入的动画 loop_mode 是 NONE；循环由运行时决定（Eat 保持一次性）
 	for name in [VISUAL_ANIM_IDLE, VISUAL_ANIM_WALK, VISUAL_ANIM_RUN]:
-		var a := visual_anim.get_animation(name)
-		if a != null:
-			a.loop_mode = Animation.LOOP_LINEAR
+		if visual_anim.has_animation(name):
+			visual_anim.get_animation(name).loop_mode = Animation.LOOP_LINEAR
+	# T049：攻击提示是**一次性**片段（0.45 s，与 `attack_telegraph` 对齐），播完停在最后一帧。
+	# `get_animation()` 未命中会打 ERROR，所以先 `has_animation()`（鼠没有这一段）。
+	if visual_anim.has_animation(VISUAL_ANIM_ATTACK):
+		visual_anim.get_animation(VISUAL_ANIM_ATTACK).loop_mode = Animation.LOOP_NONE
 	visual_anim_active = true
 
 
@@ -513,6 +519,13 @@ func _find_animation_player(n: Node) -> AnimationPlayer:
 ## 按**实际水平速度**选 clip。速率跟速度挂钩，避免"人在缓慢挪动、腿在狂奔"。
 func _update_visual_animation(speed: float) -> void:
 	if not visual_anim_active or visual_anim == null or species_config == null:
+		return
+	# T049：攻击提示优先——前摇/恢复期（`ACT.ATTACKING`）不播走跑，播一次 AttackCue。
+	if action_state() == ACT.ATTACKING and visual_anim.has_animation(VISUAL_ANIM_ATTACK):
+		if visual_anim_current != VISUAL_ANIM_ATTACK:
+			visual_anim.play(VISUAL_ANIM_ATTACK, 0.08)
+			visual_anim_current = VISUAL_ANIM_ATTACK
+		visual_anim.speed_scale = 1.0
 		return
 	var want := VISUAL_ANIM_IDLE
 	if speed > VISUAL_ANIM_MOVE_EPS:

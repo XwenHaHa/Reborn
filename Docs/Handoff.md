@@ -1,4 +1,4 @@
-﻿# 开发交接：2026-11-09（T048 猫待机/行走循环 done；下一任务 T049；T047/T051 待决策）
+﻿# 开发交接：2026-11-10（T049 猫奔跑/攻击提示 done；下一任务 T053；T047/T051 待决策）
 
 ## T043a（T043 前置，done 2026-11-09）
 
@@ -96,6 +96,16 @@
 - 新套件 `tests/run_t048_cat_anim.gd`（**17/17**）：三段 `loop_mode=LOOP_LINEAR`；Walk 播过 1.2 周期仍 `is_playing` 且位置 0.164 < 0.300（真绕回）；静止 2 个 Idle 周期**身体与视觉节点位移 0.0000 m**；**行走 1 s 位移 1.800 m = `walk_speed`**、`speed_scale=1.000` ⇒ **无双倍位移**；停 30 帧视觉节点不累积。
 - 全量 **56 套 4,600 条 0 失败**、0 RED/0 INVALID、`visible_hits=0`。
 - **未验证**：`speed_scale` 夹紧区间、交叉淡入期形变、包内复验；**未做视觉取证**（判据全为数值）。
+
+## T049（猫奔跑与攻击提示动画，done 2026-11-10）
+
+- 资产 `Art/Exports/Cat/SM_Cat_006.glb`（6,447,600 B，与工程内文件同 sha256）：在 `SM_Cat_005` 上**只追加动画**，网格仍 8,376 tris / 2 槽 / 33 骨，4 段 `AttackCue/Idle/Run/Walk`。
+- `AttackCue` 长度取 `attack_telegraph`（**0.450 s**，60 fps 0..27 帧）、`LOOP_NONE`；`AnimalBody` 在 `ACT.ATTACKING` 期间优先播它（先 `has_animation()`，鼠等无此段的物种行为不变）。
+- `tests/run_t049_attack_cue.gd` **18/18**：进入 `telegraphing` **同一帧**切片段、提示期实测 0.450 s、提示期位移 0.0000 m、恢复后回 `Idle` 且 `is_attacking()=false`；冲刺 4.500 m/s 播 `Run`、`speed_scale=1.000`、松手回 `Idle`。`run_art02_cat` 75/75。
+- **视觉两轮判读**（`Tools/Blender/t049_render_cue.py`，按求值后 bbox 构图）：第一版"几乎看不出在发力，更像站立"→ 放大 1.8× + 单侧抬爪 44° 后 f8"能看出压低+抬爪、无塌陷/穿模"；前腿 38° 会把肩根折痕放大成穿模，收到 **26°** 后末帧"能看出出爪、无穿模无撕裂"，只剩 T047 的肩根体积收缩/贴图拉伸。
+- **两个确定性踩坑**：① 根骨本地 Y≈世界 −Z，且骨架对象带 **0.0366** 缩放 ⇒ 必须 `静置矩阵逆 @ (世界位移 / 对象缩放)`，否则 0.045 m 只落 1.8 mm（`Tools/Blender/t049c_drop_probe.py` 量出）；② 竖直压低 >2 cm 会让脚掌陷地。
+- 全量 **57 套 4,621 条 0 失败**、`invalid=0`、`visible_hits=0`（`delta_ms=470`）。
+- **未验证**：包内复验、游戏内实机观感、0.08 s 淡入期形变、恢复期是否需"收爪"过渡。
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
@@ -198,7 +208,7 @@
 **T040b 的边界声明**：① 只改**死亡扣账**与**收敛退场距离**两件事；存档格式、`save_version`、`revision`、队列/节流、`pending_settlement_life_id`、状态机语义、`SpeciesConfig` 数值、`nav/*.tres` 与 `l_courtyard.tscn` **零改动**；② 死亡扣账只认**已登记且未捕获**的个体，`source_id` 幂等（`natural_death_recorded`），**表现退场**（收敛退场/读档清场/重生重建）**不扣**；③ **不改已有 `next_recover_at`**——满容量死亡的恢复由既有 `region_population_advance_to()` 起算，未采纳“死亡即重排”（连续死亡会无限推迟恢复）；④ 12 m 内保留会产生**过渡态 `active > total`**（有意代价），只在捕获/自然死亡/读档/重生立即重试 + 入口每 60 物理帧（仅 `pending_excess>0`）重试；⑤ “超时清退/系统回收”当前**没有独立代码路径**，未来新增必须走 `report_natural_death`，否则会重新出现“复活”；⑥ T040 的 done 状态未改，只在其 D1 上追加修订注记。
 **T041 的边界声明**：① 只做进世界前的菜单门与破坏性确认；存档格式/`save_version`/`revision`/队列/节流/`pending_settlement_life_id`/`LifeCycle` 四态/`SpeciesConfig` **零改动**；② 启动**不再自动恢复存活生命**，点「继续」才恢复（世界层仍在菜单建立前应用，保证解锁集正确）；③ 双坏阻断页**唯一出路「确认开始新游戏」**，确认前 `select_species` 拒绝、`save_now=blocked`、退出不写档，`.corrupt-*` **保留不动**；④ 版本不兼容**不隔离**、旧档仍在，确认后才清；⑤ 新游戏确认层**默认焦点「取消」**、Esc 取消；无存档不弹确认、不显示继续；⑥ 树序 `Hud<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 已断言，结算页仍最上；⑦ 真实鼠标/键盘与 U01 真人试玩**未验证**。
 **T042 的边界声明**：① 只做暂停层、结束确认与正常死亡接线；存档格式/`save_version`/`revision`/队列/节流/`pending_settlement_life_id`/`LifeCycle` 四态/`SpeciesConfig` **零改动**；② 冻结是**双保险**：`SceneTree.paused=true`（AI/物理/输入停摆）+ `WorldDirector.time_advancing=false`（时钟门闩），恢复后逐字段还原；③ 暂停与取消**不写盘**，退出程序仍走既有出口径；④ 主动结束**不是抄近道**：`pending` → `LifeCycle.end_life(reason=died, damage_reason=player_quit)` → 结算页/写档（`saved_reason=death`），**不重生、不清档**，重生仍由玩家在结算后选物种；⑤ Esc 优先级固定「结算页 > `NewGameConfirm` > `EndLifeConfirm` > 暂停 > 恢复」；⑥ 树序 `Hud<PauseMenu<EndLifeConfirm<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 已断言，结算页仍最上；⑦ 真实鼠标/键盘与 U01 真人试玩**未验证**；⑧ `last_safe_spot_id` **字段已预留、本轮不实现**——安全点系统未立项，最小解除需先定义安全点判定（哪些区域算安全、敌人距离阈值、进出条件）；版本不兼容存档「保留旧档等以后版本」负责人本轮未表态，按现状（仅新游戏可选）执行。
-**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 完成（T030～T036）、P5 完成（T037～T043 与 T040b、T043a）、P6 进行中（T044/T045/T046/T048/T050/T052 done；T047、T051 awaiting-review）** → **下一步 T049（猫奔跑、攻击提示动画）**。
+**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 完成（T030～T036）、P5 完成（T037～T043 与 T040b、T043a）、P6 进行中（T044/T045/T046/T048/T049/T050/T052 done；T047、T051 awaiting-review）** → **下一步 T053**。
 
 > ## ⚠ 本次最重要的教训
 >
@@ -567,7 +577,9 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 **T048 已 done（2026-11-09）**：猫 `Idle/Walk/Run` **首末帧闭合 0.000°**、**水平根漂移 0.0000 m**、净位移 0、无单调累加 location 轨道（竖向 bob 0.0035/0.0155/0.0200 m 仅记录）；引擎侧 **17/17**：三段 `LOOP_LINEAR`、Walk 播过 1.2 周期仍绕回（0.164 < 0.300）、静止 2 周期身体与视觉节点位移 **0.0000 m**、**行走 1 s 位移 1.800 m = walk_speed（无双倍位移）**、`speed_scale=1.000`。全量 **56 套 4,600 条 0 失败**、`visible_hits=0`。**判据修正**：第一版把整体位移当"根运动"，Walk/Run 被误判（1.55/2.00 cm），拆水平/竖向后全 PASS。
 
-**下一步**：**T049（猫奔跑、攻击提示动画）** —— 现役猫**没有 `AttackCue` 片段**；T047/T051 待负责人选方案。
+
+**T049 已 done（2026-11-10）**：`SM_Cat_006` 在 `SM_Cat_005` 上只追加动画（网格不变：8,376 tris / 2 槽 / 33 骨），`AttackCue` 按 `attack_telegraph` 定长 **0.450 s**、`LOOP_NONE`；`AnimalBody` 在 `ACT.ATTACKING` 期间优先播（`has_animation()` 门保证鼠等物种不变）。**18/18**：进入 `telegraphing` 同帧切片段、提示期 0.450 s、位移 0.0000 m、恢复后回 `Idle`；冲刺 **4.500 m/s** 播 `Run`、`speed_scale=1.000`、松手回 `Idle`；`run_art02_cat` 75/75。全量 **57 套 4,621 条 0 失败**、`visible_hits=0`。视觉判读两轮：第一版"像站立"→ 放大 1.8× + 单侧抬爪 44° 后 f8"能看出压低+抬爪"；前腿 38° 加剧肩根穿模 → 收到 26° 后末帧"能看出出爪、无穿模无撕裂"。踩坑：根骨本地 Y≈世界 −Z + 骨架对象 0.0366 缩放，压低必须 `静置矩阵逆 @ (世界位移/对象缩放)`。
+**下一步**：**T053**（P6 剩余资产任务）—— **T049 已 done**（`AttackCue` 0.450 s 与 `attack_telegraph` 对齐、猫冲刺 4.500 m/s 播 `Run`）；T047/T051 待负责人选方案。
 
 
 

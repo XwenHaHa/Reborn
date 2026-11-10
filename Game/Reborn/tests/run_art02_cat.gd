@@ -12,7 +12,7 @@ extends SceneTree
 ##       --script 'res://tests/run_art02_cat.gd' --quit-after 30000
 ## 退出码：0 = 全部通过；1 = 有失败。
 
-const ASSET := "res://assets/characters/cat/sm_cat_005.glb"
+const ASSET := "res://assets/characters/cat/sm_cat_006.glb"
 const CAT_CFG := "res://resources/species/cat.tres"
 const MOUSE_CFG := "res://resources/species/mouse.tres"
 const BODY_SCENE := "res://scenes/characters/animal_body.tscn"
@@ -58,7 +58,7 @@ func _check_asset_layer() -> void:
 	print("ASSET|root_class=%s|root_name=%s|children=%d" % [
 		inst.get_class(), inst.name, inst.get_child_count()])
 	_assert("asset_root_is_node3d", "Node3D", inst.get_class(), inst is Node3D)
-	_assert("asset_root_name", "sm_cat_005", str(inst.name), String(inst.name) == "sm_cat_005")
+	_assert("asset_root_name", "sm_cat_006", str(inst.name), String(inst.name) == "sm_cat_006")
 
 	var mi := _find_mesh(inst)
 	_assert("asset_has_mesh", "MeshInstance3D", str(mi != null), mi != null)
@@ -120,8 +120,9 @@ func _check_asset_layer() -> void:
 	if _assert("animation_player_exists", "AnimationPlayer", str(ap != null), ap != null):
 		var anim_names := ap.get_animation_list()
 		print("ASSET|anims=%s" % str(anim_names))
-		_assert("anim_count_3", "3", str(anim_names.size()), anim_names.size() == 3)
-		for want in ["Idle", "Walk", "Run"]:
+		# T049：新增第 4 段 `AttackCue`（攻击提示，0.45 s）
+		_assert("anim_count_4", "4", str(anim_names.size()), anim_names.size() == 4)
+		for want in ["Idle", "Walk", "Run", "AttackCue"]:
 			var wid := String(want).to_lower()
 			_assert("anim_%s_present" % wid, want, str(anim_names.has(want)),
 				anim_names.has(want))
