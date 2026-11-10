@@ -17,7 +17,7 @@ extends SceneTree
 ## - 同一档位的实例位置固定（前排 8 个 + 后排堆叠），跨档位可比。
 
 const LEVEL := "res://scenes/maps/l_courtyard.tscn"
-const CAT_VISUAL := "res://assets/characters/cat/sm_cat_002.glb"
+const CAT_VISUAL := "res://assets/characters/cat/sm_cat_006.glb"
 const MOUSE_VISUAL := "res://assets/characters/mouse/sm_mouse_002.glb"
 const BOULDER_VISUAL := "res://assets/environment/sm_boulder_001.glb"
 const BUSH_VISUAL := "res://assets/environment/sm_bush_002.glb"

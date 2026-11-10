@@ -3,7 +3,7 @@ extends SceneTree
 ##
 ## 用法：
 ##   godot --headless --path E:\Reborn\Game\Reborn `
-##     --script res://tests/tool_cat_gait_eval.gd -- --glb=res://assets/characters/cat/sm_cat_004.glb
+##     --script res://tests/tool_cat_gait_eval.gd -- --glb=res://assets/characters/cat/sm_cat_006.glb
 ##   可选：--clips=Walk,Run  --dt=0.0041667
 ##
 ## 与 tool_audit_cat_slip.gd（真实关卡）的分工：
@@ -29,7 +29,7 @@ var _skel: Skeleton3D = null
 
 
 func _initialize() -> void:
-	var glb := "res://assets/characters/cat/sm_cat_004.glb"
+	var glb := "res://assets/characters/cat/sm_cat_006.glb"
 	var clips := ["Walk", "Run"]
 	var dt := 1.0 / 240.0
 	var dump_arg := ""

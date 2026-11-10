@@ -144,7 +144,10 @@ func _check_imports() -> void:
 				broken.append(f)
 			elif not FileAccess.file_exists(full + ".import"):
 				broken.append(f + "(无.import)")
-	_assert("C_glb_count", "≥ 6", str(total), total >= 6)
+	# 2026-11-10 清理：Game 内只保留**在役**视觉资产（猫 `sm_cat_006`、鼠 `sm_mouse_002`），
+	# 退役的 sm_cat_001/002/004/005 已删（仍可在 Art/Exports 与 git 历史里查到）。
+	# 阈值因此从 6 收到 2——断言的本意是"每个物种的视觉资产都在册且可加载"，不是"文件越多越好"。
+	_assert("C_glb_count", "≥ 2（在役资产）", str(total), total >= 2)
 	_assert("C_glb_all_loadable", "0 个损坏", "%s" % [broken], broken.is_empty())
 
 	# 被物种引用的视觉场景必须能实例化（外部贴图缺失会在这里炸）
