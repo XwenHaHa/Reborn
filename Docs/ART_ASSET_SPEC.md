@@ -146,7 +146,7 @@
 | 材质/贴图 | ≤2 槽；树皮/腐木质感；`≤2048²` |
 | 碰撞 | 无（Godot 侧 Box/Capsule 显式建，**不逐面**） |
 | 参考状态 | reference_pending（候选 3 个） |
-| 当前状态 | BoxMesh 拼的屏障，**没有洞**（通行靠几何留缝） |
+| 当前状态 | **已接入**（`SM_RootHole_001.glb`，12,555 tris / 1 材质槽，尺寸 0.823×0.850×0.778 m）：洞体由 `art07_root_hole_from_ref.py` 在树桩底部**真实钻穿** 0.24×0.30 m 通道；关卡侧 `RootBarrierWest/East/Lintel` 三个 `BoxShape3D` 规定通行净空，装饰树桩 `RootHoleStumpS/N` 无碰撞。**运行时实测（T053）**：净空 **0.2400 × 0.3000 m**；鼠胶囊（r 0.06 / 高 0.18）在洞口中心 **0 命中**，猫胶囊（r 0.16 / 高 0.48）**4 命中** ⇒ 「鼠能进、猫不能」成立（`tests/run_t053_env_modules.gd` C 组） |
 
 ### 4.4 `ENV_BOULDER_001`（巨石）
 
@@ -154,11 +154,11 @@
 |---|---|
 | 用途 | 溪边地标/遮挡（现 1.2³ BoxMesh） |
 | 关键结构 | 自然不规则轮廓（非盒/球）、表面有凹凸；不得出现尖锐三角导致法线破面 |
-| 尺寸 | 目标 ≈1.2 m 见方（可 ±20%） |
-| 面数 | 1k–8k（远景主导 → 优先低面 + 法线细节） |
-| 材质/贴图 | ≤2 槽；石质 albedo+roughness+normal；≤2048² |
+| 尺寸 | **实测 1.269 × 1.004 × 1.829 m（真实米制扫描，不缩放）**。旧值「目标 ≈1.2 m 见方（可 ±20%）」来自灰盒占位，2026-11-10 T053 按实测更正：源件是真实比例扫描件，缩到 1.2 m 只会让石头与周围地形比例失调，且不解决任何玩法问题；关卡 `CreekBoulder` 的 `BoxShape3D` 与网格 AABB **逐轴 1:1**（断言 ±2 mm）。 |
+| 面数 | 1k–8k（实测 **7,500**，远景主导 → 优先低面 + 法线细节） |
+| 材质/贴图 | ≤2 槽（实测 **1 槽**）；石质 albedo+roughness+normal；≤2048² |
 | 参考状态 | **reference_confirmed（候选已下载，CC0）** → 见 manifest `ENV_BOULDER_001.primary` |
-| 当前状态 | BoxMesh |
+| 当前状态 | **已接入**（`SM_Boulder_001.glb`；`CreekBoulder` = StaticBody3D + BoxShape3D + 该 GLB 实例；视觉/碰撞一致由 `tests/run_t053_env_modules.gd` B 组断言） |
 
 ### 4.5 `ENV_FENCE_MODULE_001`（围栏/矮墙模块）
 
