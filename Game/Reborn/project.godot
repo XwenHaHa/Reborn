@@ -22,6 +22,8 @@ WorldDirector="*res://autoload/world_director.gd"
 GameState="*res://autoload/game_state.gd"
 SaveManager="*res://autoload/save_manager.gd"
 AudioDirector="*res://scripts/systems/audio_director.gd"
+AmbienceDirector="*res://scripts/systems/ambience_director.gd"
+SubtitleDirector="*res://scripts/systems/subtitle_director.gd"
 
 [debug]
 

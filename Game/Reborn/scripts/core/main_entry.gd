@@ -742,6 +742,9 @@ func _spawn_restored_player(cfg: SpeciesConfig, life: Dictionary) -> void:
 	if body.survival != null and survival_data is Dictionary and not (survival_data as Dictionary).is_empty():
 		body.survival.set_state(SurvivalState.from_dictionary(survival_data))
 	player = body
+	var subs_restore := get_node_or_null("/root/SubtitleDirector")
+	if subs_restore != null and subs_restore.has_method("bind_player"):
+		subs_restore.call("bind_player", body)
 	if not lifecycle.restore_alive(body, String(life.get("life_id", "")),
 			StringName(String(life.get("species_id", "")))):
 		push_error("MainEntry: 读档恢复存活失败")
@@ -816,6 +819,15 @@ func _build_hud() -> void:
 		return
 	hud.name = "Hud"
 	add_child(hud)
+	# T056：字幕挂显示通道；环境音按关卡里的水体布点
+	# T056：字幕挂显示通道、环境音按水体布点。用**节点查找**而不是 autoload 单例名 ——
+	# `--script` 运行方式下直接写单例名会在编译期报 `Identifier not found`（实测全量批 3 套红）。
+	var subs := get_node_or_null("/root/SubtitleDirector")
+	if subs != null and subs.has_method("bind_hud"):
+		subs.call("bind_hud", hud)
+	var amb := get_node_or_null("/root/AmbienceDirector")
+	if amb != null and amb.has_method("bind_level"):
+		amb.call("bind_level", level)
 
 
 ## 结算/选物种状态栏（普通 `Control`，不是 `CanvasLayer`：正式场景不许 CanvasLayer）。
@@ -1234,6 +1246,9 @@ func _spawn_player(species_id: StringName) -> void:
 		body.climb.reset_base()
 
 	player = body
+	var subs_spawn := get_node_or_null("/root/SubtitleDirector")
+	if subs_spawn != null and subs_spawn.has_method("bind_player"):
+		subs_spawn.call("bind_player", body)
 	lifecycle.mark_spawned(body, spawn)
 	if discovery != null:
 		discovery.player = body
