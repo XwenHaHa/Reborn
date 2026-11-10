@@ -95,3 +95,16 @@ __pycache__/
 # Reference Lock：第三方原始下载（体积大、按 manifest 的来源+sha256 可重新获取）
 references/_downloads/
 
+
+# --- ??????????2026-11-10 ????????? Tools/ ?????---
+Art/Probes/
+.trae/
+Docs/superpowers/
+/task_plan.md
+/visual-options.html
+/??.png
+/*.png
+
+Tools/Probes/
+/findings.md
+/progress.md
