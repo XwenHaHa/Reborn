@@ -24,6 +24,7 @@ SaveManager="*res://autoload/save_manager.gd"
 AudioDirector="*res://scripts/systems/audio_director.gd"
 AmbienceDirector="*res://scripts/systems/ambience_director.gd"
 SubtitleDirector="*res://scripts/systems/subtitle_director.gd"
+DayNightDirector="*res://scripts/systems/day_night_director.gd"
 
 [debug]
 

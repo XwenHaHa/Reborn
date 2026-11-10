@@ -828,6 +828,10 @@ func _build_hud() -> void:
 	var amb := get_node_or_null("/root/AmbienceDirector")
 	if amb != null and amb.has_method("bind_level"):
 		amb.call("bind_level", level)
+	# T057：昼夜光照按世界时间重算（无状态，读档后自然正确）
+	var dn := get_node_or_null("/root/DayNightDirector")
+	if dn != null and dn.has_method("bind_level"):
+		dn.call("bind_level", level)
 
 
 ## 结算/选物种状态栏（普通 `Control`，不是 `CanvasLayer`：正式场景不许 CanvasLayer）。

@@ -1,4 +1,4 @@
-﻿# 开发交接：2026-11-10（T056 环境声音与字幕 awaiting-review 待试听；下一任务 T057；T047/T051/T055/T056 待决策）
+﻿# 开发交接：2026-11-10（T057 昼夜光照 awaiting-review 视觉判读未做；下一任务 T058；T047/T051/T055/T056/T057 待决策）
 
 ## T043a（T043 前置，done 2026-11-09）
 
@@ -144,6 +144,16 @@
 - 全量 **61 套 4,791 条 0 失败**、`invalid=0`、`visible_hits=0`（`delta_ms=617`）。
 - **未验证**：循环接缝与音色未听、环境音主观定位未验、字幕视觉排版与"看到敌人是否也出字幕"未做。
 
+## T057（简化昼夜光照，awaiting-review 2026-11-10 —— 视觉判读未做）
+
+- `scripts/systems/day_night.gd`（纯函数）+ `DayNightDirector`（autoload）：白天仰角 `70·sin(π·d)`、能量 `0.35+0.95·sin`、色温暖→白；夜晚太阳落到地平线下，改月光（冷色 `b>r`、能量 `0.12`）；环境光硬下界 **0.26**（"夜间仍需看清基本路线"的可判定下界）。只写太阳旋转/能量/颜色 + `Environment.ambient_light_energy`，不碰雾/曝光/SSAO。
+- **存档恢复靠无状态**：每帧按 `world_time` 重算，不做 `+= delta` 推进 —— 读档把时间设回去，下一帧就是对的样子。
+- `tests/run_t057_day_night.gd` **24/24**：正午 `70.00°/1.300/0.850`、午夜 `-70.00°/0.120/0.260`；`t=300/1500/2700` 周期逐位相同；`t=412.5` 往返 950→10→412.5 后 6 字段逐位相同；`night_sight_multiplier` 默认 1.0；7 个边界点与 `is_daytime()` **0 处不一致**。
+- **实拍**（非 headless，`tool_capture_t057_night.gd`）：正午平均亮度 **142.5** vs 夜间 **115.6（81%）**；俯视 72.1 / 59.8。图在本机 `Art/Probes/t057_*.png`（`Art/Probes/` 未入库）。
+- **踩坑**：`_wd.call("is_night")`（实际是 `is_daytime()`）会打 SCRIPT ERROR 并**中止整个函数**，那条断言静默消失 —— 靠 `checks=23`（预期 24）才发现。**断言总条数必须与预期一致**。
+- 全量 **62 套 4,815 条 0 失败**、`invalid=0`、`visible_hits=0`（`delta_ms=671`）。
+- **未验证**：视觉判读未做（vision 两次 `ETIMEDOUT`）；`night_sight_multiplier` 未接入感知；光照性能未测（T060）。
+
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
@@ -246,7 +256,7 @@
 **T040b 的边界声明**：① 只改**死亡扣账**与**收敛退场距离**两件事；存档格式、`save_version`、`revision`、队列/节流、`pending_settlement_life_id`、状态机语义、`SpeciesConfig` 数值、`nav/*.tres` 与 `l_courtyard.tscn` **零改动**；② 死亡扣账只认**已登记且未捕获**的个体，`source_id` 幂等（`natural_death_recorded`），**表现退场**（收敛退场/读档清场/重生重建）**不扣**；③ **不改已有 `next_recover_at`**——满容量死亡的恢复由既有 `region_population_advance_to()` 起算，未采纳“死亡即重排”（连续死亡会无限推迟恢复）；④ 12 m 内保留会产生**过渡态 `active > total`**（有意代价），只在捕获/自然死亡/读档/重生立即重试 + 入口每 60 物理帧（仅 `pending_excess>0`）重试；⑤ “超时清退/系统回收”当前**没有独立代码路径**，未来新增必须走 `report_natural_death`，否则会重新出现“复活”；⑥ T040 的 done 状态未改，只在其 D1 上追加修订注记。
 **T041 的边界声明**：① 只做进世界前的菜单门与破坏性确认；存档格式/`save_version`/`revision`/队列/节流/`pending_settlement_life_id`/`LifeCycle` 四态/`SpeciesConfig` **零改动**；② 启动**不再自动恢复存活生命**，点「继续」才恢复（世界层仍在菜单建立前应用，保证解锁集正确）；③ 双坏阻断页**唯一出路「确认开始新游戏」**，确认前 `select_species` 拒绝、`save_now=blocked`、退出不写档，`.corrupt-*` **保留不动**；④ 版本不兼容**不隔离**、旧档仍在，确认后才清；⑤ 新游戏确认层**默认焦点「取消」**、Esc 取消；无存档不弹确认、不显示继续；⑥ 树序 `Hud<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 已断言，结算页仍最上；⑦ 真实鼠标/键盘与 U01 真人试玩**未验证**。
 **T042 的边界声明**：① 只做暂停层、结束确认与正常死亡接线；存档格式/`save_version`/`revision`/队列/节流/`pending_settlement_life_id`/`LifeCycle` 四态/`SpeciesConfig` **零改动**；② 冻结是**双保险**：`SceneTree.paused=true`（AI/物理/输入停摆）+ `WorldDirector.time_advancing=false`（时钟门闩），恢复后逐字段还原；③ 暂停与取消**不写盘**，退出程序仍走既有出口径；④ 主动结束**不是抄近道**：`pending` → `LifeCycle.end_life(reason=died, damage_reason=player_quit)` → 结算页/写档（`saved_reason=death`），**不重生、不清档**，重生仍由玩家在结算后选物种；⑤ Esc 优先级固定「结算页 > `NewGameConfirm` > `EndLifeConfirm` > 暂停 > 恢复」；⑥ 树序 `Hud<PauseMenu<EndLifeConfirm<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 已断言，结算页仍最上；⑦ 真实鼠标/键盘与 U01 真人试玩**未验证**；⑧ `last_safe_spot_id` **字段已预留、本轮不实现**——安全点系统未立项，最小解除需先定义安全点判定（哪些区域算安全、敌人距离阈值、进出条件）；版本不兼容存档「保留旧档等以后版本」负责人本轮未表态，按现状（仅新游戏可选）执行。
-**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 完成（T030～T036）、P5 完成（T037～T043 与 T040b、T043a）、P6 进行中（T044/T045/T046/T048/T049/T050/T052/T053/T054 done；T047、T051、T055、T056 awaiting-review）** → **下一步 T057**。
+**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 完成（T030～T036）、P5 完成（T037～T043 与 T040b、T043a）、P6 进行中（T044/T045/T046/T048/T049/T050/T052/T053/T054 done；T047、T051、T055、T056、T057 awaiting-review）** → **下一步 T058**。
 
 > ## ⚠ 本次最重要的教训
 >
@@ -628,7 +638,10 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 **T056 环境声音与关键字幕：代码/资产/断言完成（2026-11-10），状态 awaiting-review（待试听）**：`make_audio_t056.py` 合成 `creek_loop` 4.00 s / `wind_loop` 6.00 s（整数频率涌动 + 首尾交叉淡化，运行时 `LOOP_FORWARD`）；`AmbienceDirector` 按 `water_bodies` 给每个水体挂 3D 循环（与 `CreekWater` 位置差 **0.000 m**，`unit_size 6`/`max 30`）+ 风底噪；`SubtitleDirector` **只**订阅玩家 `Perception.noise_heard`，文本只有 8 个方位词 —— **25/25**：可感知噪声 +1 条 `「右前传来动静」`，**50 m 外 +0**，同方位不同坐标文本完全相同，无数字/坐标。**踩坑（重要）**：`--script` 下直接写 autoload 单例名会在**编译期**报 `Identifier not found`，让 3 套红 + 1 套 INVALID；改 `get_node_or_null("/root/Xxx")` 后全绿。全量 **61 套 4,791 条 0 失败**、`visible_hits=0`。**未验证**：循环接缝/音色未听。
 
-**下一步**：**T057**（简化昼夜光照：光照跟世界时间变化、存档恢复正确、夜间可读）；T047/T051/T055/T056 待负责人处理。
+
+**T057 简化昼夜光照：代码/断言/实拍完成（2026-11-10），状态 awaiting-review（视觉判读未做）**：`day_night.gd` 纯函数采样（白天 `70·sin` 弧线、夜晚月光冷色）+ `DayNightDirector` 每帧按 `world_time` **重算**（无状态 ⇒ 读档天然正确）；夜间环境光硬下界 `0.26`。**24/24**：正午 `70.00°/1.300/0.850`、午夜 `-70.00°/0.120/0.260`；`t=300/1500/2700` 周期逐位相同；`t=412.5` 往返 950→10→412.5 后 6 字段逐位相同；7 个边界点与 `is_daytime()` 一致。**实拍**（非 headless）：正午 luma **142.5** vs 夜间 **115.6（81%）**。**踩坑**：`_wd.call("is_night")` 实为 `is_daytime()` → SCRIPT ERROR 中止函数、少 1 条断言（靠 `checks=23 vs 24` 发现）。全量 **62 套 4,815 条 0 失败**、`visible_hits=0`。**未验证**：vision 两次 `ETIMEDOUT`，"夜间是否像夜/是否看得清"无结论，夜间亮度达正午 81% 有"像暗一点的白天"风险。
+
+**下一步**：**T058**（安全休息与快进：追逐中拒绝、资源不足提前提示；时间/生存消耗/资源与种群恢复一致）；T047/T051/T055/T056/T057 待负责人处理。
 
 
 
