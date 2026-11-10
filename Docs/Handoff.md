@@ -1,4 +1,4 @@
-﻿# 开发交接：2026-11-10（T054 导入与替换回归 done；下一任务 T055；T047/T051 待决策）
+﻿# 开发交接：2026-11-10（T055 行动声音与 AI 噪声 awaiting-review 待试听；下一任务 T056；T047/T051 待决策）
 
 ## T043a（T043 前置，done 2026-11-09）
 
@@ -124,6 +124,16 @@
 - 全量 **59 套 4,731 条 0 失败**、`invalid=0`、`visible_hits=0`（`delta_ms=552`）。
 - **未验证**：真人试玩 U01 与 `tool_t028_walkthrough`、包内复验、交叉淡入期形变。
 
+## T055（行动声音与 AI 噪声统一，awaiting-review 2026-11-10 —— 待试听）
+
+- 开工前**项目没有音频**（0 个 `AudioStreamPlayer`、0 个音频文件）；本轮补音源 + 统一出口。
+- `Tools/make_audio_t055.py` 确定性合成 4 个**自有**音（44.1 kHz/16 bit，合计 61,916 B）：`footstep_walk` 0.12 s、`footstep_run` 0.10 s、`attack` 0.22 s、`hurt` 0.26 s，不进 `THIRD_PARTY_NOTICES`。
+- `WorldDirector.emit_action(kind, source, pos, loudness)` 是**唯一出口**：一次调用 → 出声（`AudioDirector`，8 路 `AudioStreamPlayer3D` 池，inverse 距离衰减、`max_distance 40 m`）+ 按 `NOISE_TO_AI` 白名单喂 `noise_emitted`。**白名单目前只有脚步**：攻击/受伤只出声，**故意不动 AI 行为**（是否该被听见属 T029/U01 平衡）。
+- `tests/run_t055_audio_noise.gd` **35/35**：一次 `footstep_walk` → 1 声 + 噪声 +1 + `to_ai=true`、`linear_to_db(0.5)=-6.02 dB`；`attack`/`hurt` → 1 声、噪声 +0；衰减 **1 m→8 m 差 10.46 dB**、40 m 归零、`hurt` 比 `walk` 传得远；真实身体脚步/奔跑/掉血各自播对；静音下不出声但噪声照发。
+- **踩坑**：`SceneTree._initialize()` 里 `root` 未进树 → autoload 取不到（"outside the active scene tree"），加 `await process_frame`；`unit_size` 5.0 时 1 m 与 8 m 只差 4.08 dB（增益钳位），按"该传多远"重定后 10.46 dB。
+- 全量 **60 套 4,766 条 0 失败**、`invalid=0`、`visible_hits=0`（`delta_ms=586`）。
+- **未验证**：听觉主观判读（没听过）、音量平衡、左右声像、包内复验。
+
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
@@ -226,7 +236,7 @@
 **T040b 的边界声明**：① 只改**死亡扣账**与**收敛退场距离**两件事；存档格式、`save_version`、`revision`、队列/节流、`pending_settlement_life_id`、状态机语义、`SpeciesConfig` 数值、`nav/*.tres` 与 `l_courtyard.tscn` **零改动**；② 死亡扣账只认**已登记且未捕获**的个体，`source_id` 幂等（`natural_death_recorded`），**表现退场**（收敛退场/读档清场/重生重建）**不扣**；③ **不改已有 `next_recover_at`**——满容量死亡的恢复由既有 `region_population_advance_to()` 起算，未采纳“死亡即重排”（连续死亡会无限推迟恢复）；④ 12 m 内保留会产生**过渡态 `active > total`**（有意代价），只在捕获/自然死亡/读档/重生立即重试 + 入口每 60 物理帧（仅 `pending_excess>0`）重试；⑤ “超时清退/系统回收”当前**没有独立代码路径**，未来新增必须走 `report_natural_death`，否则会重新出现“复活”；⑥ T040 的 done 状态未改，只在其 D1 上追加修订注记。
 **T041 的边界声明**：① 只做进世界前的菜单门与破坏性确认；存档格式/`save_version`/`revision`/队列/节流/`pending_settlement_life_id`/`LifeCycle` 四态/`SpeciesConfig` **零改动**；② 启动**不再自动恢复存活生命**，点「继续」才恢复（世界层仍在菜单建立前应用，保证解锁集正确）；③ 双坏阻断页**唯一出路「确认开始新游戏」**，确认前 `select_species` 拒绝、`save_now=blocked`、退出不写档，`.corrupt-*` **保留不动**；④ 版本不兼容**不隔离**、旧档仍在，确认后才清；⑤ 新游戏确认层**默认焦点「取消」**、Esc 取消；无存档不弹确认、不显示继续；⑥ 树序 `Hud<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 已断言，结算页仍最上；⑦ 真实鼠标/键盘与 U01 真人试玩**未验证**。
 **T042 的边界声明**：① 只做暂停层、结束确认与正常死亡接线；存档格式/`save_version`/`revision`/队列/节流/`pending_settlement_life_id`/`LifeCycle` 四态/`SpeciesConfig` **零改动**；② 冻结是**双保险**：`SceneTree.paused=true`（AI/物理/输入停摆）+ `WorldDirector.time_advancing=false`（时钟门闩），恢复后逐字段还原；③ 暂停与取消**不写盘**，退出程序仍走既有出口径；④ 主动结束**不是抄近道**：`pending` → `LifeCycle.end_life(reason=died, damage_reason=player_quit)` → 结算页/写档（`saved_reason=death`），**不重生、不清档**，重生仍由玩家在结算后选物种；⑤ Esc 优先级固定「结算页 > `NewGameConfirm` > `EndLifeConfirm` > 暂停 > 恢复」；⑥ 树序 `Hud<PauseMenu<EndLifeConfirm<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 已断言，结算页仍最上；⑦ 真实鼠标/键盘与 U01 真人试玩**未验证**；⑧ `last_safe_spot_id` **字段已预留、本轮不实现**——安全点系统未立项，最小解除需先定义安全点判定（哪些区域算安全、敌人距离阈值、进出条件）；版本不兼容存档「保留旧档等以后版本」负责人本轮未表态，按现状（仅新游戏可选）执行。
-**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 完成（T030～T036）、P5 完成（T037～T043 与 T040b、T043a）、P6 进行中（T044/T045/T046/T048/T049/T050/T052/T053/T054 done；T047、T051 awaiting-review）** → **下一步 T055**。
+**P0 完成（T001～T007）、P1 完成（T008～T013）、P2 完成（T014～T022）、P3 完成（T023～T029；T028 真人半边 / T029 冲刺平衡挂 U01）、P4 完成（T030～T036）、P5 完成（T037～T043 与 T040b、T043a）、P6 进行中（T044/T045/T046/T048/T049/T050/T052/T053/T054 done；T047、T051、T055 awaiting-review）** → **下一步 T056**。
 
 > ## ⚠ 本次最重要的教训
 >
@@ -602,7 +612,10 @@ $proj = 'E:\Reborn\Game\Reborn'
 
 **T054 已 done（2026-11-10）**：导入与替换回归 **53/53** —— 猫 4 段 / 鼠 4 段齐备、资产层全 `LOOP_NONE` 而运行时 3 段循环 + 1 段一次性、胶囊 0.160/0.480 与 0.060/0.180 未动、视觉子树 0 碰撞、6 个 `.glb` 全可加载、数值契约未漂移；P1/P2/P3 路线与战斗 13 套 1,871 条全绿；全量 **59 套 4,731 条 0 失败**、`visible_hits=0`。
 
-**下一步**：**T055**（行动声音与 AI 噪声统一：步伐/奔跑/攻击/受伤音效，同一事件驱动声音与 AI 噪声，距离衰减可辨）；T047/T051 待负责人选方案。
+
+**T055 代码/资产/断言已完成（2026-11-10），状态 awaiting-review**：音频从 0 起 —— `make_audio_t055.py` 合成 4 个自有音（走/跑/攻击/受伤，合计 61,916 B，不引第三方）；`AudioDirector` autoload（8 路 3D 播放池）+ `WorldDirector.emit_action()` 成为**声音与 AI 噪声的唯一出口**（`NOISE_TO_AI` 白名单目前只有脚步，攻击/受伤只出声不改玩法）。**35/35**：一次事件 = 1 声 + 1 噪声（`-6.02 dB` 对应 loudness 0.5）；1 m→8 m 差 **10.46 dB**、40 m 归零；真实身体脚步/奔跑/掉血分别播对音；静音开关下出声 0 次而噪声照发。全量 **60 套 4,766 条 0 失败**、`visible_hits=0`。**为什么不是 done**：**听觉主观判读未做**（headless 无音频输出，"像不像脚步/是否可辨"没被听过），按 AGENTS.md「无运行/感知能力验证不得记 done」记 awaiting-review —— 需负责人试听，或授权做自动化音频分析（频谱/包络比对）。
+
+**下一步**：**T056**（环境声音与关键字幕：溪流等基础环境音；字幕不显示不可感知敌人的真实位置）；T047/T051 待负责人选方案。
 
 
 

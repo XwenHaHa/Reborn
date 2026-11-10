@@ -100,6 +100,41 @@ func emit_noise(source_id: String, position: Vector3, loudness: float) -> void:
 	noise_emitted.emit(source_id, position, loudness, world_time)
 
 
+
+## T055：一次"行动事件"的广播（诊断/断言用）
+signal action_sound(kind: StringName, source_id: String, position: Vector3, loudness: float)
+
+## 哪些行动事件同时喂给 **AI 听觉**（其余只出声）。改这个白名单 = 改玩法，
+## 必须重跑 T020/T025/T026/T027（攻击声会让鼠提前警觉）。
+const NOISE_TO_AI := {
+	&"footstep_walk": true,
+	&"footstep_run": true,
+}
+
+## 最近一次行动事件快照（测试读它证明"同一次调用同时产生了声音与噪声"）
+var last_action: Dictionary = {}
+var action_count := 0
+
+
+## T055：**行动事件的唯一入口** —— 一次调用同时驱动**声音**（`AudioDirector`）
+## 与**AI 噪声**（`noise_emitted`，受 `NOISE_TO_AI` 白名单约束）。
+## 调用方只表达"发生了什么"（`footstep_walk` / `footstep_run` / `attack` / `hurt`），
+## 不再各写一遍播放与上报。
+func emit_action(kind: StringName, source_id: String, position: Vector3,
+		loudness: float = 1.0, ai_loudness: float = -1.0) -> void:
+	action_count += 1
+	var to_ai: bool = NOISE_TO_AI.has(kind)
+	last_action = {
+		"kind": kind, "source_id": source_id, "position": position,
+		"loudness": loudness, "to_ai": to_ai, "world_time": world_time,
+	}
+	var audio := get_node_or_null("/root/AudioDirector")
+	if audio != null and audio.has_method("play"):
+		audio.call("play", kind, position, loudness)
+	action_sound.emit(kind, source_id, position, loudness)
+	if to_ai:
+		emit_noise(source_id, position, ai_loudness if ai_loudness >= 0.0 else loudness)
+
 ## 成功捕获广播（T021；`Docs/TechnicalDesign.md` §7 捕获流程）。每次**真实结算**只发一次。
 signal capture_reported(captor_id: String, target_id: String, position: Vector3, world_time: float)
 

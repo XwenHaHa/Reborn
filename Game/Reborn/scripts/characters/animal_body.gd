@@ -682,6 +682,9 @@ func apply_config() -> void:
 			attack.name = "Attack"
 			add_child(attack)
 		attack.setup(self, species_config)
+		# T055：命中即出攻击声（走同一个 `emit_action` 出口）
+		if not attack.attack_landed.is_connected(_on_attack_landed):
+			attack.attack_landed.connect(_on_attack_landed)
 	elif attack != null and is_instance_valid(attack):
 		attack.queue_free()
 		attack = null
@@ -894,8 +897,12 @@ func _apply_fall_damage() -> void:
 
 ## 掉血就中断进行中的交互（`Parameters.md` 第 75 行）。恢复（加值）不会中断。
 func _on_survival_changed(state: SurvivalState) -> void:
-	if interaction != null and interaction.is_interacting() and state.health < _last_health:
+	var took_damage: bool = state.health < _last_health
+	if interaction != null and interaction.is_interacting() and took_damage:
 		interaction.release_interact(&"hurt")
+	# T055：掉血就出受伤声（同一个 `emit_action` 出口；是否喂 AI 由 WorldDirector 白名单决定）
+	if took_damage and _last_health < INF:
+		_emit_action(&"hurt", 1.0)
 	_last_health = state.health
 
 
@@ -1239,7 +1246,8 @@ func _update_footsteps(dt_sim: float) -> void:
 	_emit_footstep()
 
 
-## 发出一次脚步噪声：本地信号 + 世界总线（`WorldDirector.emit_noise()`），让别的身体能听见
+## 发出一次脚步：本地信号 + **行动事件出口**（`WorldDirector.emit_action()`），
+## 一次调用同时驱动声音与 AI 噪声（T055）。
 func _emit_footstep() -> void:
 	var loudness := noise_loudness()
 	last_footstep_loudness = loudness
@@ -1247,6 +1255,23 @@ func _emit_footstep() -> void:
 	var sid := source_id()
 	var now := world_time_now()
 	action_noise.emit(sid, global_position, loudness, now)
+	_emit_action(&"footstep_run" if is_sprinting() else &"footstep_walk", loudness, sid)
+
+
+## T055 统一出口：所有"行动声音"都从这里发出，保证声音与 AI 噪声一一对应。
+## `loudness` 同时用于音量（线性→dB）与 AI 听觉（`Perception` 的 `loudness` 判据）。
+func _emit_action(kind: StringName, loudness: float, sid: String = "") -> void:
+	var source := sid if not sid.is_empty() else source_id()
 	var wd := _world_director_node()
-	if wd != null and wd.has_method("emit_noise"):
-		wd.call("emit_noise", sid, global_position, loudness)
+	if wd != null and wd.has_method("emit_action"):
+		wd.call("emit_action", kind, source, global_position, loudness)
+		return
+	# 兜底（没有 WorldDirector 的纯单元场景）：只出声，不上报噪声
+	var audio := get_node_or_null("/root/AudioDirector")
+	if audio != null and audio.has_method("play"):
+		audio.call("play", kind, global_position, loudness)
+
+
+## 命中帧（`AttackSettlement.attack_landed`）→ 出攻击声。
+func _on_attack_landed(_target_id: String, _damage: float, _applied: bool) -> void:
+	_emit_action(&"attack", 0.8)
