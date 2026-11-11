@@ -1,4 +1,4 @@
-﻿# 开发交接：2026-11-11（T058 休息快进 / T059 设置与新手指引 / T060 性能检查 done；T057 夜间结构待你三选一；下一任务 T061 完整流程回归）
+﻿# 开发交接：2026-11-11（P7 已到 T061：休息快进/设置与新手指引/性能检查/完整流程回归全部 done；下一任务 T062 Windows 候选版打包；T057 夜间结构待你三选一）
 
 ## T043a（T043 前置，done 2026-11-09）
 
@@ -220,6 +220,23 @@
   ③ 1080p 首采有 1 帧 **155 ms**（切分辨率后管线编译尖峰）→ 两分辨率都报 avg/p95/max 且 `all` 各测两次交叉验证。
 - **未验证**：发布目标硬件、4K/1440p、满编 NPC 极限负载、长时间内存漂移、**包内（`.pck`）帧时间**。
 
+
+## T061（完整流程回归，done 2026-11-11）
+
+- **跑真实入口 + 正式模式**（`main.tscn`、`test_mode=false`，鼠靠"发现鼠洞"**真解锁**），一段脚本串跑 10 段：
+  A 启动/选猫 → B 捕猎（扑击→捕获→食物→进食）→ C 休息 → D 暂停/恢复 → E 解锁鼠 → F 猫死→结算→回菜单
+  → G 选鼠出生 → H 存档→**新会话 continue_game()** → I 鼠休息 → J 鼠死→结算→**第三世可出生**。
+- **`tests/run_t061_full_flow.gd` 48/48 ×3**；**全量 66 套 4,981 条 0 失败 / 0 INVALID**（基线 4,933 + 48）。**生产代码零改动**。
+- **三个必须记住的夹具事实**（都不是游戏缺陷）：
+  ① `--script` 下 `_read_input()` **每帧**用 Input 覆盖 `want_pounce` / `want_interact` ⇒ 手写意图前先
+  `player_controlled=false`，交互走 `interaction.press_interact()`（T021/T022 同口径）；
+  ② `--script` 里引擎**不设 `current_scene`**，而 `MainEntry._ready` 的读档门（T037 D9）要求 `current_scene == self`
+  ⇒ 夹具按 `_ready` 同一顺序补跑 `_load_saved_game()` + `apply_saved_snapshot(snap,false)`，再走玩家侧 `continue_game()`；
+  ③ **读档位置回退是设计行为**：存档文件写的 `(2.00, 21.00)`，读回 `(0.71, −0.71)`，
+  `last_position_resolution.reason=**nearest_nav**`（该点不在**鼠**导航层上，T040 吸附到最近导航点）。
+- **未验证**：U01 真人试玩、视觉取证（结算/菜单/HUD 视觉由 T032/T033/T042/T059 各自覆盖）、包内复验、
+  4K UI 布局、**"鼠→猫"顺序**（只跑了猫→鼠）。
+
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
@@ -308,7 +325,7 @@
 | T042 | **done（2026-11-05，系统时钟）** | `Docs/Tasks/T042.md`；`Docs/Evidence/T042.md`；`scripts/ui/pause_menu.gd`（新）；`scripts/ui/end_life_confirm.gd`（新）；`scripts/core/main_entry.gd`；`scripts/characters/animal_body.gd`；`tests/run_t042_pause_flow.gd`（121 条）；`tests/tool_capture_t042_pause.gd`；`Art/Probes/t042_{pause_menu,end_life_confirm,player_quit_settle}.png` | Esc 暂停层（「游戏已暂停」「继续游戏」「结束本次生命」、焦点「继续游戏」）；**真冻结**双保险（`SceneTree.paused` + `time_advancing=false`），真实等 5 s 世界时间/资源/区域/NPC/玩家/生存/脚步/主档全部一字不变；恢复后不跳变；结束生命二次确认**默认「取消」**，确认走 `LifeCycle.end_life` 正常死亡（`damage_reason=player_quit`、`pending` 存盘、结算页「死亡（player_quit）」、`revision` +2），不重生不清档；暂停/取消不写盘；Esc 优先级「结算页 > 新游戏确认 > 结束确认 > 暂停 > 恢复」；树序 `Hud<PauseMenu<EndLifeConfirm<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 断言通过。121/121 ×3、变异 5 处全拦、重点回归 16 套、全量 53 套 4,500 条 0 失败、两预设重导出 + 包内 4 套、三帧 vision `visible_hits=0`。未验证真实鼠标键盘与 U01 |
 | T043 | **done（2026-11-09）** | `Docs/Tasks/T043.md`、`Docs/Evidence/T043.md`；`tests/run_t043_save_matrix.gd`（60 条）、`tests/tool_t043_package_probe.gd`、`Tools/t043_{package,package_assert,release_capture}.ps1`、`Tools/t043_pck_audit.py`；`Art/Probes/t043_release_{menu,hud}.png` | 存档测试矩阵与打包（P5 阶段门）：A–F 六类无 `gap`（缺口由新矩阵套件 60 条补齐：资源 `next_refill_at/expire_at` / 区域 `next_recover_at` 往返、`revision` 严格 +1 链、跨世 `world_time` 连续、`SETTLING/SELECTING` 期保存，14 键格式未变、**生产代码零改动**）；变异 M1 `revision += 0`（53/7 红）/M2 丢 `expire_at`（58/2 红）/M3 审计 SelfTest 包（`leak=196`、退出 1）全拦；矩阵 ×3 = 60/0；全量 54 套 4560/0；发布预设关控制台包装（导出后无 `Reborn.console.exe`）+ 两预设 `EXIT=0`（`Reborn.pck` 66,996,328 / `SelfTest` 68,206,852）+ PCK 审计 `leak=0` + `THIRD_PARTY_NOTICES.md` 随包 + 包内 T037/T039/T041/T042/T043 全绿；发行包隐藏桌面取证 `visible_hits=0`/`console_windows=0`、两帧非黑 0.917/0.940、vision 判读首启菜单正确与存活帧无菜单残留；**修复取证工具缺陷**（旧序列只按一次 Enter 停在物种选择页）。**未确认**：发行包存活帧右侧指标条/罗盘/按键提示未读到（`HUD-NOT-CONFIRMED`，根因未定位）。**未验证**：真实鼠标键盘、U01 真人试玩 | 
 
-**未完成**：正式角色与骨骼资产（P6 待负责人）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**、发行包存活帧右侧 HUD 未确认项、**T047/T051/T055/T056/T057 五个 awaiting-review 待负责人**（T057 只剩"夜间结构方案"要你三选一）。**P5 已收口（T037～T043 + T043a + T040b）**；**P7 进行中：T058、T059、T060 done（2026-11-11）**；**T061～T063 pending**。
+**未完成**：正式角色与骨骼资产（P6 待负责人）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**、发行包存活帧右侧 HUD 未确认项、**T047/T051/T055/T056/T057 五个 awaiting-review 待负责人**（T057 只剩"夜间结构方案"要你三选一）。**P5 已收口（T037～T043 + T043a + T040b）**；**P7 进行中：T058、T059、T060、T061 done（2026-11-11）**；**T062～T063 pending**。
 
 
 **T030 的边界声明**：① 只做生命周期与记录，~~没做结算页（T032）~~ **T032 已落结算页（见下）**、存档仍属 T037；② ~~`MainEntry.test_mode = true` 临时开发态~~ **已于 T031 收口为默认 `false`（正式解锁门接入）**；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。
