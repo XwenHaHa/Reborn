@@ -1,0 +1,27 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/rest_point.gd" id="1_rest"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_1"]
+radius = 0.9
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.95, 0.82, 0.45, 1)
+roughness = 0.7
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_1"]
+material = SubResource("StandardMaterial3D_1")
+top_radius = 0.34
+bottom_radius = 0.44
+height = 0.08
+radial_segments = 16
+
+[node name="RestPoint" type="Area3D"]
+script = ExtResource("1_rest")
+interaction_id = "rest_shelter_courtyard_01"
+
+[node name="Shape" type="CollisionShape3D" parent="."]
+shape = SubResource("SphereShape3D_1")
+
+[node name="Marker" type="MeshInstance3D" parent="."]
+mesh = SubResource("CylinderMesh_1")

@@ -1,4 +1,4 @@
-﻿# 开发交接：2026-11-11（T057 修正轮已收口了一半：夜间真的变黑，仅差"修正后帧"判读；T058 安全休息与快进 in-progress；T047/T051/T055/T056/T057 待负责人）
+﻿# 开发交接：2026-11-11（T058 安全休息与快进 done；T057 修正轮 awaiting-review 仅差"修正后夜间帧"判读；下一任务 T059；T047/T051/T055/T056/T057 待负责人）
 
 ## T043a（T043 前置，done 2026-11-09）
 
@@ -157,6 +157,21 @@
 - 全量 **62 套 4,819 条 0 失败**、`invalid=0`（`Tools/Probes/t057_full62b.log`）。
 - **仍未验证**：修正后夜间帧的判读（vision 连续 3 次 `ETIMEDOUT`）⇒ 不记 done；`night_sight_multiplier` 未接入感知；光照性能未测（T060）。
 
+
+## T058（安全休息与快进，done 2026-11-11）
+
+- **真源**：`Docs/Parameters.md:81`（休息 60 sim s / Health +10 / 饥渴照常扣 / 预计 ≤0 或警戒追逐则拒绝 / 资源种群结算所有经过周期并夹紧容量、next 前移）。策划 :297/:299/:305 另有"安全地点""提前拒绝不等死""休息完成即存档"。
+- **D1 一次原子事务**：`RestDirector.rest()` = 世界时间**权威 +60 s**（与读档同口径）→ 同一条 `tick_to` 结算生存 → `restore_health(+10)`（**先扣后加**）→ 资源点 / 区域种群结算到新时间。因为 T017/T035 本来就"多周期一次结算 + 夹紧 + next 前移"，所以"快进只恢复一次"这类时间错误**在本设计里不可能发生**（C/E 两组断言逐项对比"自然推进 60 s"）。
+- **D2 预测不试算**：`predict()` 用 `rate×60` 直接算，拒绝时不推进时间、不回滚（回滚会污染 `last_world_time` 与账本）。
+- **D3 危险判定复用 AI 状态**：NPC 的 `ai.state_id()` ∈ `{alert, approach, chase, search, attack}` 且距离 ≤ **8 m**（实现默认值）。
+- **D4/D5 交互接入但不动关卡**：`RestPoint extends Interactable`（`action_id=rest`、1.0 s、`interaction_id=rest_shelter_courtyard_01`），由 `MainEntry._mount_rest_point()` **运行期挂载**在庭院庇护棚 `(-8.0, 0.10, 27.3)`；**不重生成 `l_courtyard.tscn`、不重烤导航**。
+- **D7 完成即存档**：`save_now(&"rest")`（策划 :305 的自动存档节点之一），HUD 用既有 Toast 出「休息完成：时间 +60 秒，生命 +10」；拒绝时按 `reason` 出中文原因（「正在被追猎，无法休息」/「食物或水分不足，撑不到休息结束」…）。
+- **`tests/run_t058_rest.gd` 53/53 ×3**：`+60.000`（1e-9）、Health `90→100`/`60→70`、Hunger `50→45.2`/Thirst `50→46.4`；自然 vs 快进**逐项相同**（生存/资源/种群）；2 m 警戒拒绝且**零副作用**、20 m 不误挡；30 s 间隔 → **+2**、容量夹紧、next 前移；暂停/门闩拒绝；同一事务只结算一次；跨昼夜边界采样 = 纯函数值；真实 `main.tscn` 里 `Level/RestPoint` 存在且位置逐位正确。
+- **全量 63 套 4,872 条 0 失败 / 0 INVALID**（`Tools/Probes/t058_full63.log`；基线 4,819 + 53）。
+- **踩坑 ①**：判据用常量 `T0` 比世界时间 → 2 条假红（`await physics_frame` 期间 `_process` 按真实 delta 推进）。改成**调用前后快照**比对。**是判据错，不是生产缺陷**。
+- **踩坑 ②**：GUI exe 直跑 `--headless --script` 抓不到 stdout（`*>` 得到 0 字节、`exit=0` 不可信）→ 一律走 `Tools/CaptureRun.ps1`。
+- **未验证**：真人试玩 U01（好不好按、交互 1.0 s 是否太短）、HUD Toast 的画面判读（vision 当时不可用）、休息点美术占位（P6）。
+
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
@@ -245,7 +260,7 @@
 | T042 | **done（2026-11-05，系统时钟）** | `Docs/Tasks/T042.md`；`Docs/Evidence/T042.md`；`scripts/ui/pause_menu.gd`（新）；`scripts/ui/end_life_confirm.gd`（新）；`scripts/core/main_entry.gd`；`scripts/characters/animal_body.gd`；`tests/run_t042_pause_flow.gd`（121 条）；`tests/tool_capture_t042_pause.gd`；`Art/Probes/t042_{pause_menu,end_life_confirm,player_quit_settle}.png` | Esc 暂停层（「游戏已暂停」「继续游戏」「结束本次生命」、焦点「继续游戏」）；**真冻结**双保险（`SceneTree.paused` + `time_advancing=false`），真实等 5 s 世界时间/资源/区域/NPC/玩家/生存/脚步/主档全部一字不变；恢复后不跳变；结束生命二次确认**默认「取消」**，确认走 `LifeCycle.end_life` 正常死亡（`damage_reason=player_quit`、`pending` 存盘、结算页「死亡（player_quit）」、`revision` +2），不重生不清档；暂停/取消不写盘；Esc 优先级「结算页 > 新游戏确认 > 结束确认 > 暂停 > 恢复」；树序 `Hud<PauseMenu<EndLifeConfirm<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 断言通过。121/121 ×3、变异 5 处全拦、重点回归 16 套、全量 53 套 4,500 条 0 失败、两预设重导出 + 包内 4 套、三帧 vision `visible_hits=0`。未验证真实鼠标键盘与 U01 |
 | T043 | **done（2026-11-09）** | `Docs/Tasks/T043.md`、`Docs/Evidence/T043.md`；`tests/run_t043_save_matrix.gd`（60 条）、`tests/tool_t043_package_probe.gd`、`Tools/t043_{package,package_assert,release_capture}.ps1`、`Tools/t043_pck_audit.py`；`Art/Probes/t043_release_{menu,hud}.png` | 存档测试矩阵与打包（P5 阶段门）：A–F 六类无 `gap`（缺口由新矩阵套件 60 条补齐：资源 `next_refill_at/expire_at` / 区域 `next_recover_at` 往返、`revision` 严格 +1 链、跨世 `world_time` 连续、`SETTLING/SELECTING` 期保存，14 键格式未变、**生产代码零改动**）；变异 M1 `revision += 0`（53/7 红）/M2 丢 `expire_at`（58/2 红）/M3 审计 SelfTest 包（`leak=196`、退出 1）全拦；矩阵 ×3 = 60/0；全量 54 套 4560/0；发布预设关控制台包装（导出后无 `Reborn.console.exe`）+ 两预设 `EXIT=0`（`Reborn.pck` 66,996,328 / `SelfTest` 68,206,852）+ PCK 审计 `leak=0` + `THIRD_PARTY_NOTICES.md` 随包 + 包内 T037/T039/T041/T042/T043 全绿；发行包隐藏桌面取证 `visible_hits=0`/`console_windows=0`、两帧非黑 0.917/0.940、vision 判读首启菜单正确与存活帧无菜单残留；**修复取证工具缺陷**（旧序列只按一次 Enter 停在物种选择页）。**未确认**：发行包存活帧右侧指标条/罗盘/按键提示未读到（`HUD-NOT-CONFIRMED`，根因未定位）。**未验证**：真实鼠标键盘、U01 真人试玩 | 
 
-**未完成**：正式角色与骨骼资产（P6）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**、发行包存活帧右侧 HUD 未确认项。**T043 done（2026-11-09）**；**T044～T063 全部 pending（T037～T043 与 T043a 已 done；P5 已收口）。**
+**未完成**：正式角色与骨骼资产（P6 待负责人）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**、发行包存活帧右侧 HUD 未确认项、**T047/T051/T055/T056/T057 五个 awaiting-review 待负责人**（T057 只剩"修正后夜间帧"的判读）。**P5 已收口（T037～T043 + T043a + T040b）**；**P7 已开工：T058 done（2026-11-11）**；**T059～T063 pending**。
 
 
 **T030 的边界声明**：① 只做生命周期与记录，~~没做结算页（T032）~~ **T032 已落结算页（见下）**、存档仍属 T037；② ~~`MainEntry.test_mode = true` 临时开发态~~ **已于 T031 收口为默认 `false`（正式解锁门接入）**；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。

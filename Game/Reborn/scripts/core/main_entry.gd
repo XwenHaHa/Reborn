@@ -14,6 +14,10 @@ const LEVEL_SCENE_PATH := "res://scenes/maps/l_courtyard.tscn"
 const BODY_SCENE_PATH := "res://scenes/characters/animal_body.tscn"
 const HUD_SCENE_PATH := "res://scenes/ui/hud.tscn"
 const RESOURCE_SCENE_PATH := "res://scenes/world/resource_point.tscn"
+## T058：休息点（安全地点）。位置与交互时长见 `Docs/Parameters.md` §休息 实现默认值。
+const REST_POINT_SCENE_PATH := "res://scenes/world/rest_point.tscn"
+## 庭院庇护棚内（`SHELTER_X_MIN..MAX = -9.5..-6.5`、`SHELTER_Z_MIN..MAX = 25.6..29.0` 的中心偏南）
+const REST_POINT_POSITION := Vector3(-8.0, 0.10, 27.3)
 ## T042：新脚本用 `preload` 显式依赖，避免依赖 `.godot` 全局类缓存的刷新时机。
 const PAUSE_MENU_SCRIPT := preload("res://scripts/ui/pause_menu.gd")
 const END_LIFE_CONFIRM_SCRIPT := preload("res://scripts/ui/end_life_confirm.gd")
@@ -98,6 +102,9 @@ var _npcs_wired: Array[AnimalBody] = []
 var _last_record: Dictionary = {}
 var _wd_capture_hooked := false
 var _wd_death_hooked := false
+## T058：休息点与信号接线标记（`rest_point` 由 `_mount_rest_point()` 挂载）
+var rest_point: Node = null
+var _rest_wired := false
 ## 启动读档结果（T037）：快照在校验通过后暂存，等关卡/HUD 建好再按 D8 顺序应用。
 var _loaded_snapshot: Dictionary = {}
 var _load_status: String = "none"
@@ -520,6 +527,7 @@ func _build_level() -> void:
 		return
 	level.name = "Level"
 	add_child(level)
+	_mount_rest_point()
 
 
 ## 区域种群账本初始化（T035）：建关卡后、铺生态前，按当前关卡 `level_regions`
@@ -533,6 +541,76 @@ func _init_region_population() -> void:
 	if w != null:
 		w.call("init_region_population", _configs)
 
+
+
+# ---------------------------------------------------------------------------
+# 安全休息（T058）
+# ---------------------------------------------------------------------------
+
+## 在关卡里挂休息点（**运行期挂载**，不改关卡几何 —— 与资源点同一做法）。
+## 幂等：同一个关卡里已经挂过就直接用现有的。
+func _mount_rest_point() -> void:
+	if level == null:
+		return
+	if rest_point != null and is_instance_valid(rest_point):
+		return
+	var packed := load(REST_POINT_SCENE_PATH) as PackedScene
+	if packed == null:
+		push_warning("MainEntry: 休息点场景缺失 %s" % REST_POINT_SCENE_PATH)
+		return
+	var point := packed.instantiate()
+	if point == null:
+		return
+	point.name = "RestPoint"
+	level.add_child(point)
+	if point is Node3D:
+		(point as Node3D).global_position = REST_POINT_POSITION
+	rest_point = point
+
+
+## 休息信号 → Toast + 关键事务存档。`RestDirector` 只发信号（不碰 UI、不碰存档）。
+## 用**节点查找**而不是 autoload 单例名：`--script` 下直接写单例名会编译期报错（T056 教训）。
+func _wire_rest_director() -> void:
+	if _rest_wired:
+		return
+	var rd := get_node_or_null("/root/RestDirector")
+	if rd == null:
+		return
+	if rd.has_signal("rest_completed"):
+		rd.connect("rest_completed", _on_rest_completed)
+	if rd.has_signal("rest_refused"):
+		rd.connect("rest_refused", _on_rest_refused)
+	_rest_wired = true
+
+
+## 休息成功：**完成即存档**（策划 v1.1 :305 的自动存档节点之一）。
+func _on_rest_completed(result: Dictionary) -> void:
+	if hud != null:
+		hud.show_toast("休息完成：时间 +%.0f 秒，生命 +%.0f" % [
+			float(result.get("seconds", 0.0)), float(result.get("gain", 0.0))])
+	save_now(&"rest")
+
+
+## 休息被拒：把 `RestDirector` 的理由翻成**玩家能看懂的原因**（不出现数字/内部枚举名）。
+func _on_rest_refused(reason: StringName, _detail: Dictionary) -> void:
+	if hud == null:
+		return
+	var msg := ""
+	match reason:
+		&"in_danger":
+			msg = "正在被追猎，无法休息"
+		&"insufficient_resources":
+			msg = "食物或水分不足，撑不到休息结束"
+		&"busy":
+			msg = "正在行动中，无法休息"
+		&"not_advancing":
+			msg = "现在不能休息"
+		&"dead":
+			msg = ""
+		_:
+			msg = "无法休息"
+	if msg != "":
+		hud.show_toast(msg)
 
 # ---------------------------------------------------------------------------
 # 存档与读档（T037）
@@ -832,6 +910,8 @@ func _build_hud() -> void:
 	var dn := get_node_or_null("/root/DayNightDirector")
 	if dn != null and dn.has_method("bind_level"):
 		dn.call("bind_level", level)
+	# T058：休息的提示与完成存档（`RestDirector` 只发信号，不碰 UI / 存档）
+	_wire_rest_director()
 
 
 ## 结算/选物种状态栏（普通 `Control`，不是 `CanvasLayer`：正式场景不许 CanvasLayer）。
