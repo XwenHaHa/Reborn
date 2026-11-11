@@ -1402,8 +1402,8 @@ func _build_settings() -> void:
 	_settings_panel.anchor_bottom = 0.5
 	_settings_panel.offset_left = -220.0
 	_settings_panel.offset_right = 220.0
-	_settings_panel.offset_top = -120.0
-	_settings_panel.offset_bottom = 120.0
+	_settings_panel.offset_top = -160.0
+	_settings_panel.offset_bottom = 160.0
 	_settings_panel.add_theme_stylebox_override("panel", _panel_style())
 	add_child(_settings_panel)
 
@@ -1424,8 +1424,16 @@ func _build_settings() -> void:
 	var fov := float(_initial_settings.get(GameSettings.KEY_FOV, 0.0))
 	if fov <= 0.0:
 		fov = SETTINGS_FOV
+	var vol := float(_initial_settings.get(GameSettings.KEY_VOLUME, GameSettings.DEFAULT_VOLUME))
+	var shake := float(_initial_settings.get(GameSettings.KEY_CAMERA_SHAKE, GameSettings.DEFAULT_CAMERA_SHAKE))
+	var subs := float(_initial_settings.get(GameSettings.KEY_SUBTITLES, GameSettings.DEFAULT_SUBTITLES))
 	column.add_child(_slider_row("鼠标灵敏度", &"sensitivity", 0.4, 3.0, sens))
 	column.add_child(_slider_row("视野 (FOV)", &"fov", 60.0, 110.0, fov))
+	column.add_child(_slider_row("主音量", GameSettings.KEY_VOLUME, 0.0, 1.0, vol))
+	column.add_child(_slider_row("镜头晃动", GameSettings.KEY_CAMERA_SHAKE, 0.0, 1.0,
+		1.0 if shake >= 0.5 else 0.0))
+	column.add_child(_slider_row("关键声音字幕", GameSettings.KEY_SUBTITLES, 0.0, 1.0,
+		1.0 if subs >= 0.5 else 0.0))
 
 	var close := _button("关闭", false)
 	close.pressed.connect(func() -> void: _settings_panel.visible = false)
@@ -1454,7 +1462,7 @@ func _slider_row(label_text: String, key: StringName, min_v: float, max_v: float
 	var slider := HSlider.new()
 	slider.min_value = min_v
 	slider.max_value = max_v
-	slider.step = 0.05 if key == &"sensitivity" else 1.0
+	slider.step = 0.05 if (key == &"sensitivity" or key == GameSettings.KEY_VOLUME) else 1.0
 	slider.value = default_v
 	slider.custom_minimum_size = Vector2(0.0, 18.0)
 	slider.value_changed.connect(func(v: float) -> void:
@@ -1469,6 +1477,10 @@ func _slider_row(label_text: String, key: StringName, min_v: float, max_v: float
 func _format_setting(key: StringName, value: float) -> String:
 	if key == &"fov":
 		return "%.0f°" % value
+	if key == GameSettings.KEY_VOLUME:
+		return "%.0f%%" % (value * 100.0)
+	if key == GameSettings.KEY_CAMERA_SHAKE or key == GameSettings.KEY_SUBTITLES:
+		return "开" if value >= 0.5 else "关"
 	return "%.2f×" % value
 
 

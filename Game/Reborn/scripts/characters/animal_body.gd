@@ -78,6 +78,21 @@ const VISUAL_MIN_SQUASH := 0.55
 @export var make_camera_current: bool = false
 @export var mouse_sensitivity: float = 0.0025
 
+# --- 镜头晃动（T059）：**受伤反馈**，可在设置里关闭 ---
+## 关掉后 `camera_shake_offset()` 恒为 `Vector3.ZERO`（不是"很小"）。
+## 由 `SettingsApply` 在启动/改设置时写入；默认开（策划 :136 要求可关，不是默认关）。
+@export var camera_shake_enabled: bool = true
+## 晃动幅度上限（米）。0.05 m 在 0.3 m 眼高的猫身上是"明显但不晕"的一档。
+const SHAKE_MAX_OFFSET := 0.05
+## 振幅每秒衰减量（1.0 → 0 用 1/6 s ≈ 0.17 s）
+const SHAKE_DECAY := 6.0
+## 当前振幅 0..1（诊断/断言用；`shake_camera()` 只抬不叠）
+var camera_shake_amplitude: float = 0.0
+var _shake_time: float = 0.0
+var _shake_applied: bool = false
+## 第三人称相机"未加晃动"的本地位置（由 `_update_third_person_camera()` 每物理帧写入）
+var _cam_base_local: Vector3 = Vector3.ZERO
+
 # --- 运动意图（每物理帧由 Input 或外部写入）---
 ## x = 右(+1)/左(-1)，y = 后(+1)/前(-1)（与 `Input.get_vector` 一致）
 var move_intent: Vector2 = Vector2.ZERO
@@ -593,7 +608,8 @@ func _update_third_person_camera(with_collision: bool) -> void:
 				var hit_pos: Vector3 = hit.get("position", to)
 				allowed = maxf(MIN_THIRD_PERSON_ARM, from.distance_to(hit_pos) - THIRD_PERSON_WALL_MARGIN)
 	third_person_arm = allowed
-	camera.position = pivot_local + direction * allowed
+	_cam_base_local = pivot_local + direction * allowed
+	camera.position = _cam_base_local + camera_shake_offset()
 	camera.rotation = Vector3(pitch, 0.0, 0.0)
 
 
@@ -903,6 +919,8 @@ func _on_survival_changed(state: SurvivalState) -> void:
 	# T055：掉血就出受伤声（同一个 `emit_action` 出口；是否喂 AI 由 WorldDirector 白名单决定）
 	if took_damage and _last_health < INF:
 		_emit_action(&"hurt", 1.0)
+		# T059：受伤镜头晃动（可关）。掉得越多晃得越狠，但只抬不叠。
+		shake_camera(clampf((_last_health - state.health) / 20.0, 0.25, 1.0))
 	_last_health = state.health
 
 
@@ -1275,3 +1293,58 @@ func _emit_action(kind: StringName, loudness: float, sid: String = "") -> void:
 ## 命中帧（`AttackSettlement.attack_landed`）→ 出攻击声。
 func _on_attack_landed(_target_id: String, _damage: float, _applied: bool) -> void:
 	_emit_action(&"attack", 0.8)
+
+
+# ---------------------------------------------------------------------------
+# 镜头晃动（T059）
+# ---------------------------------------------------------------------------
+
+## 请求一次晃动（`amount` 0..1）。关掉时**什么都不做**（偏移恒 0，不是"很小"）。
+func shake_camera(amount: float) -> void:
+	if not camera_shake_enabled:
+		return
+	if amount <= 0.0:
+		return
+	camera_shake_amplitude = clampf(maxf(camera_shake_amplitude, amount), 0.0, 1.0)
+
+
+## 当前晃动偏移（相机本地空间）。关闭或振幅为 0 时**精确为零**。
+## 两个不同频率的正弦叠加，避免"一个方向来回摆"看起来像 bug。
+func camera_shake_offset() -> Vector3:
+	if not camera_shake_enabled or camera_shake_amplitude <= 0.0:
+		return Vector3.ZERO
+	var a: float = camera_shake_amplitude * SHAKE_MAX_OFFSET
+	return Vector3(
+		sin(_shake_time * 47.0) * a,
+		sin(_shake_time * 61.0 + 1.7) * a * 0.7,
+		0.0
+	)
+
+
+## 相机"没有晃动时"的本地位置：第一人称按配置算（蹲下降低视线），第三人称用每物理帧缓存的值。
+func _camera_base_local() -> Vector3:
+	if species_config == null:
+		return Vector3.ZERO
+	if is_third_person():
+		return _cam_base_local
+	var drop: float = species_config.crouch_drop() if is_crouching else 0.0
+	return Vector3(0.0, species_config.camera_offset_z - drop, 0.0)
+
+
+## 每渲染帧推进晃动（纯表现：不进物理、不改世界时间；暂停时 `_process` 本来就不跑）
+func _process(delta: float) -> void:
+	advance_camera_shake(delta)
+
+
+## 推进晃动 dt 秒（`_process` 与测试共用同一条路径；测试可注入固定 dt，不依赖真实帧率）
+func advance_camera_shake(delta: float) -> void:
+	if camera == null or species_config == null:
+		return
+	_shake_time += delta
+	if camera_shake_amplitude > 0.0:
+		camera_shake_amplitude = maxf(0.0, camera_shake_amplitude - SHAKE_DECAY * delta)
+	var offset := camera_shake_offset()
+	if offset != Vector3.ZERO or _shake_applied:
+		# 只在"有晃动"或"刚结束需要归位"时写相机位置，避免与第三人称收臂/第一人称站立互相打架
+		camera.position = _camera_base_local() + offset
+		_shake_applied = offset != Vector3.ZERO

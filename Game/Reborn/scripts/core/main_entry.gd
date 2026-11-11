@@ -91,6 +91,13 @@ var sensitivity_scale := 1.0
 var fov_override := 0.0
 ## 设置文件路径（测试可指向临时文件，不污染真实 `user://settings.cfg`）
 @export var settings_path: String = GameSettings.DEFAULT_PATH
+## T059：主音量（线性 0..1）/ 镜头晃动 / 关键声音字幕 / 首次提示是否看过。同一份 `settings.cfg`。
+var volume_level := 1.0
+var camera_shake_on := true
+var subtitles_on := true
+var hints_seen := false
+## 首次操作提示节点（播完释放；没有提示时为 null）
+var first_run_hints: Node = null
 ## 自动存档总开关（D9）。只有正式运行（`current_scene == self`）才真正启用；
 ## 测试/取证工具通过 `set_persistence_enabled()` 显式打开。
 @export var persistence_enabled: bool = true
@@ -1340,6 +1347,8 @@ func _spawn_player(species_id: StringName) -> void:
 
 	if hud != null:
 		hud.bind_player(body)
+	# T059：首次出生播一次简短操作提示（不堵操作；播完把 `hints_seen` 落盘）
+	_maybe_show_first_run_hints()
 	_last_hunger = NAN
 	_last_thirst = NAN
 	if body.survival != null:
@@ -1723,13 +1732,16 @@ func _find_anim_player(node: Node) -> AnimationPlayer:
 	return null
 
 
-## 设置项落到玩家身体上（灵敏度按倍数、FOV 直接覆盖物种默认值）
+## 设置项落到玩家身体上（灵敏度按倍数、FOV 直接覆盖物种默认值），并应用**全局三项**（音量/字幕/晃动）。
+## 全部走 `SettingsApply` 单一出口，避免"启动时"和"改设置时"两条分支漂移。
 func _apply_settings_to(body: AnimalBody) -> void:
 	if body == null or not is_instance_valid(body):
 		return
 	body.mouse_sensitivity = MainMenu.SENSITIVITY_BASE * sensitivity_scale
 	if fov_override > 0.0 and body.camera != null:
 		body.camera.fov = fov_override
+	body.camera_shake_enabled = camera_shake_on
+	SettingsApply.apply_all(current_settings(), get_tree(), body)
 
 
 func _on_menu_species_committed(species_id: StringName) -> void:
@@ -1738,12 +1750,24 @@ func _on_menu_species_committed(species_id: StringName) -> void:
 
 ## 菜单设置改动：立刻落到本局 + 立刻写 `user://settings.cfg`（真源见 `GameSettings`）
 func _on_menu_setting_changed(key: StringName, value: float) -> void:
-	if key == &"sensitivity":
-		sensitivity_scale = value
-	elif key == &"fov":
-		fov_override = value
-	else:
-		return
+	# 统一按 String 匹配：滑块键历史上混用过 `&"sensitivity"` 与 `GameSettings.KEY_*`（String），
+	# 用 `String(key)` 归一，避免因键类型不同走进 `_` 分支（静默不生效）。
+	var k := String(key)
+	match k:
+		"sensitivity":
+			sensitivity_scale = value
+		"fov":
+			fov_override = value
+		GameSettings.KEY_VOLUME:
+			volume_level = clampf(value, 0.0, 1.0)
+		GameSettings.KEY_CAMERA_SHAKE:
+			camera_shake_on = value >= 0.5
+		GameSettings.KEY_SUBTITLES:
+			subtitles_on = value >= 0.5
+		_:
+			return
+	# 立即生效（音量/字幕/晃动都走这一处；灵敏度/FOV 只在出生时写进身体）
+	SettingsApply.apply_all(current_settings(), get_tree(), player)
 	var ok := GameSettings.save_to(current_settings(), settings_path)
 	print("ENTRY|settings|%s=%.3f|saved=%s|path=%s" % [
 		String(key), value, str(ok), settings_path
@@ -1755,17 +1779,60 @@ func current_settings() -> Dictionary:
 	return {
 		GameSettings.KEY_SENSITIVITY: sensitivity_scale,
 		GameSettings.KEY_FOV: fov_override,
+		GameSettings.KEY_VOLUME: volume_level,
+		GameSettings.KEY_CAMERA_SHAKE: 1.0 if camera_shake_on else 0.0,
+		GameSettings.KEY_SUBTITLES: 1.0 if subtitles_on else 0.0,
+		GameSettings.KEY_HINTS_SEEN: 1.0 if hints_seen else 0.0,
 	}
 
 
-## 从 `settings_path` 读设置；缺失/损坏时回落默认值（不崩）
+## 从 `settings_path` 读设置；缺失/损坏时回落默认值（不崩）。
+## 读完**立刻应用**音量与字幕（此时还没有玩家身体，晃动等出生时再落）。
 func _load_settings() -> void:
 	var s := GameSettings.load_from(settings_path)
 	sensitivity_scale = float(s[GameSettings.KEY_SENSITIVITY])
 	fov_override = float(s[GameSettings.KEY_FOV])
-	print("ENTRY|settings_loaded|sensitivity=%.2f|fov=%.1f|path=%s" % [
-		sensitivity_scale, fov_override, settings_path
+	volume_level = float(s[GameSettings.KEY_VOLUME])
+	camera_shake_on = GameSettings.as_bool(s, GameSettings.KEY_CAMERA_SHAKE)
+	subtitles_on = GameSettings.as_bool(s, GameSettings.KEY_SUBTITLES)
+	hints_seen = GameSettings.as_bool(s, GameSettings.KEY_HINTS_SEEN)
+	SettingsApply.apply_all(current_settings(), get_tree(), null)
+	print("ENTRY|settings_loaded|sensitivity=%.2f|fov=%.1f|volume=%.2f|shake=%s|subtitles=%s|hints_seen=%s|path=%s" % [
+		sensitivity_scale, fov_override, volume_level, str(camera_shake_on),
+		str(subtitles_on), str(hints_seen), settings_path
 	])
+
+
+# ---------------------------------------------------------------------------
+# 首次操作提示（T059）
+# ---------------------------------------------------------------------------
+
+## 首次出生时播一遍简短操作提示（`hints_seen=false` 才会播）。
+## 提示本身**不堵操作**（`FirstRunHints` 不抢输入/不暂停），播完只做一件事：把 `hints_seen` 落盘。
+func _maybe_show_first_run_hints() -> void:
+	if hints_seen:
+		return
+	if first_run_hints != null and is_instance_valid(first_run_hints):
+		return
+	if player == null or not is_instance_valid(player):
+		return
+	var hints := FirstRunHints.new()
+	add_child(hints)
+	# 层序：在 HUD 之上、菜单/结算之下（提示不该盖住结算页与暂停层）
+	if hud != null and hud.get_parent() == self:
+		move_child(hints, mini(get_child_count() - 1, hud.get_index() + 1))
+	hints.finished.connect(_on_first_run_hints_finished)
+	first_run_hints = hints
+	print("ENTRY|hints|shown|lines=%d" % hints.total_lines())
+
+
+func _on_first_run_hints_finished() -> void:
+	hints_seen = true
+	var ok := GameSettings.save_to(current_settings(), settings_path)
+	print("ENTRY|hints|finished|saved=%s|path=%s" % [str(ok), settings_path])
+	if first_run_hints != null and is_instance_valid(first_run_hints):
+		first_run_hints.queue_free()
+	first_run_hints = null
 
 
 func _on_menu_quit() -> void:
