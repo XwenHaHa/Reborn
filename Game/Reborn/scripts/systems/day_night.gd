@@ -9,8 +9,18 @@ extends RefCounted
 ##
 ## 光照形状（刻意简单，够读）：
 ##   白天 `p∈[0,0.5)`：仰角 `70·sin(π·d)`（d 是白天进度 0→1），能量 `0.35 + 0.95·sin`，色温随风化；
-##   夜晚 `p∈[0.5,1)`：太阳在地平线下，改用**月光**（冷色、能量 0.12、环境光不低于 0.26）；
-##   环境光下限 `NIGHT_AMBIENT_FLOOR = 0.26` —— 这是"夜间仍需看清基本路线"的可判定下界。
+##   夜晚 `p∈[0.5,1)`：太阳在地平线下，改用**月光**（冷色、能量 0.12）；**天空本身压暗**到
+##   `NIGHT_SKY_ENERGY`，环境光切到 `AMBIENT_SOURCE_COLOR` 并给 `NIGHT_AMBIENT_FLOOR` 下界
+##   —— 这是"夜间仍需看清基本路线"的可判定下界。
+##
+## 【2026-11-10 修正（T057 视觉判读）】原实现只写 `Environment.ambient_light_energy`，但本工程
+## 的 `ambient_light_source = AMBIENT_SOURCE_SKY`、`ambient_light_sky_contribution = 1.0`，
+## 而 ART07 已实测"**`ambient_light_energy` 对 SKY 源无效**（0.72 与 1.0 渲染像素完全一致）"。
+## 结果：夜间只有太阳变暗，天空 HDRI 与天光仍是白天 ⇒ 实拍 `mean_luma` 115.6 vs 正午 142.5（81%），
+## vision 把夜间帧判成"白天/像暗一点的白天"。
+## 修正不改白天一帧：白天仍写 SKY 源（该值本就无效，画面零变化），只在夜间换成
+## ① 天空材质 `energy_multiplier`（== 天光辐照 + 天空亮度，ART07 认定的正确旋钮）
+## ② `AMBIENT_SOURCE_COLOR` + 冷色环境光（保证夜里地形与路线可读）。
 
 const DAY_LENGTH := 1200.0
 const NIGHT_START_RATIO := 0.5
@@ -26,12 +36,17 @@ const MOON_ENERGY := 0.12
 const DAY_AMBIENT_BASE := 0.35
 const DAY_AMBIENT_SWING := 0.50
 const NIGHT_AMBIENT_FLOOR := 0.26
+## 天空自身亮度/天光辐照的倍率：白天维持 ART 现场（1.0），夜间压到 0.12。
+const DAY_SKY_ENERGY := 1.0
+const NIGHT_SKY_ENERGY := 0.12
 
 ## 低角度暖光 → 正午白光
 const COLOR_WARM := Color(1.0, 0.72, 0.45)
 const COLOR_NOON := Color(1.0, 0.97, 0.92)
 ## 月光（冷色，`b > r` 是"夜"的可判定特征）
 const COLOR_MOON := Color(0.55, 0.66, 0.95)
+## 夜间环境光（`AMBIENT_SOURCE_COLOR`）：比月光更中性、略偏蓝，用来把地形抬到"看得清路线"。
+const COLOR_NIGHT_AMBIENT := Color(0.42, 0.48, 0.62)
 
 
 ## 世界时间 → 光照参数（纯函数；同输入必同输出）
@@ -57,6 +72,7 @@ static func sample(world_time: float, day_length: float = DAY_LENGTH) -> Diction
 		energy = MOON_ENERGY
 		ambient = NIGHT_AMBIENT_FLOOR
 		color = COLOR_MOON
+	var sky_energy: float = DAY_SKY_ENERGY if is_day else NIGHT_SKY_ENERGY
 	return {
 		"world_time": t,
 		"phase": p,
@@ -66,14 +82,34 @@ static func sample(world_time: float, day_length: float = DAY_LENGTH) -> Diction
 		"energy": energy,
 		"ambient": ambient,
 		"color": color,
+		## 天空材质倍率：白天 1.0（ART 现场原值），夜间压暗
+		"sky_energy": sky_energy,
+		## 环境光来源：白天沿用工程现场（SKY），夜间切 COLOR 才能让 ambient 真的生效
+		"ambient_source": "sky" if is_day else "color",
+		"ambient_color": COLOR_NOON if is_day else COLOR_NIGHT_AMBIENT,
 	}
 
 
-## 把采样结果写到真实节点上（只碰旋转/能量/颜色/环境光，不改雾/色调映射等 ART 设置）
+## 把采样结果写到真实节点上。
+##
+## 写的东西：太阳旋转/能量/颜色；环境光的**来源/颜色/能量**；天空材质的 `energy_multiplier`。
+## 不碰雾、色调映射、SSAO、曝光等 ART 设置（`run_art09_frame_contract` 锁着）。
 static func apply(sample_data: Dictionary, sun: DirectionalLight3D, env: Environment) -> void:
 	if sun != null:
 		sun.rotation_degrees = Vector3(-float(sample_data["elevation_deg"]), float(sample_data["azimuth_deg"]), 0.0)
 		sun.light_energy = float(sample_data["energy"])
 		sun.light_color = sample_data["color"]
-	if env != null:
-		env.ambient_light_energy = float(sample_data["ambient"])
+	if env == null:
+		return
+	env.ambient_light_energy = float(sample_data["ambient"])
+	# 环境光来源：白天 SKY（工程现场、且该源的 energy 无效 → 画面与改前逐像素一致），
+	# 夜间 COLOR（这是让 NIGHT_AMBIENT_FLOOR 真正生效的唯一途径）。
+	var want_color := String(sample_data.get("ambient_source", "sky")) == "color"
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR if want_color else Environment.AMBIENT_SOURCE_SKY
+	if want_color:
+		env.ambient_light_color = sample_data.get("ambient_color", COLOR_NIGHT_AMBIENT)
+	# 天空材质倍率（Panorama/Procedural 都叫 `energy_multiplier`；没有就跳过，不报错）
+	if env.sky != null and env.sky.sky_material != null:
+		var mat: Object = env.sky.sky_material
+		if "energy_multiplier" in mat:
+			mat.set("energy_multiplier", float(sample_data.get("sky_energy", DAY_SKY_ENERGY)))

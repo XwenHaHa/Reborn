@@ -1,4 +1,4 @@
-﻿# 开发交接：2026-11-10（T057 昼夜光照 awaiting-review 视觉判读未做；下一任务 T058；T047/T051/T055/T056/T057 待决策）
+﻿# 开发交接：2026-11-11（T057 修正轮已收口了一半：夜间真的变黑，仅差"修正后帧"判读；T058 安全休息与快进 in-progress；T047/T051/T055/T056/T057 待负责人）
 
 ## T043a（T043 前置，done 2026-11-09）
 
@@ -144,15 +144,18 @@
 - 全量 **61 套 4,791 条 0 失败**、`invalid=0`、`visible_hits=0`（`delta_ms=617`）。
 - **未验证**：循环接缝与音色未听、环境音主观定位未验、字幕视觉排版与"看到敌人是否也出字幕"未做。
 
-## T057（简化昼夜光照，awaiting-review 2026-11-10 —— 视觉判读未做）
+## T057（简化昼夜光照，awaiting-review 2026-11-11 —— 修正轮：夜间真的变黑夜，仅差"修正后帧"的判读）
 
-- `scripts/systems/day_night.gd`（纯函数）+ `DayNightDirector`（autoload）：白天仰角 `70·sin(π·d)`、能量 `0.35+0.95·sin`、色温暖→白；夜晚太阳落到地平线下，改月光（冷色 `b>r`、能量 `0.12`）；环境光硬下界 **0.26**（"夜间仍需看清基本路线"的可判定下界）。只写太阳旋转/能量/颜色 + `Environment.ambient_light_energy`，不碰雾/曝光/SSAO。
+- `scripts/systems/day_night.gd`（纯函数）+ `DayNightDirector`（autoload）：白天仰角 `70·sin(π·d)`、能量 `0.35+0.95·sin`、色温暖→白；夜晚太阳落到地平线下，改月光（冷色 `b>r`、能量 `0.12`）。
 - **存档恢复靠无状态**：每帧按 `world_time` 重算，不做 `+= delta` 推进 —— 读档把时间设回去，下一帧就是对的样子。
-- `tests/run_t057_day_night.gd` **24/24**：正午 `70.00°/1.300/0.850`、午夜 `-70.00°/0.120/0.260`；`t=300/1500/2700` 周期逐位相同；`t=412.5` 往返 950→10→412.5 后 6 字段逐位相同；`night_sight_multiplier` 默认 1.0；7 个边界点与 `is_daytime()` **0 处不一致**。
-- **实拍**（非 headless，`tool_capture_t057_night.gd`）：正午平均亮度 **142.5** vs 夜间 **115.6（81%）**；俯视 72.1 / 59.8。图在本机 `Art/Probes/t057_*.png`（`Art/Probes/` 未入库）。
+- **修正轮的根因（重要，别再犯）**：原实现只写 `Environment.ambient_light_energy`，但本工程 `ambient_light_source = AMBIENT_SOURCE_SKY`、`sky_contribution = 1.0`，而 **`ambient_light_energy` 对 SKY 源无效**（ART07 在 `tests/tool_make_courtyard.gd:812` 已实测记录：0.72 与 1.0 渲染像素完全一致）。
+- ⇒ 夜里只有太阳变暗、**天空 HDRI 与天光原样留白天**，vision 直接判夜间帧「**看起来像白天**」。正确的旋钮是**天空材质的 `energy_multiplier`**；要夜间可读还得把 `ambient_light_source` 切 `AMBIENT_SOURCE_COLOR`。
+- **改法**：`sample()` 增加 `sky_energy`（白天 1.0 / 夜 0.12）、`ambient_source`、`ambient_color`；`apply()` 写天空倍率 + 夜间切 COLOR 源 + 冷色环境光（`NIGHT_AMBIENT_FLOOR = 0.26` 这才真的生效）。**白天路径一字未改**。
+- **实拍对比（同机位）**：正午 142.5 → **142.4**、正午俯视 72.1 → **72.1**（逐位相同 ⇒ 白天零变化）；夜间 115.6 → **46.3（33% of 正午）**、夜间俯视 59.8 → **19.0（26%）**、夜间过曝像素 **0.4%**。
+- `tests/run_t057_day_night.gd` **28/28**（原 24 + 白天零变化 2 + 夜间天空/环境光来源 2），无状态快照 6 → **9 字段**。
 - **踩坑**：`_wd.call("is_night")`（实际是 `is_daytime()`）会打 SCRIPT ERROR 并**中止整个函数**，那条断言静默消失 —— 靠 `checks=23`（预期 24）才发现。**断言总条数必须与预期一致**。
-- 全量 **62 套 4,815 条 0 失败**、`invalid=0`、`visible_hits=0`（`delta_ms=671`）。
-- **未验证**：视觉判读未做（vision 两次 `ETIMEDOUT`）；`night_sight_multiplier` 未接入感知；光照性能未测（T060）。
+- 全量 **62 套 4,819 条 0 失败**、`invalid=0`（`Tools/Probes/t057_full62b.log`）。
+- **仍未验证**：修正后夜间帧的判读（vision 连续 3 次 `ETIMEDOUT`）⇒ 不记 done；`night_sight_multiplier` 未接入感知；光照性能未测（T060）。
 
 ## 真实状态
 
@@ -383,6 +386,15 @@ $proj = 'E:\Reborn\Game\Reborn'
 退出码 0 = 通过。**必须加 `--quit-after`**，否则脚本出错会挂死。
 
 ## 关键环境事实
+
+> ## ⚠ 负责人明确要求：**任何 Godot 窗口都不许弹到桌面上**（2026-11-11）
+>
+> - **永远不要**直接 `& 'E:\Godot_v4.7.2-stable_win64.exe\..._console.exe' ...`：console 版本身会弹一个黑色终端；
+>   GUI 版**不带 `--headless`** 时会在 (0,0) 建窗（`--position` 是"软"参数，启动期约 1.8 s 可见）。
+> - **非 headless（要出图）** 一律走 `powershell -NoProfile -File E:\Reborn\Tools\CaptureRun.ps1 -Script tests/xxx.gd -UserArgs xxx`：
+>   它在自建隐藏桌面 `winsta0\RebornCapture` 上启动 GUI exe，实测 `WINMON|summary|windows_seen=0|visible_hits=0`。
+> - **headless 回归**用 GUI exe + `--headless`（`Run`/`Tools/t040_headless_batch.ps1` 内部就是 GUI exe），同样零窗口。
+> - 验证口径：每次运行后看 `WINMON|summary` 的 `visible_hits`；**不许**用"窗口很快就没了"当解释。
 
 - **Godot**：`E:\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe`
   （**外层同名项是目录不是文件**）；版本 `4.7.2.stable.official.ed1daf0bf`。

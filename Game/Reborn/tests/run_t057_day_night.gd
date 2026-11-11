@@ -106,6 +106,11 @@ func _check_apply() -> void:
 		absf(_sun.rotation_degrees.x + 70.0) <= 0.01)
 	_assert("B_noon_ambient_written", "%.3f" % noon["ambient"], "%.3f" % _env.ambient_light_energy,
 		absf(_env.ambient_light_energy - float(noon["ambient"])) <= 1e-3)
+	# 白天必须保持工程现场：SKY 源 + 天空倍率 1.0（T057 修正不得改白天一帧）
+	_assert("B_noon_ambient_source_sky", "%d" % Environment.AMBIENT_SOURCE_SKY,
+		"%d" % _env.ambient_light_source, _env.ambient_light_source == Environment.AMBIENT_SOURCE_SKY)
+	_assert("B_noon_sky_energy_untouched", "1.000", "%.3f" % _sky_energy(),
+		absf(_sky_energy() - 1.0) <= 1e-3)
 	print("MEASURE|noon|elev=%.2f|energy=%.3f|ambient=%.3f|color=(%.2f,%.2f,%.2f)" % [
 		_sun.rotation_degrees.x, _sun.light_energy, _env.ambient_light_energy,
 		_sun.light_color.r, _sun.light_color.g, _sun.light_color.b])
@@ -120,6 +125,11 @@ func _check_apply() -> void:
 	print("MEASURE|night|elev=%.2f|energy=%.3f|ambient=%.3f|color=(%.2f,%.2f,%.2f)" % [
 		_sun.rotation_degrees.x, _sun.light_energy, _env.ambient_light_energy,
 		_sun.light_color.r, _sun.light_color.g, _sun.light_color.b])
+	# 夜间：天空倍率压暗 + 环境光切 COLOR（否则 ambient 在下界也无效，画面会"像白天"）
+	_assert("B_night_sky_energy_written", "%.3f" % night["sky_energy"], "%.3f" % _sky_energy(),
+		absf(_sky_energy() - float(night["sky_energy"])) <= 1e-3)
+	_assert("B_night_ambient_source_color", "%d" % Environment.AMBIENT_SOURCE_COLOR,
+		"%d" % _env.ambient_light_source, _env.ambient_light_source == Environment.AMBIENT_SOURCE_COLOR)
 
 
 # ---------------- C：存档恢复正确（无状态） ----------------
@@ -142,10 +152,18 @@ func _check_restore_is_stateless() -> void:
 	_assert("C_restore_identical", first, second, first == second)
 
 
+func _sky_energy() -> float:
+	if _env == null or _env.sky == null or _env.sky.sky_material == null:
+		return -1.0
+	return float(_env.sky.sky_material.get("energy_multiplier"))
+
+
 func _snapshot() -> String:
-	return "%.5f|%.5f|%.5f|%.5f|%.5f|%.5f" % [
+	return "%.5f|%.5f|%.5f|%.5f|%.5f|%.5f|%.5f|%d|%.5f" % [
 		_sun.rotation_degrees.x, _sun.rotation_degrees.y, _sun.light_energy,
-		_sun.light_color.r, _sun.light_color.g, _sun.light_color.b]
+		_sun.light_color.r, _sun.light_color.g, _sun.light_color.b,
+		_sky_energy(), int(_env.ambient_light_source),
+		float(_env.ambient_light_energy)]
 
 
 # ---------------- D：夜间可读 ----------------
