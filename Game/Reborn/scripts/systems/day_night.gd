@@ -35,18 +35,23 @@ const MOON_ENERGY := 0.12
 
 const DAY_AMBIENT_BASE := 0.35
 const DAY_AMBIENT_SWING := 0.50
-const NIGHT_AMBIENT_FLOOR := 0.26
-## 天空自身亮度/天光辐照的倍率：白天维持 ART 现场（1.0），夜间压到 0.12。
+## 夜间环境光下限。**第二次修正（2026-11-11）**：0.26 → **0.40** —— 实测 0.26 时画面是
+## "树冠缝隙的高光 + 后方树林死黑剪影"，vision 仍判「白天」；夜间要的是**均匀的暗**，
+## 所以抬环境光（diffuse 铺满全画面）而不是抬月光。
+const NIGHT_AMBIENT_FLOOR := 0.40
+## 天空自身亮度/天光辐照的倍率：白天维持 ART 现场（1.0），夜间压到 0.03。
+## 第一次修正取 0.12 时树冠缝隙仍是"亮白色的日光斑"，视觉得到"阳光穿透树冠"的印象 → 再压一档。
 const DAY_SKY_ENERGY := 1.0
-const NIGHT_SKY_ENERGY := 0.12
+const NIGHT_SKY_ENERGY := 0.03
 
 ## 低角度暖光 → 正午白光
 const COLOR_WARM := Color(1.0, 0.72, 0.45)
 const COLOR_NOON := Color(1.0, 0.97, 0.92)
 ## 月光（冷色，`b > r` 是"夜"的可判定特征）
 const COLOR_MOON := Color(0.55, 0.66, 0.95)
-## 夜间环境光（`AMBIENT_SOURCE_COLOR`）：比月光更中性、略偏蓝，用来把地形抬到"看得清路线"。
-const COLOR_NIGHT_AMBIENT := Color(0.42, 0.48, 0.62)
+## 夜间环境光（`AMBIENT_SOURCE_COLOR`）：偏蓝的冷色，用来把地形与路线**均匀**抬到看得清。
+## 第二次修正把红色通道再压低（0.42→0.32），让夜里的地面偏冷而不是"灰亮"。
+const COLOR_NIGHT_AMBIENT := Color(0.32, 0.40, 0.62)
 
 
 ## 世界时间 → 光照参数（纯函数；同输入必同输出）
