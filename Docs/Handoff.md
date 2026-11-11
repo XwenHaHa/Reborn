@@ -1,4 +1,4 @@
-﻿# 开发交接：2026-11-11（T058 休息快进 / T059 设置与新手提示 done；T057 夜间结构待你三选一；下一任务 T060 性能检查）
+﻿# 开发交接：2026-11-11（T058 休息快进 / T059 设置与新手指引 / T060 性能检查 done；T057 夜间结构待你三选一；下一任务 T061 完整流程回归）
 
 ## T043a（T043 前置，done 2026-11-09）
 
@@ -200,6 +200,26 @@
   ③ `_on_menu_setting_changed` 的 `match` 键混用 `&"sensitivity"` 与 String → 统一 `String(key)`。
 - **未验证**：真实鼠标键盘操作设置面板、音量试听（0.5 是不是"一半响"）、晃动体感（是否晕，属 U01）。
 
+
+## T060（目标机器性能检查，done 2026-11-11）
+
+- **测的是真实一局**（`main.tscn` + 出生 + 2 NPC + HUD + 昼夜 + 环境音、固定机位），**不是空关卡**；
+  旧的 `tool_perf_probe.gd`（ART03 遗留）只测空关卡，按开发计划 :257 不再作结论。新工具 `tests/tool_t060_perf.gd` + `Tools/t060_perf.ps1`（经 `CaptureRun`，`visible_hits=0`）。
+- **本机基线**：i7-11800H / 32 GB / **T600 Laptop 4 GB** / Win10 19045；`MEMORY_STATIC` **122.2–122.3 MB** 稳定。
+- **修前（720p / 1080p avg·p95）**：`all` **5.249/5.940** 与 **8.368/8.671**；`no_ai` −0.10/≈0；
+  `no_vegetation` **−0.25/−0.21**（三角形 921k→372k、draw 256→189 却几乎不掉帧 ⇒ **瓶颈不在几何**）；
+  `no_daynight` **−0.79（−15%）/−0.67（−8%）** ⇒ **最大单项就是昼夜光照每帧写环境/天空**。
+- **修的那一个**：`day_night_director.gd` 加 `MIN_APPLY_INTERVAL = 0.25` 世界秒（≈4 Hz）**只限自动路径**，
+  显式 `apply_now()` 不受限；采样仍是 `world_time` 纯函数（一天最多晚 0.25 s = 1/4800），时间跳变必然 ≥ 间隔所以不会漏更新。
+- **修后**：720p `all` **5.249 → 4.524 ms（−14%，≈190→221 fps）**、1080p p50 **8.410 → 7.657 ms（−9%，≈119→131 fps）**；
+  昼夜项差值 **0.83 → 0.09 ms**。**画面零变化**（同机位 `mean_luma` 142.4 / 38.7 / 72.0 / 16.4）。
+- **契约守卫 `tests/run_t060_daynight_throttle.gd` 11/11 ×3**：显式立即、小于间隔不推、到间隔必推、正/反跳变必推、纯函数、`enabled=false` 不写。
+- **全量 65 套 4,933 条 0 失败 / 0 INVALID**（`Tools/Probes/t060_full65.log`；基线 4,922 + 11）。
+- **踩坑**：① 多行替换把 director 改出重复行（`return sample` 丢了）→ 整文件重写并用 28/28 验证；**多操作编辑不要用重叠行号**；
+  ② 判据依赖真实帧 delta（headless 不受 vsync 限制，delta 不稳）→ 夹具先 `time_advancing=false`；
+  ③ 1080p 首采有 1 帧 **155 ms**（切分辨率后管线编译尖峰）→ 两分辨率都报 avg/p95/max 且 `all` 各测两次交叉验证。
+- **未验证**：发布目标硬件、4K/1440p、满编 NPC 极限负载、长时间内存漂移、**包内（`.pck`）帧时间**。
+
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
@@ -288,7 +308,7 @@
 | T042 | **done（2026-11-05，系统时钟）** | `Docs/Tasks/T042.md`；`Docs/Evidence/T042.md`；`scripts/ui/pause_menu.gd`（新）；`scripts/ui/end_life_confirm.gd`（新）；`scripts/core/main_entry.gd`；`scripts/characters/animal_body.gd`；`tests/run_t042_pause_flow.gd`（121 条）；`tests/tool_capture_t042_pause.gd`；`Art/Probes/t042_{pause_menu,end_life_confirm,player_quit_settle}.png` | Esc 暂停层（「游戏已暂停」「继续游戏」「结束本次生命」、焦点「继续游戏」）；**真冻结**双保险（`SceneTree.paused` + `time_advancing=false`），真实等 5 s 世界时间/资源/区域/NPC/玩家/生存/脚步/主档全部一字不变；恢复后不跳变；结束生命二次确认**默认「取消」**，确认走 `LifeCycle.end_life` 正常死亡（`damage_reason=player_quit`、`pending` 存盘、结算页「死亡（player_quit）」、`revision` +2），不重生不清档；暂停/取消不写盘；Esc 优先级「结算页 > 新游戏确认 > 结束确认 > 暂停 > 恢复」；树序 `Hud<PauseMenu<EndLifeConfirm<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 断言通过。121/121 ×3、变异 5 处全拦、重点回归 16 套、全量 53 套 4,500 条 0 失败、两预设重导出 + 包内 4 套、三帧 vision `visible_hits=0`。未验证真实鼠标键盘与 U01 |
 | T043 | **done（2026-11-09）** | `Docs/Tasks/T043.md`、`Docs/Evidence/T043.md`；`tests/run_t043_save_matrix.gd`（60 条）、`tests/tool_t043_package_probe.gd`、`Tools/t043_{package,package_assert,release_capture}.ps1`、`Tools/t043_pck_audit.py`；`Art/Probes/t043_release_{menu,hud}.png` | 存档测试矩阵与打包（P5 阶段门）：A–F 六类无 `gap`（缺口由新矩阵套件 60 条补齐：资源 `next_refill_at/expire_at` / 区域 `next_recover_at` 往返、`revision` 严格 +1 链、跨世 `world_time` 连续、`SETTLING/SELECTING` 期保存，14 键格式未变、**生产代码零改动**）；变异 M1 `revision += 0`（53/7 红）/M2 丢 `expire_at`（58/2 红）/M3 审计 SelfTest 包（`leak=196`、退出 1）全拦；矩阵 ×3 = 60/0；全量 54 套 4560/0；发布预设关控制台包装（导出后无 `Reborn.console.exe`）+ 两预设 `EXIT=0`（`Reborn.pck` 66,996,328 / `SelfTest` 68,206,852）+ PCK 审计 `leak=0` + `THIRD_PARTY_NOTICES.md` 随包 + 包内 T037/T039/T041/T042/T043 全绿；发行包隐藏桌面取证 `visible_hits=0`/`console_windows=0`、两帧非黑 0.917/0.940、vision 判读首启菜单正确与存活帧无菜单残留；**修复取证工具缺陷**（旧序列只按一次 Enter 停在物种选择页）。**未确认**：发行包存活帧右侧指标条/罗盘/按键提示未读到（`HUD-NOT-CONFIRMED`，根因未定位）。**未验证**：真实鼠标键盘、U01 真人试玩 | 
 
-**未完成**：正式角色与骨骼资产（P6 待负责人）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**、发行包存活帧右侧 HUD 未确认项、**T047/T051/T055/T056/T057 五个 awaiting-review 待负责人**（T057 只剩"夜间结构方案"要你三选一）。**P5 已收口（T037～T043 + T043a + T040b）**；**P7 进行中：T058、T059 done（2026-11-11）**；**T060～T063 pending**。
+**未完成**：正式角色与骨骼资产（P6 待负责人）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**、发行包存活帧右侧 HUD 未确认项、**T047/T051/T055/T056/T057 五个 awaiting-review 待负责人**（T057 只剩"夜间结构方案"要你三选一）。**P5 已收口（T037～T043 + T043a + T040b）**；**P7 进行中：T058、T059、T060 done（2026-11-11）**；**T061～T063 pending**。
 
 
 **T030 的边界声明**：① 只做生命周期与记录，~~没做结算页（T032）~~ **T032 已落结算页（见下）**、存档仍属 T037；② ~~`MainEntry.test_mode = true` 临时开发态~~ **已于 T031 收口为默认 `false`（正式解锁门接入）**；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。
