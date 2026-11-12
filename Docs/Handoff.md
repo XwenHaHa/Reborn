@@ -1,4 +1,4 @@
-﻿# 开发交接：2026-11-11（P7 只剩 T063：T058~T062 全部 done，Windows 候选版已打包并验证；T063 需 3~5 位外部玩家）
+﻿# 开发交接：2026-11-11（P7 收官在望：T058~T062 done，T063 只差 3~5 位真人试玩；试玩协议+判定标准+只读回收工具已就绪；包体积"排源文件"方案已用画面证据否掉）
 
 ## T043a（T043 前置，done 2026-11-09）
 
@@ -249,6 +249,22 @@
 - **包内探针 20/20**（`--main-pack RebornSelfTest.pck`）：出生成功、**HUD visible + 四条指标条可见且有值（100/99.9/100/100）**、8 个 autoload、休息点/太阳/6 个音源全在 ⇒ **T043 的 `HUD-NOT-CONFIRMED` 结案**：那是**外部窗口截图抓不到 Vulkan 叠加层**，**不是 HUD 没画**。
 - **`tests/run_t062_package_contract.gd` 20/20 ×3**；**全量 67 套 5,001 条 0 失败 / 0 INVALID**（`Tools/Probes/t062_full67.log`）。
 - **挂账**：**包体积策略**仍待你拍板（`export_filter=all_resources` 把 `assets/` 源文件打进包：pck 54.6 MB / exe 109 MB）；签名/安装器/自动更新不做；发行包上不能直接跑 `--script`（引擎限制）。
+
+
+## T063（外部试玩与收尾决策，**blocked 2026-11-11 —— 缺 3～5 位真人玩家**）
+
+- **除真人以外的准备已全部做完**：`Docs/Tasks/T063.md` 有照读开场语（**不提示玩法**）、观察员分阶段记录表
+  （0–1 / 1–3 / 3–6 / 6–10 / 10–15 min + 死亡后 + 收尾）、每人三问、结果表，以及**阻断/体验/继续投入**的判定标准
+  （≥3/3 闭环⇒继续；1～2/3⇒继续但先修；0/3 且卡同处⇒停止重做）。
+- **只读会话回收** `Tools/t063_session_collect.ps1`：输出 `SESSION|`（存活局数 / 解锁物种 / 世界时间 / revision /
+  pending / 隔离文件数 / `SCRIPT ERROR` 数）+ `PROBLEM|` + `LOGTAIL|`；本机自检通过。
+  **踩坑**：脚本必须存 **UTF-8 带 BOM**，否则 Windows PowerShell 5.1 按 ANSI 解析中文直接语法报错。
+- **顺带用证据否掉一条"省体积"方案**：额外排除 `assets/**/*.glb`+`*.hdr` 能把 pck 从 **54,611,684 → 44,821,008 B
+  （−9.79 MB / −17.9%）**，导出与审计都过，但**同机位画面判读发现菜单 3D 猫与庭院背景全没了**（只剩纯 UI）
+  ⇒ **不采纳**；`export_filter` **保持 `all_resources`**（预设已还原，工作区干净）。
+  真要瘦身必须改成按"导入资源"导出 + 重跑包内探针/首启/画面判读/审计 require，**属独立任务**。
+- **最小解除**：负责人安排 3～5 人 → 按 §3 跑 10～20 分钟 → 回收 `%APPDATA%\Godot\app_userdata\Reborn\` →
+  按 §6 决定"继续 / 继续但先修 / 停止"。**不把 T028 的自测走查当外部试玩。**
 ## 真实状态
 
 **引擎**：Godot 4.7.2 + GDScript（UE5 路线已废止）。
@@ -337,7 +353,7 @@
 | T042 | **done（2026-11-05，系统时钟）** | `Docs/Tasks/T042.md`；`Docs/Evidence/T042.md`；`scripts/ui/pause_menu.gd`（新）；`scripts/ui/end_life_confirm.gd`（新）；`scripts/core/main_entry.gd`；`scripts/characters/animal_body.gd`；`tests/run_t042_pause_flow.gd`（121 条）；`tests/tool_capture_t042_pause.gd`；`Art/Probes/t042_{pause_menu,end_life_confirm,player_quit_settle}.png` | Esc 暂停层（「游戏已暂停」「继续游戏」「结束本次生命」、焦点「继续游戏」）；**真冻结**双保险（`SceneTree.paused` + `time_advancing=false`），真实等 5 s 世界时间/资源/区域/NPC/玩家/生存/脚步/主档全部一字不变；恢复后不跳变；结束生命二次确认**默认「取消」**，确认走 `LifeCycle.end_life` 正常死亡（`damage_reason=player_quit`、`pending` 存盘、结算页「死亡（player_quit）」、`revision` +2），不重生不清档；暂停/取消不写盘；Esc 优先级「结算页 > 新游戏确认 > 结束确认 > 暂停 > 恢复」；树序 `Hud<PauseMenu<EndLifeConfirm<MainMenu<LifeStatus<NewGameConfirm<LifeSettlePanel` 断言通过。121/121 ×3、变异 5 处全拦、重点回归 16 套、全量 53 套 4,500 条 0 失败、两预设重导出 + 包内 4 套、三帧 vision `visible_hits=0`。未验证真实鼠标键盘与 U01 |
 | T043 | **done（2026-11-09）** | `Docs/Tasks/T043.md`、`Docs/Evidence/T043.md`；`tests/run_t043_save_matrix.gd`（60 条）、`tests/tool_t043_package_probe.gd`、`Tools/t043_{package,package_assert,release_capture}.ps1`、`Tools/t043_pck_audit.py`；`Art/Probes/t043_release_{menu,hud}.png` | 存档测试矩阵与打包（P5 阶段门）：A–F 六类无 `gap`（缺口由新矩阵套件 60 条补齐：资源 `next_refill_at/expire_at` / 区域 `next_recover_at` 往返、`revision` 严格 +1 链、跨世 `world_time` 连续、`SETTLING/SELECTING` 期保存，14 键格式未变、**生产代码零改动**）；变异 M1 `revision += 0`（53/7 红）/M2 丢 `expire_at`（58/2 红）/M3 审计 SelfTest 包（`leak=196`、退出 1）全拦；矩阵 ×3 = 60/0；全量 54 套 4560/0；发布预设关控制台包装（导出后无 `Reborn.console.exe`）+ 两预设 `EXIT=0`（`Reborn.pck` 66,996,328 / `SelfTest` 68,206,852）+ PCK 审计 `leak=0` + `THIRD_PARTY_NOTICES.md` 随包 + 包内 T037/T039/T041/T042/T043 全绿；发行包隐藏桌面取证 `visible_hits=0`/`console_windows=0`、两帧非黑 0.917/0.940、vision 判读首启菜单正确与存活帧无菜单残留；**修复取证工具缺陷**（旧序列只按一次 Enter 停在物种选择页）。**未确认**：发行包存活帧右侧指标条/罗盘/按键提示未读到（`HUD-NOT-CONFIRMED`，根因未定位）。**未验证**：真实鼠标键盘、U01 真人试玩 | 
 
-**未完成**：正式角色与骨骼资产（P6 待负责人）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**、**T047/T051/T055/T056/T057 五个 awaiting-review 待负责人**（T057 只剩"夜间结构方案"要你三选一）、**包体积策略**（pck 54.6 MB 含 `assets/` 源文件）。**P5 已收口**；**P7 进行中：T058～T062 done（2026-11-11）**；**只剩 T063（外部试玩与收尾决策，需要真人玩家）**。
+**未完成**：正式角色与骨骼资产（P6 待负责人）、**T028 的 U01 真人半边**、**T029 的冲刺平衡决策**、**T047/T051/T055/T056/T057 五个 awaiting-review 待负责人**（T057 只剩"夜间结构方案"要你三选一）、**T063（blocked：缺 3～5 位真人玩家）**、包体积策略（已用证据否掉"排源文件"这一招，真要瘦身需另立任务）。**P7 其余全部 done（T058～T062）**。
 
 
 **T030 的边界声明**：① 只做生命周期与记录，~~没做结算页（T032）~~ **T032 已落结算页（见下）**、存档仍属 T037；② ~~`MainEntry.test_mode = true` 临时开发态~~ **已于 T031 收口为默认 `false`（正式解锁门接入）**；③ 真实按键（`1`/`2`）选择 **NOT-RUN**，只验证了键码=引擎常量与逻辑路径。
