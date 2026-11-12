@@ -523,8 +523,15 @@ $proj = 'E:\Reborn\Game\Reborn'
   git -c http.proxy= -c https.proxy= push origin art/modeling-pipeline
   ```
   2026-11-11 用这套把 77 个提交推上去，**LFS 上传 433 个对象 / 480 MB**（`80e187d..f8bd6d3`）。
-  **仓库本地仍保留 `http.proxy`/`https.proxy` 配置**（代理恢复后原命令即可用）；若之后长期直连，可自行
-  `git config --local --unset http.proxy; git config --local --unset https.proxy` 一劳永逸（**本次没有替你改**）。
+  **2026-11-11 二次发生（`git pull` 同样报 7897）→ 已根治**：把**本仓库**这两条代理配置**删掉**了
+  （`git config --local --unset http.proxy` / `https.proxy`；**全局本来就没有代理配置**）。
+  删后实测：`git ls-remote --heads origin` 876 ms、**`git pull` 1.2 s 返回 `Already up to date`**、`git push` 无需任何参数即可用。
+  **如果哪天必须走代理**（直连被墙/换网络），把这两条加回去即可：
+  ```powershell
+  git config --local http.proxy http://127.0.0.1:7897
+  git config --local https.proxy http://127.0.0.1:7897
+  ```
+  （`lfs.…locksverify=false` 保留未动——它解决的是 LFS 锁校验卡住，与代理无关。）
 - **视觉工具可用**：`E:\claude-vision-skill\vision.js`（先用已知答案图 `Art/Probes/vision_probe_red_blue.png` 自检）：
   `node E:\claude-vision-skill\vision.js <图片> "<中文问题>"`。
   T025 期间曾返回 **API 503 `auth_unavailable`**（当时记 NOT-VERIFIED）；**T026 期间已恢复**（两帧判读通过）。
