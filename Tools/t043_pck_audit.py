@@ -63,6 +63,9 @@ def main():
     ap.add_argument("pck")
     ap.add_argument("--deny", action="append", default=[])
     ap.add_argument("--allow-prefix", action="append", default=[])
+    # T062：候选版要**证明必需内容真的在包里**（不只是"没泄露"）
+    ap.add_argument("--require", action="append", default=[])
+    ap.add_argument("--list", action="store_true", help="打印包内条目（证据用）")
     args = ap.parse_args()
     deny = args.deny or ["tests/", "references/", "Docs/", ".uid", "tool_capture_", "tool_make_"]
     try:
@@ -70,8 +73,9 @@ def main():
     except Exception as exc:  # 解析失败也是审计失败
         print("AUDIT|FAIL|parse|%s" % exc)
         return 1
+    names = [name for name, _off, _size, _flags in info["entries"]]
     leak = []
-    for name, _off, _size, _flags in info["entries"]:
+    for name in names:
         # 以 "/" 结尾的规则只匹配**根级目录前缀**（避免把 assets/tests/ 误判成项目 tests/）；
         # 其余规则（.uid、tool_capture_ 等）按子串匹配。
         hit = any((name.startswith(p) if p.endswith("/") else p in name) for p in deny)
@@ -79,11 +83,23 @@ def main():
             leak.append(name)
     print("AUDIT|pack=%s|format=%d|engine=%s|files=%d|leak=%d" % (
         args.pck, info["format"], info["engine"], info["count"], len(leak)))
+    if args.list:
+        for name in sorted(names):
+            print("ENTRY|%s" % name)
     for name in leak:
         print("LEAK|%s" % name)
     if leak:
         return 1
-    print("AUDIT|PASS|no_denied_paths")
+    missing = []
+    for prefix in args.require:
+        if not any(n == prefix or n.startswith(prefix) for n in names):
+            missing.append(prefix)
+    for prefix in missing:
+        print("MISSING|%s" % prefix)
+    if missing:
+        print("AUDIT|FAIL|missing_required=%d" % len(missing))
+        return 1
+    print("AUDIT|PASS|no_denied_paths|required_ok=%d" % len(args.require))
     return 0
 
 

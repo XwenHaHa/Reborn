@@ -225,6 +225,18 @@ func interaction_visible() -> bool:
 	return _interact_label != null and _interact_label.visible
 
 
+
+## T062：**包内探针/断言用** —— 四条指标条的 `ProgressBar` 列表（只读，不改显示状态）。
+## 为什么加它：导出包里读不到 UI 层级、外部窗口截图对叠加层又不可靠，
+## 需要一个"从引擎侧问 HUD 存在不存在"的稳定接口。
+func vital_bars() -> Array:
+	var out: Array = []
+	for key in _bars:
+		var entry: Dictionary = _bars[key]
+		var bar := entry.get("bar") as ProgressBar
+		if bar != null:
+			out.append(bar)
+	return out
 ## HUD 当前显示的全部文本（断言用）
 func hud_text() -> String:
 	var parts := PackedStringArray()

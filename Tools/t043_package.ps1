@@ -39,7 +39,20 @@ $audit = @(
     'E:\Reborn\Tools\t043_pck_audit.py',
     (Join-Path $out 'Reborn.pck'),
     '--deny', 'tests/', '--deny', 'references/', '--deny', 'Docs/', '--deny', '.uid',
-    '--deny', 'tool_capture_', '--deny', 'tool_make_', '--deny', 'run_t0'
+    # T062：候选版不得带"测试作弊入口"（调试场景/脚本）——命中即失败，不靠"配置里写了"自证
+    '--deny', 'scripts/debug/', '--deny', 'scenes/debug/', '--deny', 'debug_entry',
+    '--deny', 'tool_capture_', '--deny', 'tool_make_', '--deny', 'run_t0',
+    # T062：反向断言——候选版**必需**的运行期内容必须在包里（防"排干净了功能也排没了"）
+    '--require', 'scripts/core/main_entry.gdc',
+    '--require', 'scripts/ui/hud.gdc',
+    '--require', 'scripts/systems/rest_director.gdc',
+    '--require', 'scripts/systems/day_night_director.gdc',
+    '--require', 'scenes/core/main.tscn.remap',
+    '--require', 'scenes/maps/l_courtyard.tscn.remap',
+    '--require', 'scenes/world/rest_point.tscn.remap',
+    '--require', 'resources/species/cat.tres.remap',
+    '--require', 'assets/audio/footstep_walk.wav.import',
+    '--require', 'assets/audio/creek_loop.wav.import'
 )
 python @audit
 if ($LASTEXITCODE -ne 0) { Write-Host "PACK|FAIL|pck_leak"; exit 1 }
