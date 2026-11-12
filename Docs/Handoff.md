@@ -513,6 +513,18 @@ $proj = 'E:\Reborn\Game\Reborn'
   2026-10-27 已在**仓库本地**配好 `http.proxy` / `https.proxy` = `http://127.0.0.1:7897`，
   并设 `lfs.https://github.com/XwenHaHa/Reborn.git/info/lfs.locksverify=false`
   —— **不设这一条 `git push` 会先卡在 LFS 锁校验超时**（远端 LFS locking API 经本机代理不可达，本仓库也没用锁）。
+  **⚠ 2026-11-11 更新：本机代理常常没启动，而直连已可用。** 现象：`git push` 报
+  `Failed to connect to 127.0.0.1 port 7897`。判断：`Test-NetConnection 127.0.0.1 -Port 7897` 为 False 而
+  `Test-NetConnection github.com -Port 443` 为 True ⇒ **代理没开、直连可通**。
+  **一组命令验证直连 + 认证（不传数据）**：`git -c http.proxy= -c https.proxy= ls-remote --heads origin`（本机 949 ms 成功，凭据用 `credential.helper=store`）。
+  **推送（绕开仓库里写死的代理）**：
+  ```powershell
+  $env:HTTP_PROXY=''; $env:HTTPS_PROXY=''; $env:GIT_TERMINAL_PROMPT='0'
+  git -c http.proxy= -c https.proxy= push origin art/modeling-pipeline
+  ```
+  2026-11-11 用这套把 77 个提交推上去，**LFS 上传 433 个对象 / 480 MB**（`80e187d..f8bd6d3`）。
+  **仓库本地仍保留 `http.proxy`/`https.proxy` 配置**（代理恢复后原命令即可用）；若之后长期直连，可自行
+  `git config --local --unset http.proxy; git config --local --unset https.proxy` 一劳永逸（**本次没有替你改**）。
 - **视觉工具可用**：`E:\claude-vision-skill\vision.js`（先用已知答案图 `Art/Probes/vision_probe_red_blue.png` 自检）：
   `node E:\claude-vision-skill\vision.js <图片> "<中文问题>"`。
   T025 期间曾返回 **API 503 `auth_unavailable`**（当时记 NOT-VERIFIED）；**T026 期间已恢复**（两帧判读通过）。
